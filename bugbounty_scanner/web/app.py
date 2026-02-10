@@ -531,15 +531,16 @@ def run_pro_scan(scan_id, target, modules, options):
     from bugbounty_scanner.modules.js_scanner import JSScanner
     from bugbounty_scanner.modules.crawler import CrawlerModule
     from bugbounty_scanner.modules.wayback import WaybackModule
+    from bugbounty_scanner.modules.subdomain_takeover import SubdomainTakeoverModule
     from bugbounty_scanner.cli_pro import InternalToolAdapterWithSession
 
     http_session = _create_http_session(options)
     scope_checker = _setup_scope(options)
 
     pipeline = modules if modules else [
-        "subfinder", "httpx", "nmap", "crawler", "wayback", "ffuf",
-        "js_scanner", "nuclei", "nikto", "dalfox", "sqlmap",
-        "headers", "sensitive_files",
+        "subfinder", "httpx", "subdomain_takeover", "nmap", "crawler",
+        "wayback", "ffuf", "js_scanner", "nuclei", "nikto", "dalfox",
+        "sqlmap", "headers", "sensitive_files",
     ]
 
     orch = Orchestrator(target_url=target, pipeline=pipeline, skip_missing=True)
@@ -570,6 +571,7 @@ def run_pro_scan(scan_id, target, modules, options):
         max_depth=options.get("crawl_depth", 3),
     ))
     orch.register("wayback", InternalToolAdapterWithSession(WaybackModule, http_session))
+    orch.register("subdomain_takeover", InternalToolAdapterWithSession(SubdomainTakeoverModule, http_session))
     orch.register("js_scanner", InternalToolAdapterWithSession(JSScanner, http_session))
     orch.register("headers", InternalToolAdapterWithSession(HeadersModule, http_session))
     orch.register("sensitive_files", InternalToolAdapterWithSession(SensitiveFilesModule, http_session))
