@@ -22,6 +22,7 @@ from bugbounty_scanner.config import (
     SEVERITY_INFO,
 )
 from bugbounty_scanner.scanner import Finding
+from bugbounty_scanner.modules.secret_verifier import verify_secret
 
 logger = logging.getLogger("bugbounty_scanner")
 
@@ -39,7 +40,7 @@ SECRET_PATTERNS = {
     "Stripe Secret Key": r"sk_(?:live|test)_[0-9a-zA-Z]{24,99}",
     "Stripe Publishable Key": r"pk_(?:live|test)_[0-9a-zA-Z]{24,99}",
     "Twilio API Key": r"SK[0-9a-fA-F]{32}",
-    "Twilio Account SID": r"AC[a-zA-Z0-9_\-]{32}",
+    "Twilio Account SID": r"AC[0-9a-f]{32}",
     "Mailgun API Key": r"key-[0-9a-zA-Z]{32}",
     "SendGrid API Key": r"SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}",
     "JWT Token": r"eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+",
@@ -161,15 +162,35 @@ class JSScanner:
                 # Filtra falsi positivi ovvi
                 real_matches = [m for m in matches if not self._is_false_positive(m, secret_name)]
                 if real_matches:
+                    match_value = real_matches[0] if isinstance(real_matches[0], str) else real_matches[0][0]
+
+                    # Verifica se il secret è attivo
+                    is_active = verify_secret(secret_name, match_value, js_content)
+
+                    if is_active is False:
+                        # Verificato come INATTIVO: non segnalare
+                        logger.info(f"  [JS Scanner] {secret_name} inattivo, scartato")
+                        continue
+
+                    if is_active is True:
+                        status_label = "VERIFICATO ATTIVO"
+                        description = (
+                            f"Un {secret_name} ATTIVO è stato trovato nel file JavaScript. "
+                            f"Questo secret è stato verificato ed è valido."
+                        )
+                    else:
+                        status_label = "Non verificato"
+                        description = (
+                            f"Un possibile {secret_name} è stato trovato nel file JavaScript. "
+                            f"Non è stato possibile verificarne la validità automaticamente."
+                        )
+
                     findings.append(Finding(
-                        title=f"Secret trovato in JS: {secret_name}",
+                        title=f"Secret trovato in JS: {secret_name} [{status_label}]",
                         severity=SEVERITY_HIGH,
                         url=js_url,
-                        description=(
-                            f"Un possibile {secret_name} è stato trovato nel file JavaScript. "
-                            f"Verifica manualmente se è un secret valido."
-                        ),
-                        evidence=f"Pattern: {secret_name}\nMatch: {real_matches[0][:80]}...",
+                        description=description,
+                        evidence=f"Pattern: {secret_name}\nStato: {status_label}\nMatch: {match_value[:80]}...",
                         remediation=(
                             "Non includere mai secret, API key o token nei file JavaScript. "
                             "Usa variabili di ambiente lato server e proxy le richieste API."

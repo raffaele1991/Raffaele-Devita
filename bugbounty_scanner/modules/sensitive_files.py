@@ -97,7 +97,8 @@ class SensitiveFilesModule:
             return SEVERITY_HIGH
         if path in self.HIGH_PATHS:
             return SEVERITY_MEDIUM
-        return SEVERITY_LOW
+        # Path generici (robots.txt, sitemap, ecc.) sono solo noise
+        return SEVERITY_INFO
 
     @staticmethod
     def _is_soft_404(response):

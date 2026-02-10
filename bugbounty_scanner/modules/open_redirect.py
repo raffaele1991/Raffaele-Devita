@@ -9,7 +9,7 @@ from bugbounty_scanner.config import (
     DEFAULT_TIMEOUT,
     DEFAULT_USER_AGENT,
     OPEN_REDIRECT_PAYLOADS,
-    SEVERITY_MEDIUM,
+    SEVERITY_LOW,
 )
 from bugbounty_scanner.scanner import Finding
 
@@ -85,7 +85,7 @@ class OpenRedirectModule:
                     if self._is_external_redirect(location, parsed.netloc):
                         findings.append(Finding(
                             title=f"Open Redirect in parameter '{param_name}'",
-                            severity=SEVERITY_MEDIUM,
+                            severity=SEVERITY_LOW,
                             url=test_url,
                             description=(
                                 f"Parameter '{param_name}' allows redirecting users to external sites. "
@@ -109,7 +109,7 @@ class OpenRedirectModule:
                     ):
                         findings.append(Finding(
                             title=f"Open Redirect (DOM/Meta) in parameter '{param_name}'",
-                            severity=SEVERITY_MEDIUM,
+                            severity=SEVERITY_LOW,
                             url=test_url,
                             description=(
                                 f"Parameter '{param_name}' causes a client-side redirect to an external site."

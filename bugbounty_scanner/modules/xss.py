@@ -13,6 +13,7 @@ from bugbounty_scanner.config import (
     XSS_PAYLOADS,
     SEVERITY_HIGH,
     SEVERITY_MEDIUM,
+    SEVERITY_INFO,
 )
 from bugbounty_scanner.scanner import Finding
 
@@ -215,7 +216,7 @@ class XSSModule:
                         if re.search(source_pat, region):
                             findings.append(Finding(
                                 title=f"Potential DOM XSS: {sink_name}",
-                                severity=SEVERITY_MEDIUM,
+                                severity=SEVERITY_INFO,
                                 url=target,
                                 description=(
                                     f"A DOM XSS sink ({sink_name}) was found near a user-controllable "

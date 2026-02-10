@@ -40,39 +40,41 @@ class HeadersModule:
         headers = resp.headers
 
         # Check missing security headers
+        # NOTE: Missing headers da soli non sono exploitable e non pagano
+        # nei programmi di bug bounty. Li segnaliamo come INFO (filtrati dal report).
         critical_headers = {
             "Strict-Transport-Security": {
-                "severity": SEVERITY_MEDIUM,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-319",
                 "desc": "HSTS header is missing. The site may be vulnerable to protocol downgrade attacks.",
                 "fix": "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains' header.",
             },
             "Content-Security-Policy": {
-                "severity": SEVERITY_MEDIUM,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-79",
                 "desc": "CSP header is missing. The site has no defense-in-depth against XSS attacks.",
                 "fix": "Implement a Content-Security-Policy header with appropriate directives.",
             },
             "X-Content-Type-Options": {
-                "severity": SEVERITY_LOW,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-16",
                 "desc": "X-Content-Type-Options header is missing. Browser MIME sniffing is not prevented.",
                 "fix": "Add 'X-Content-Type-Options: nosniff' header.",
             },
             "X-Frame-Options": {
-                "severity": SEVERITY_MEDIUM,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-1021",
                 "desc": "X-Frame-Options header is missing. The site may be vulnerable to clickjacking.",
                 "fix": "Add 'X-Frame-Options: DENY' or 'SAMEORIGIN' header.",
             },
             "Referrer-Policy": {
-                "severity": SEVERITY_LOW,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-200",
                 "desc": "Referrer-Policy header is missing. Sensitive URL info may leak via Referer header.",
                 "fix": "Add 'Referrer-Policy: strict-origin-when-cross-origin' header.",
             },
             "Permissions-Policy": {
-                "severity": SEVERITY_LOW,
+                "severity": SEVERITY_INFO,
                 "cwe": "CWE-16",
                 "desc": "Permissions-Policy header is missing. Browser features are not restricted.",
                 "fix": "Add a Permissions-Policy header to control browser feature access.",
@@ -118,11 +120,12 @@ class HeadersModule:
                     ))
 
         # Check for CORS misconfiguration
+        # CORS wildcard senza credentials non è exploitable
         acao = headers.get("Access-Control-Allow-Origin", "")
         if acao == "*":
             findings.append(Finding(
                 title="Permissive CORS Policy",
-                severity=SEVERITY_MEDIUM,
+                severity=SEVERITY_INFO,
                 url=target,
                 description="Access-Control-Allow-Origin is set to '*', allowing any origin.",
                 evidence=f"Access-Control-Allow-Origin: {acao}",
@@ -160,6 +163,7 @@ class HeadersModule:
             pass
 
         # Check cookies for security flags
+        # Cookie flags da soli non pagano nei bug bounty
         for cookie in resp.cookies:
             issues = []
             if not cookie.secure:
@@ -173,7 +177,7 @@ class HeadersModule:
             if issues:
                 findings.append(Finding(
                     title=f"Insecure Cookie: {cookie.name}",
-                    severity=SEVERITY_LOW,
+                    severity=SEVERITY_INFO,
                     url=target,
                     description=f"Cookie '{cookie.name}' is missing security attributes.",
                     evidence="; ".join(issues),
