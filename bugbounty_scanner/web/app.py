@@ -388,8 +388,10 @@ def generate_reports(scan_id, options):
                 return self._summary
 
         result = SimpleResult(scan)
-        # Usa path assoluto per evitare mismatch con Flask send_file
-        output_dir = os.path.abspath(options.get("output_dir", "reports"))
+        # Usa path assoluto nella home del progetto per evitare mismatch con Flask
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        output_subdir = options.get("output_dir", "reports").strip() or "reports"
+        output_dir = os.path.join(base_dir, "reports", output_subdir)
         reporter = Reporter(result, output_dir=output_dir)
 
         formats = options.get("report_formats", ["html", "json"])
