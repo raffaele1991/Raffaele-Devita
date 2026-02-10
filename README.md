@@ -255,13 +255,15 @@ install_tools.sh          # Installer automatico tool
 Questo software e **a pagamento** e protetto da un **sistema di chiavi di licenza**.
 Senza una chiave valida il programma **non si avvia**.
 
-### Piani disponibili
+### Piani disponibili - Abbonamento mensile
 
-| Piano | Per chi | Cosa include | Supporto | Durata aggiornamenti |
-|-------|---------|-------------|----------|----------------------|
-| **LITE** | Singolo utente | Solo modalita LITE (7 moduli) | - | 12 mesi |
-| **PRO** | Professionista o team (max 5 persone) | LITE + PRO (tutti i 13 moduli) | Email (risposta entro 48h) | 12 mesi |
-| **ENTERPRISE** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (risposta entro 24h) | 24 mesi |
+| Piano | Prezzo | Per chi | Cosa include | Supporto |
+|-------|--------|---------|-------------|----------|
+| **LITE** | **19€/mese** | Singolo utente | Modalita LITE (7 moduli) | - |
+| **PRO** | **49€/mese** | Professionista o team (max 5) | LITE + PRO (tutti i 13 moduli) | Email (48h) |
+| **ENTERPRISE** | **149€/mese** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (24h) |
+
+Risparmia con l'annuale: **2 mesi gratis** (LITE 190€/anno, PRO 490€/anno, ENTERPRISE 1.490€/anno)
 
 ### Come funziona l'acquisto
 
