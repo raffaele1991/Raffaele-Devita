@@ -1,217 +1,232 @@
 #!/usr/bin/env python3
 """Script per creare il pacchetto distribuibile del Bug Bounty Scanner.
 
-Compila il software in un eseguibile binario con PyInstaller.
-Il cliente riceve UN SOLO FILE eseguibile, senza codice sorgente.
+Crea un archivio ZIP pronto da inviare al cliente con:
+  - Codice compilato in bytecode (.pyc) - non leggibile come il sorgente
+  - Script di avvio semplici (bbscanner, bbscanner_pro, bbscanner_activate)
+  - README e LICENSE per il cliente
 
 Uso:
-    pip install pyinstaller
     python build_release.py
 
 Genera:
-    dist/bbscanner         - Eseguibile modalita LITE
-    dist/bbscanner_pro     - Eseguibile modalita PRO
-    dist/bbscanner_activate - Eseguibile per attivare la licenza
-
-Cosa inviare al cliente:
-    1. I 3 file eseguibili dalla cartella dist/
-    2. La chiave di licenza generata con generate_license.py
-    3. Il file README_CLIENTE.md (generato automaticamente)
+    dist/bugbounty_scanner_v2.0.zip  - Archivio pronto da inviare al cliente
 """
 
+import compileall
 import os
-import subprocess
-import sys
+import py_compile
 import shutil
+import sys
+from pathlib import Path
+
+PROJECT_DIR = Path(__file__).parent
+DIST_DIR = PROJECT_DIR / "dist"
+BUILD_DIR = PROJECT_DIR / "build" / "release"
 
 
-def check_pyinstaller():
-    """Verifica che PyInstaller sia installato."""
-    try:
-        import PyInstaller
-        print(f"  PyInstaller {PyInstaller.__version__} trovato")
-        return True
-    except ImportError:
-        print("  ERRORE: PyInstaller non installato.")
-        print("  Installalo con: pip install pyinstaller")
-        return False
+def clean():
+    """Pulisci le cartelle di build."""
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+    DIST_DIR.mkdir(exist_ok=True)
+    BUILD_DIR.mkdir(parents=True)
 
 
-def build_executable(script, name, hidden_imports=None):
-    """Compila uno script Python in un eseguibile."""
-    print(f"\n  Compilazione {name}...")
+def compile_package():
+    """Compila tutto il pacchetto in bytecode .pyc."""
+    print("  [1/4] Compilazione bytecode...")
 
-    cmd = [
-        sys.executable, "-m", "PyInstaller",
-        "--onefile",           # Un solo file eseguibile
-        "--clean",             # Pulisci cache
-        "--name", name,        # Nome dell'eseguibile
-        "--noconfirm",         # Sovrascrivi senza chiedere
-    ]
+    src = PROJECT_DIR / "bugbounty_scanner"
+    dst = BUILD_DIR / "bugbounty_scanner"
 
-    # Importa tutti i moduli del pacchetto
-    if hidden_imports:
-        for imp in hidden_imports:
-            cmd.extend(["--hidden-import", imp])
+    # Copia la struttura
+    shutil.copytree(src, dst)
 
-    cmd.append(script)
+    # Compila tutti i .py in .pyc
+    compileall.compile_dir(str(dst), quiet=1, force=True)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"  ERRORE compilazione {name}:")
-        print(result.stderr[-500:] if len(result.stderr) > 500 else result.stderr)
-        return False
+    # Rimuovi i file .py sorgente, tieni solo i .pyc
+    count = 0
+    for pyc_file in dst.rglob("*.pyc"):
+        # Sposta .pyc dalla cartella __pycache__ alla cartella del modulo
+        module_dir = pyc_file.parent.parent
+        # Nome originale: modulo.cpython-XY.pyc -> modulo.pyc
+        original_name = pyc_file.stem.split(".")[0] + ".pyc"
+        dest = module_dir / original_name
+        shutil.move(str(pyc_file), str(dest))
+        count += 1
 
-    print(f"  {name} compilato con successo!")
-    return True
+    # Rimuovi le cartelle __pycache__ e i file .py
+    for pycache in dst.rglob("__pycache__"):
+        shutil.rmtree(pycache)
+    for py_file in dst.rglob("*.py"):
+        py_file.unlink()
+
+    print(f"         {count} moduli compilati")
 
 
-def generate_client_readme():
-    """Genera un README semplificato per il cliente."""
-    readme = """# Bug Bounty Vulnerability Scanner Agent v2.0
+def create_launchers():
+    """Crea gli script di avvio per il cliente."""
+    print("  [2/4] Creazione script di avvio...")
+
+    # Script LITE
+    (BUILD_DIR / "bbscanner").write_text(
+        '#!/usr/bin/env python3\n'
+        'import sys, os\n'
+        'sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\n'
+        'from bugbounty_scanner.cli import main\n'
+        'main()\n'
+    )
+
+    # Script PRO
+    (BUILD_DIR / "bbscanner_pro").write_text(
+        '#!/usr/bin/env python3\n'
+        'import sys, os\n'
+        'sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\n'
+        'from bugbounty_scanner.cli_pro import main\n'
+        'main()\n'
+    )
+
+    # Script attivazione
+    (BUILD_DIR / "bbscanner_activate").write_text(
+        '#!/usr/bin/env python3\n'
+        'import sys, os\n'
+        'sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\n'
+        'from bugbounty_scanner.activate import main\n'
+        'main()\n'
+    )
+
+    # Rendi eseguibili
+    for script in ["bbscanner", "bbscanner_pro", "bbscanner_activate"]:
+        os.chmod(BUILD_DIR / script, 0o755)
+
+
+def create_client_files():
+    """Crea README e copia LICENSE per il cliente."""
+    print("  [3/4] Creazione documentazione cliente...")
+
+    # README per il cliente
+    (BUILD_DIR / "README.md").write_text("""# Bug Bounty Vulnerability Scanner Agent v2.0
+
+## Requisiti
+- Python 3.8 o superiore
+- pip install requests beautifulsoup4 dnspython Jinja2 urllib3
 
 ## Installazione
 
-### 1. Attiva la licenza
+### 1. Estrai i file
+Estrai questo archivio in una cartella a tua scelta.
+
+### 2. Installa le dipendenze Python
 ```bash
-./bbscanner_activate BBSC-LA-TUA-CHIAVE
+pip install requests beautifulsoup4 dnspython Jinja2 urllib3
 ```
 
-### 2. Usa lo scanner
-
-Modalita LITE:
+### 3. Attiva la licenza
 ```bash
-./bbscanner -t example.com
+python3 bbscanner_activate BBSC-LA-TUA-CHIAVE
 ```
 
-Modalita PRO:
+### 4. Usa lo scanner
 ```bash
-./bbscanner_pro -t example.com
+# Modalita LITE
+python3 bbscanner -t example.com
+
+# Modalita PRO
+python3 bbscanner_pro -t example.com
 ```
 
-### 3. Verifica stato licenza
+### 5. Verifica stato licenza
 ```bash
-./bbscanner_activate
+python3 bbscanner_activate
 ```
 
-## Comandi rapidi
+## Comandi utili
 
 ```bash
-# Scansione completa LITE
-./bbscanner -t example.com
-
 # Scansione completa PRO
-./bbscanner_pro -t example.com
+python3 bbscanner_pro -t example.com
 
-# PRO con scope automatico da HackerOne
-./bbscanner_pro -t example.com --program "https://hackerone.com/example"
+# Con scope automatico da HackerOne
+python3 bbscanner_pro -t example.com --program "https://hackerone.com/example"
 
-# PRO con notifiche Telegram
-./bbscanner_pro -t example.com --telegram-token "TOKEN" --telegram-chat "CHAT_ID"
+# Con notifiche Telegram
+python3 bbscanner_pro -t example.com --telegram-token "TOKEN" --telegram-chat "CHAT_ID"
 
-# PRO solo Nuclei e Nmap
-./bbscanner_pro -t example.com --pipeline nuclei nmap
+# Solo Nuclei e Nmap
+python3 bbscanner_pro -t example.com --pipeline nuclei nmap
 ```
 
 ## Supporto
-
-Per problemi, rinnovi o upgrade: **devita.raffaele@gmail.com**
+Per problemi, rinnovi o upgrade: devita.raffaele@gmail.com
 
 ## Licenza
+Software protetto da licenza commerciale. Chiave personale e non trasferibile.
+""")
 
-Questo software e protetto da licenza commerciale.
-La chiave di licenza e personale e non trasferibile.
-Vedi il file LICENSE per i termini completi.
-"""
+    # Copia LICENSE
+    license_file = PROJECT_DIR / "LICENSE"
+    if license_file.exists():
+        shutil.copy(license_file, BUILD_DIR / "LICENSE")
 
-    with open("dist/README_CLIENTE.md", "w") as f:
-        f.write(readme)
-    print("  README_CLIENTE.md generato")
+    # Copia requirements.txt
+    req_file = PROJECT_DIR / "requirements.txt"
+    if req_file.exists():
+        shutil.copy(req_file, BUILD_DIR / "requirements.txt")
+
+    # Copia install_tools.sh per la modalita PRO
+    tools_file = PROJECT_DIR / "install_tools.sh"
+    if tools_file.exists():
+        shutil.copy(tools_file, BUILD_DIR / "install_tools.sh")
+        os.chmod(BUILD_DIR / "install_tools.sh", 0o755)
 
 
-def copy_license():
-    """Copia il file LICENSE nella cartella dist."""
-    if os.path.exists("LICENSE"):
-        shutil.copy("LICENSE", "dist/LICENSE")
-        print("  LICENSE copiato")
+def create_zip():
+    """Crea l'archivio ZIP finale."""
+    print("  [4/4] Creazione archivio ZIP...")
+
+    zip_name = "bugbounty_scanner_v2.0"
+    zip_path = DIST_DIR / zip_name
+
+    shutil.make_archive(str(zip_path), "zip", str(BUILD_DIR))
+
+    final_path = DIST_DIR / f"{zip_name}.zip"
+    size_mb = final_path.stat().st_size / (1024 * 1024)
+
+    print(f"         {final_path} ({size_mb:.1f} MB)")
+    return final_path
 
 
 def main():
     print("\n  ================================================")
-    print("  BUILD RELEASE - Bug Bounty Scanner")
+    print("  BUILD RELEASE - Bug Bounty Scanner v2.0")
     print("  ================================================\n")
 
-    if not check_pyinstaller():
-        sys.exit(1)
+    clean()
+    compile_package()
+    create_launchers()
+    create_client_files()
+    zip_path = create_zip()
 
-    # Moduli da includere nell'eseguibile
-    hidden = [
-        "bugbounty_scanner",
-        "bugbounty_scanner.license_manager",
-        "bugbounty_scanner.scanner",
-        "bugbounty_scanner.orchestrator",
-        "bugbounty_scanner.reporter",
-        "bugbounty_scanner.http_session",
-        "bugbounty_scanner.program_parser",
-        "bugbounty_scanner.scope_checker",
-        "bugbounty_scanner.notifier",
-        "bugbounty_scanner.config",
-        "bugbounty_scanner.modules",
-        "bugbounty_scanner.modules.recon",
-        "bugbounty_scanner.modules.headers",
-        "bugbounty_scanner.modules.xss",
-        "bugbounty_scanner.modules.sqli",
-        "bugbounty_scanner.modules.ssrf",
-        "bugbounty_scanner.modules.open_redirect",
-        "bugbounty_scanner.modules.sensitive_files",
-        "bugbounty_scanner.modules.crawler",
-        "bugbounty_scanner.modules.wayback",
-        "bugbounty_scanner.modules.js_scanner",
-        "bugbounty_scanner.tools",
-        "bugbounty_scanner.tools.base",
-        "bugbounty_scanner.tools.subfinder",
-        "bugbounty_scanner.tools.httpx_tool",
-        "bugbounty_scanner.tools.nmap_tool",
-        "bugbounty_scanner.tools.nuclei_tool",
-        "bugbounty_scanner.tools.ffuf_tool",
-        "bugbounty_scanner.tools.sqlmap_tool",
-        "bugbounty_scanner.tools.dalfox_tool",
-        "bugbounty_scanner.tools.nikto_tool",
-    ]
-
-    # Compila i 3 eseguibili
-    ok = True
-    ok = build_executable("bugbounty_scanner/cli.py", "bbscanner", hidden) and ok
-    ok = build_executable("bugbounty_scanner/cli_pro.py", "bbscanner_pro", hidden) and ok
-    ok = build_executable("bugbounty_scanner/activate.py", "bbscanner_activate", hidden) and ok
-
-    if not ok:
-        print("\n  ERRORE: Alcune compilazioni sono fallite.")
-        sys.exit(1)
-
-    # Genera file per il cliente
-    generate_client_readme()
-    copy_license()
-
-    # Pulizia file temporanei PyInstaller
-    for d in ["build", "*.spec"]:
-        if os.path.isdir(d):
-            shutil.rmtree(d, ignore_errors=True)
-    for f in os.listdir("."):
-        if f.endswith(".spec"):
-            os.remove(f)
+    # Pulizia build temporanei
+    shutil.rmtree(BUILD_DIR.parent, ignore_errors=True)
 
     print(f"\n  ================================================")
     print(f"  BUILD COMPLETATA!")
     print(f"  ================================================")
-    print(f"\n  File pronti in: dist/")
-    print(f"    - bbscanner           (modalita LITE)")
-    print(f"    - bbscanner_pro       (modalita PRO)")
-    print(f"    - bbscanner_activate  (attivazione licenza)")
-    print(f"    - README_CLIENTE.md   (istruzioni per il cliente)")
-    print(f"    - LICENSE             (contratto di licenza)")
-    print(f"\n  Invia la cartella dist/ al cliente dopo il pagamento.")
-    print(f"  NON inviare mai il codice sorgente!\n")
+    print(f"\n  File pronto da inviare al cliente:")
+    print(f"    {zip_path}")
+    print(f"\n  Il cliente riceve:")
+    print(f"    - Codice compilato (bytecode, non leggibile)")
+    print(f"    - Script di avvio (bbscanner, bbscanner_pro, bbscanner_activate)")
+    print(f"    - README con istruzioni")
+    print(f"    - LICENSE")
+    print(f"    - requirements.txt")
+    print(f"\n  COME INVIARE:")
+    print(f"    1. Genera la chiave: python generate_license.py PRO email@cliente.com")
+    print(f"    2. Manda il file ZIP + la chiave via email al cliente")
+    print(f"  ================================================\n")
 
 
 if __name__ == "__main__":
