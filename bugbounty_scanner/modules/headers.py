@@ -79,14 +79,22 @@ class HeadersModule:
             },
         }
 
+        # Costruisci evidenza con tutti gli header della risposta
+        all_headers_str = "\n".join(f"{k}: {v}" for k, v in headers.items())
+
         for header_name, info in critical_headers.items():
             if header_name not in headers:
+                evidence_parts = [
+                    f"Header '{header_name}' non presente nella risposta HTTP.",
+                    f"\nComando per verificare:\ncurl -s -I '{target}'",
+                    f"\nHeader di risposta attuali:\n{all_headers_str}"
+                ]
                 findings.append(Finding(
                     title=f"Missing Security Header: {header_name}",
                     severity=info["severity"],
                     url=target,
                     description=info["desc"],
-                    evidence=f"Header '{header_name}' not found in response.",
+                    evidence="\n".join(evidence_parts),
                     remediation=info["fix"],
                     module=self.name,
                     cwe=info["cwe"],

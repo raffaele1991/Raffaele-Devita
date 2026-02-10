@@ -3,16 +3,26 @@
 import json
 import logging
 import os
+import socket
 import threading
 import time
+import urllib3
 from datetime import datetime
 from pathlib import Path
+
+# Silenzia i warning SSL "InsecureRequestWarning"
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session, send_file
 
 from bugbounty_scanner.license_manager import (
     activate_license, get_active_license, verify_license_key, LicenseError
 )
+
+logger = logging.getLogger("bugbounty_scanner")
+
+# Silenzia i log HTTP di Flask/Werkzeug (GET /scan/... 200)
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -199,9 +209,25 @@ def start_scan():
         return redirect(url_for("scan_status", scan_id=first_scan_id))
 
 
+def _dns_resolves(domain):
+    """Verifica che un dominio risolva via DNS (esiste davvero)."""
+    # Rimuovi schema se presente
+    if "://" in domain:
+        from urllib.parse import urlparse
+        domain = urlparse(domain).netloc
+    # Rimuovi porta
+    if ":" in domain:
+        domain = domain.split(":")[0]
+    try:
+        socket.getaddrinfo(domain, None, socket.AF_INET, socket.SOCK_STREAM)
+        return True
+    except (socket.gaierror, OSError):
+        return False
+
+
 def _extract_targets_from_scope(program_url, scope_text):
     """Estrae TUTTI i target dall'URL programma BB o dallo scope manuale."""
-    targets = []
+    raw_targets = []
 
     # Prima prova dal programma bug bounty
     if program_url:
@@ -209,26 +235,44 @@ def _extract_targets_from_scope(program_url, scope_text):
             from bugbounty_scanner.program_parser import ProgramParser
             parser = ProgramParser()
             program_info = parser.parse(program_url)
-            # Prendi tutti i domini in scope (rimuovi wildcard)
             for domain in program_info.in_scope_domains:
                 clean = domain.strip().lstrip("*.")
-                if clean and clean not in targets:
-                    targets.append(clean)
-            # Aggiungi anche URL specifici in scope
+                if clean and clean not in raw_targets:
+                    raw_targets.append(clean)
             for url in program_info.in_scope_urls:
-                if url and url not in targets:
-                    targets.append(url)
+                if url and url not in raw_targets:
+                    raw_targets.append(url)
         except Exception as e:
             logger.error(f"Errore parsing programma {program_url}: {e}")
 
-    # Poi aggiungi dallo scope manuale (se non già presenti)
+    # Poi aggiungi dallo scope manuale
     if scope_text:
         for line in scope_text.strip().splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
                 clean = line.lstrip("*.")
-                if clean and clean not in targets:
-                    targets.append(clean)
+                if clean and clean not in raw_targets:
+                    raw_targets.append(clean)
+
+    # Filtra: tieni solo i domini che risolvono via DNS
+    targets = []
+    skipped = []
+    for t in raw_targets:
+        if _dns_resolves(t):
+            targets.append(t)
+        else:
+            skipped.append(t)
+
+    if skipped:
+        print(f"  [SCOPE] {len(skipped)} domini scartati (DNS non risolve):")
+        for s in skipped[:10]:
+            print(f"    [-] {s}")
+        if len(skipped) > 10:
+            print(f"    ... e altri {len(skipped) - 10}")
+    if targets:
+        print(f"  [SCOPE] {len(targets)} domini validi trovati:")
+        for t in targets:
+            print(f"    [+] {t}")
 
     return targets
 
@@ -236,6 +280,8 @@ def _extract_targets_from_scope(program_url, scope_text):
 def run_scan_background(scan_id, target, mode, modules, options):
     """Esegue la scansione in un thread separato."""
     try:
+        print(f"\n  [SCAN] Avvio scansione {mode.upper()} su {target}...")
+
         if mode == "lite":
             run_lite_scan(scan_id, target, modules, options)
         else:
@@ -247,7 +293,22 @@ def run_scan_background(scan_id, target, mode, modules, options):
         # Invia notifiche
         send_notifications(scan_id, options)
 
+        # Messaggio finale nel terminale
+        scan = scans.get(scan_id, {})
+        n_findings = len(scan.get("findings", []))
+        report_paths = scan.get("report_paths", {})
+        print(f"\n  {'='*55}")
+        print(f"  [COMPLETATA] {target}")
+        print(f"  Vulnerabilita trovate: {n_findings}")
+        if report_paths:
+            for fmt, path in report_paths.items():
+                print(f"  Report {fmt.upper()}: {path}")
+        else:
+            print(f"  Report: nessun formato selezionato")
+        print(f"  {'='*55}\n")
+
     except Exception as e:
+        print(f"\n  [ERRORE] Scansione {target} fallita: {e}\n")
         with scan_lock:
             scans[scan_id]["status"] = "error"
             scans[scan_id]["current_step"] = f"Errore: {str(e)}"
@@ -423,11 +484,14 @@ def run_lite_scan(scan_id, target, modules, options):
     if scope_checker:
         result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
 
+    # Filtra via gli INFO - mostra solo CRITICAL, HIGH, MEDIUM, LOW
+    result.findings = [f for f in result.findings if getattr(f, "severity", "INFO") != "INFO"]
+
     findings_list = []
     for f in result.findings:
         findings_list.append({
             "type": getattr(f, "vuln_type", "Unknown"),
-            "severity": getattr(f, "severity", "INFO"),
+            "severity": getattr(f, "severity", "LOW"),
             "url": getattr(f, "url", target),
             "description": getattr(f, "description", str(f)),
         })
@@ -533,11 +597,14 @@ def run_pro_scan(scan_id, target, modules, options):
     if scope_checker:
         result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
 
+    # Filtra via gli INFO - mostra solo CRITICAL, HIGH, MEDIUM, LOW
+    result.findings = [f for f in result.findings if getattr(f, "severity", "INFO") != "INFO"]
+
     findings_list = []
     for f in result.findings:
         findings_list.append({
             "type": getattr(f, "vuln_type", "Unknown"),
-            "severity": getattr(f, "severity", "INFO"),
+            "severity": getattr(f, "severity", "LOW"),
             "url": getattr(f, "url", target),
             "description": getattr(f, "description", str(f)),
         })

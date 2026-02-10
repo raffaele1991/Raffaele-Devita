@@ -53,6 +53,11 @@ class NiktoTool(BaseTool):
                 if any(x in message for x in ["host(s) tested", "item(s) reported"]):
                     continue
 
+                # Filtra errori interni di Nikto (non sono vulnerabilità)
+                if message.upper().startswith("ERROR") or "ERROR:" in message:
+                    logger.warning(f"  [Nikto] Errore interno ignorato: {message}")
+                    continue
+
                 # Classifica la gravità
                 severity = SEVERITY_LOW
                 if any(kw in message.lower() for kw in [
