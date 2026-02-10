@@ -161,7 +161,7 @@ class WaybackModule:
         }
 
         try:
-            resp = self.session.get(WAYBACK_API, params=params, timeout=30)
+            resp = self.session.get(WAYBACK_API, params=params, timeout=60)
             if resp.status_code == 200:
                 for line in resp.text.splitlines():
                     line = line.strip()

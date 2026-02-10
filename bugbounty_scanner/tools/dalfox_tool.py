@@ -100,7 +100,7 @@ class DalfoxTool(BaseTool):
         args.extend(self.get_header_args("-H"))
 
         # Cattura stdout (contiene --format json output)
-        stdout_output = self.run_command(args, timeout=300) or ""
+        stdout_output = self.run_command(args, timeout=600) or ""
 
         # Leggi anche il file di output
         file_content = ""

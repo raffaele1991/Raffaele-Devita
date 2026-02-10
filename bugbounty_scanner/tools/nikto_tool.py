@@ -1,7 +1,9 @@
 """Wrapper per Nikto - web server scanner."""
 
 import logging
+import os
 import re
+import tempfile
 
 from bugbounty_scanner.tools.base import BaseTool
 from bugbounty_scanner.scanner import Finding
@@ -28,9 +30,14 @@ class NiktoTool(BaseTool):
 
         logger.info(f"  [Nikto] Scansione web server su {target.base_url}")
 
+        # Nikto richiede -output quando si usa -Format
+        fd, output_file = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+
         args = [
             "-h", target.base_url,
             "-Format", "csv",
+            "-output", output_file,
             "-nointeractive",
             "-maxtime", "300s",
             "-Tuning", "1234567890abc",  # tutti i test
@@ -38,10 +45,25 @@ class NiktoTool(BaseTool):
 
         output = self.run_command(args, timeout=360)
 
-        if not output:
+        # Leggi anche il file CSV di output
+        file_content = ""
+        try:
+            with open(output_file, "r") as f:
+                file_content = f.read()
+        except Exception:
+            pass
+        finally:
+            try:
+                os.unlink(output_file)
+            except Exception:
+                pass
+
+        if not output and not file_content:
             return findings
 
-        for line in output.splitlines():
+        # Parsa stdout (linee con + prefisso)
+        all_lines = (output or "").splitlines()
+        for line in all_lines:
             # Nikto CSV format: "host","IP","port","ref","method","URI","message"
             # Ma anche output in plain text con + prefisso
             if line.startswith("+"):
