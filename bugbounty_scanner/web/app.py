@@ -16,6 +16,9 @@ from bugbounty_scanner.license_manager import (
 
 logger = logging.getLogger("bugbounty_scanner")
 
+# Silenzia i log HTTP di Flask/Werkzeug (GET /scan/... 200)
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -238,6 +241,8 @@ def _extract_targets_from_scope(program_url, scope_text):
 def run_scan_background(scan_id, target, mode, modules, options):
     """Esegue la scansione in un thread separato."""
     try:
+        print(f"\n  [SCAN] Avvio scansione {mode.upper()} su {target}...")
+
         if mode == "lite":
             run_lite_scan(scan_id, target, modules, options)
         else:
@@ -249,7 +254,22 @@ def run_scan_background(scan_id, target, mode, modules, options):
         # Invia notifiche
         send_notifications(scan_id, options)
 
+        # Messaggio finale nel terminale
+        scan = scans.get(scan_id, {})
+        n_findings = len(scan.get("findings", []))
+        report_paths = scan.get("report_paths", {})
+        print(f"\n  {'='*55}")
+        print(f"  [COMPLETATA] {target}")
+        print(f"  Vulnerabilita trovate: {n_findings}")
+        if report_paths:
+            for fmt, path in report_paths.items():
+                print(f"  Report {fmt.upper()}: {path}")
+        else:
+            print(f"  Report: nessun formato selezionato")
+        print(f"  {'='*55}\n")
+
     except Exception as e:
+        print(f"\n  [ERRORE] Scansione {target} fallita: {e}\n")
         with scan_lock:
             scans[scan_id]["status"] = "error"
             scans[scan_id]["current_step"] = f"Errore: {str(e)}"
