@@ -101,32 +101,43 @@ class NucleiTool(BaseTool):
             curl_command = entry.get("curl-command", "")
 
             evidence_parts = []
+            if matched_url:
+                evidence_parts.append(f"URL vulnerabile: {matched_url}")
             if template_id:
                 evidence_parts.append(f"Template: {template_id}")
             if matcher_name:
                 evidence_parts.append(f"Matcher: {matcher_name}")
             if extracted:
-                evidence_parts.append(f"Estratto: {', '.join(str(e) for e in extracted[:5])}")
-            if curl_command:
-                evidence_parts.append(f"Curl: {curl_command}")
+                evidence_parts.append(f"Dati estratti: {', '.join(str(e) for e in extracted[:5])}")
             if tags:
                 tag_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
                 evidence_parts.append(f"Tags: {tag_str}")
+            if curl_command:
+                evidence_parts.append(f"\nComando per riprodurre:\n{curl_command}")
+            elif matched_url:
+                # Genera curl command se Nuclei non lo fornisce
+                curl_cmd = f"curl -s -I '{matched_url}'"
+                if self._custom_headers:
+                    for k, v in self._custom_headers.items():
+                        curl_cmd += f" -H '{k}: {v}'"
+                evidence_parts.append(f"\nComando per riprodurre:\n{curl_cmd}")
 
-            remediation = ""
+            remediation_parts = []
+            if description:
+                remediation_parts.append(description)
             if reference:
                 if isinstance(reference, list):
-                    remediation = "Riferimenti: " + ", ".join(reference[:3])
+                    remediation_parts.append("Riferimenti: " + " | ".join(reference[:5]))
                 else:
-                    remediation = f"Riferimento: {reference}"
+                    remediation_parts.append(f"Riferimento: {reference}")
 
             findings.append(Finding(
                 title=f"[Nuclei] {name}",
                 severity=SEVERITY_MAP.get(severity, SEVERITY_INFO),
                 url=matched_url,
-                description=description or f"Nuclei template '{template_id}' ha trovato un match.",
+                description=description or f"Nuclei template '{template_id}' ha trovato un match su {matched_url}.",
                 evidence="\n".join(evidence_parts),
-                remediation=remediation,
+                remediation="\n".join(remediation_parts) if remediation_parts else "",
                 module=self.name,
             ))
 

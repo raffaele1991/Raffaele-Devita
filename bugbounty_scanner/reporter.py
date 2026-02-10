@@ -95,23 +95,26 @@ HTML_TEMPLATE = """\
 
   <h2>Vulnerabilita Trovate ({{ result.findings|length }})</h2>
   {% for finding in findings_sorted %}
-  <div class="finding">
+  <div class="finding" id="finding-{{ loop.index }}">
     <div class="finding-header">
-      <span class="finding-title">{{ finding.title }}</span>
+      <span class="finding-title">{{ loop.index }}. {{ finding.title }}</span>
       <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span>
     </div>
-    <div class="field"><span class="field-label">URL:</span> {{ finding.url }}</div>
-    <div class="field"><span class="field-label">Descrizione:</span> {{ finding.description }}</div>
+    <div class="field"><span class="field-label">URL:</span> <a href="{{ finding.url }}" style="color: #58a6ff; word-break: break-all;">{{ finding.url }}</a></div>
+    {% if finding.cwe %}
+    <div class="field"><span class="field-label">CWE:</span> <a href="https://cwe.mitre.org/data/definitions/{{ finding.cwe.replace('CWE-','') }}.html" style="color: #58a6ff;">{{ finding.cwe }}</a></div>
+    {% endif %}
+    <div class="field"><span class="field-label">Descrizione:</span><br><p style="margin: 6px 0 0 0; line-height: 1.5;">{{ finding.description }}</p></div>
     {% if finding.evidence %}
-    <div class="field"><span class="field-label">Evidenza:</span><pre>{{ finding.evidence }}</pre></div>
+    <div class="field">
+      <span class="field-label">Proof of Concept (PoC):</span>
+      <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 6px; padding: 12px;">{{ finding.evidence }}</pre>
+    </div>
     {% endif %}
     {% if finding.remediation %}
-    <div class="field"><span class="field-label">Rimedio:</span> {{ finding.remediation }}</div>
+    <div class="field"><span class="field-label">Remediation:</span><br><p style="margin: 6px 0 0 0; line-height: 1.5;">{{ finding.remediation }}</p></div>
     {% endif %}
-    {% if finding.cwe %}
-    <div class="field"><span class="field-label">CWE:</span> {{ finding.cwe }}</div>
-    {% endif %}
-    <div class="field"><span class="field-label">Modulo:</span> {{ finding.module }}</div>
+    <div class="field" style="color: #6e7681; font-size: 0.85em;"><span class="field-label">Modulo:</span> {{ finding.module }}</div>
   </div>
   {% endfor %}
 
