@@ -294,9 +294,25 @@ class JSScanner:
             return True
 
         # Troppi caratteri ripetuti = probabilmente base64/padding, non un secret
-        # Es: "ABIAAAAZCAYAAAA8CX6U" ha troppi 'A' consecutivi
         for char in set(match):
             if match.count(char) > len(match) * 0.4:
+                return True
+
+        # Generic Secret/API Key: filtra valori che sono chiaramente nomi di
+        # variabili, token CSRF, o valori comuni e non veri secret
+        if secret_name in ("Generic Secret", "Generic API Key"):
+            generic_noise = [
+                "csrf", "xsrf", "nonce", "state", "session",
+                "undefined", "null", "true", "false", "none",
+                "function", "return", "default", "module", "export",
+                "require", "window", "document", "console",
+                "token_type", "access_token", "refresh_token",
+                "grant_type", "client_id", "redirect_uri",
+            ]
+            if any(n in match_lower for n in generic_noise):
+                return True
+            # Se il match contiene solo lettere e underscore, è un nome variabile
+            if match.replace("_", "").replace("-", "").isalpha():
                 return True
 
         return False
