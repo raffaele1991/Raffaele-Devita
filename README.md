@@ -294,7 +294,7 @@ Il software viene distribuito come **eseguibile compilato** (non come codice sor
 
 - Il codice sorgente **non e incluso**: ricevi solo i file eseguibili
 - Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
-- Ogni chiave ha una **data di scadenza** (12 o 24 mesi in base al piano)
+- Ogni chiave ha una **data di scadenza** (mensile o annuale in base all'abbonamento)
 - Le chiavi sono **firmate crittograficamente**: non possono essere generate, modificate o falsificate
 - Chi ha una licenza **LITE** non puo usare la modalita **PRO**
 - **Senza chiave valida il software non si avvia**
