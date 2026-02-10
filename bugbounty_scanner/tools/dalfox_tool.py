@@ -6,11 +6,39 @@ import json
 import tempfile
 import re
 
+import requests
+
 from bugbounty_scanner.tools.base import BaseTool
 from bugbounty_scanner.scanner import Finding
-from bugbounty_scanner.config import SEVERITY_HIGH, SEVERITY_MEDIUM
+from bugbounty_scanner.config import SEVERITY_HIGH, SEVERITY_MEDIUM, DEFAULT_USER_AGENT
 
 logger = logging.getLogger("bugbounty_scanner")
+
+# Firme WAF: pattern nel body o header che indicano un blocco WAF
+WAF_BODY_SIGNATURES = [
+    "cloudfront",
+    "cloudflare",
+    "access denied",
+    "request blocked",
+    "web application firewall",
+    "waf",
+    "mod_security",
+    "modsecurity",
+    "imperva",
+    "incapsula",
+    "sucuri",
+    "akamai",
+    "blocked by",
+    "security policy",
+    "forbidden",
+    "ddos protection",
+    "attention required",
+]
+
+WAF_HEADER_SIGNATURES = [
+    "cloudfront", "cloudflare", "akamai", "incapsula", "sucuri",
+    "imperva", "barracuda", "f5", "fortiweb", "wallarm",
+]
 
 
 class DalfoxTool(BaseTool):
@@ -22,6 +50,57 @@ class DalfoxTool(BaseTool):
     name = "dalfox"
     binary = "dalfox"
     install_url = "https://github.com/hahwul/dalfox"
+
+    def _is_waf_blocked(self, poc_url):
+        """Verifica se il PoC URL viene bloccato da un WAF.
+
+        Fa una richiesta HTTP al PoC URL e controlla se la risposta
+        indica un blocco WAF (403/406/429 con firme WAF nel body/header).
+        Ritorna True se bloccato da WAF, False se il payload passa.
+        """
+        if not poc_url:
+            return False
+
+        try:
+            headers = {"User-Agent": DEFAULT_USER_AGENT}
+            if self._custom_headers:
+                headers.update(self._custom_headers)
+
+            resp = requests.get(
+                poc_url, headers=headers, timeout=10,
+                allow_redirects=True, verify=False,
+            )
+
+            # Status code tipici di WAF block
+            if resp.status_code in (403, 406, 429, 503):
+                body_lower = resp.text.lower()
+                # Verifica che sia davvero un WAF e non un 403 legittimo
+                for sig in WAF_BODY_SIGNATURES:
+                    if sig in body_lower:
+                        logger.info(
+                            f"  [Dalfox] WAF rilevato ({resp.status_code}, "
+                            f"firma: {sig}): {poc_url[:100]}"
+                        )
+                        return True
+
+                # Controlla anche gli header della risposta
+                all_headers = " ".join(
+                    f"{k}: {v}" for k, v in resp.headers.items()
+                ).lower()
+                for sig in WAF_HEADER_SIGNATURES:
+                    if sig in all_headers:
+                        logger.info(
+                            f"  [Dalfox] WAF rilevato in header ({sig}): "
+                            f"{poc_url[:100]}"
+                        )
+                        return True
+
+            return False
+
+        except requests.RequestException as e:
+            logger.debug(f"  [Dalfox] Errore verifica WAF: {e}")
+            # In caso di errore di connessione, non confermiamo la vuln
+            return True
 
     def _parse_output(self, raw_content):
         """Parsa output Dalfox (JSON, JSONL, o testo [POC]...)."""
@@ -161,6 +240,11 @@ class DalfoxTool(BaseTool):
             # Se non c'è PoC URL e non c'è payload, è un falso positivo
             if not poc_url and not payload and not raw_line:
                 logger.debug(f"  [Dalfox] Entry senza PoC/payload scartata: {entry}")
+                continue
+
+            # Verifica WAF: se il PoC viene bloccato da un WAF, scarta
+            if poc_url and self._is_waf_blocked(poc_url):
+                logger.info(f"  [Dalfox] XSS scartato - bloccato da WAF: {poc_url[:100]}")
                 continue
 
             severity = SEVERITY_HIGH
