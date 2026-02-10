@@ -236,13 +236,95 @@ class SubdomainTakeoverModule:
             from bugbounty_scanner.http_session import HttpSession
             self.session = HttpSession()
 
+    def _enumerate_subdomains(self, domain):
+        """Enumera sottodomini da fonti OSINT multiple.
+
+        Fallback quando subfinder non è installato. Usa:
+        1. crt.sh (Certificate Transparency)
+        2. HackerTarget
+        3. AlienVault OTX
+        """
+        subdomains = set()
+
+        # 1. crt.sh (Certificate Transparency logs)
+        try:
+            logger.info("  [Takeover] Cerco sottodomini su crt.sh...")
+            resp = requests.get(
+                f"https://crt.sh/?q=%.{domain}&output=json",
+                headers={"User-Agent": DEFAULT_USER_AGENT},
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                for entry in resp.json():
+                    name = entry.get("name_value", "")
+                    for line in name.splitlines():
+                        line = line.strip().lower()
+                        if line and "*" not in line and line.endswith(domain):
+                            subdomains.add(line)
+                logger.info(f"  [Takeover] crt.sh: {len(subdomains)} sottodomini")
+        except Exception as e:
+            logger.debug(f"  [Takeover] crt.sh fallito: {e}")
+
+        # 2. HackerTarget (free, no API key)
+        try:
+            logger.info("  [Takeover] Cerco sottodomini su HackerTarget...")
+            resp = requests.get(
+                f"https://api.hackertarget.com/hostsearch/?q={domain}",
+                headers={"User-Agent": DEFAULT_USER_AGENT},
+                timeout=20,
+            )
+            if resp.status_code == 200 and "error" not in resp.text.lower():
+                for line in resp.text.splitlines():
+                    parts = line.strip().split(",")
+                    if parts and parts[0].endswith(domain):
+                        subdomains.add(parts[0].lower())
+                logger.info(f"  [Takeover] HackerTarget: totale {len(subdomains)} sottodomini")
+        except Exception as e:
+            logger.debug(f"  [Takeover] HackerTarget fallito: {e}")
+
+        # 3. AlienVault OTX (free, no API key)
+        try:
+            logger.info("  [Takeover] Cerco sottodomini su AlienVault OTX...")
+            resp = requests.get(
+                f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns",
+                headers={"User-Agent": DEFAULT_USER_AGENT},
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                for record in data.get("passive_dns", []):
+                    hostname = record.get("hostname", "").lower()
+                    if hostname and hostname.endswith(domain):
+                        subdomains.add(hostname)
+                logger.info(f"  [Takeover] AlienVault: totale {len(subdomains)} sottodomini")
+        except Exception as e:
+            logger.debug(f"  [Takeover] AlienVault fallito: {e}")
+
+        return sorted(subdomains)
+
     def run(self, target, scan_result):
         findings = []
 
+        # Prendi sottodomini da subfinder, altrimenti usa crt.sh
         subdomains = getattr(scan_result, "subdomains", [])
         if not subdomains:
-            logger.info("  [Takeover] Nessun sottodominio da testare (subfinder non eseguito?)")
-            return findings
+            # Estrai dominio dal target (può essere URL o stringa)
+            if hasattr(target, "replace"):
+                from urllib.parse import urlparse
+                parsed = urlparse(target if "://" in target else f"https://{target}")
+                domain = parsed.netloc or target
+            else:
+                domain = target
+            domain = domain.split(":")[0]  # rimuovi porta
+
+            logger.info(f"  [Takeover] Subfinder non ha trovato sottodomini, uso fonti OSINT per {domain}...")
+            subdomains = self._enumerate_subdomains(domain)
+            if subdomains:
+                scan_result.subdomains = subdomains
+                logger.info(f"  [Takeover] crt.sh ha trovato {len(subdomains)} sottodomini")
+            else:
+                logger.info("  [Takeover] Nessun sottodominio trovato nemmeno da crt.sh")
+                return findings
 
         logger.info(f"  [Takeover] Test takeover su {len(subdomains)} sottodomini...")
 
