@@ -116,10 +116,15 @@ def start_scan():
     target = request.form.get("target", "").strip()
     mode = request.form.get("mode", "lite")
     modules = request.form.getlist("modules")
+    program_url = request.form.get("program_url", "").strip()
+    scope_text = request.form.get("scope_text", "").strip()
 
+    # Se non c'è target manuale, estrai dal programma o dallo scope
     if not target:
-        flash("Inserisci un target.", "error")
-        return redirect(url_for("dashboard"))
+        target = _extract_target_from_scope(program_url, scope_text)
+        if not target:
+            flash("Inserisci un target oppure un URL programma Bug Bounty / scope manuale.", "error")
+            return redirect(url_for("dashboard"))
 
     if mode == "pro" and not info["plan_info"]["allow_pro"]:
         flash("La modalita PRO richiede una licenza PRO o ENTERPRISE.", "error")
@@ -127,8 +132,8 @@ def start_scan():
 
     # Raccogli tutte le opzioni dal form
     scan_options = {
-        "program_url": request.form.get("program_url", "").strip(),
-        "scope_text": request.form.get("scope_text", "").strip(),
+        "program_url": program_url,
+        "scope_text": scope_text,
         "custom_header": request.form.get("custom_header", "").strip(),
         "email": request.form.get("email", "").strip(),
         "rate_limit": float(request.form.get("rate_limit", 5)),
@@ -152,7 +157,8 @@ def start_scan():
     }
 
     # Crea scan ID
-    scan_id = f"scan_{int(time.time())}_{target.replace('.', '_').replace('/', '_')[:30]}"
+    safe_target = target.replace('.', '_').replace('/', '_').replace(':', '_')[:30]
+    scan_id = f"scan_{int(time.time())}_{safe_target}"
 
     scan_data = {
         "id": scan_id,
@@ -179,6 +185,36 @@ def start_scan():
     thread.start()
 
     return redirect(url_for("scan_status", scan_id=scan_id))
+
+
+def _extract_target_from_scope(program_url, scope_text):
+    """Estrae il target principale dall'URL programma BB o dallo scope manuale."""
+    # Prima prova dal programma bug bounty
+    if program_url:
+        try:
+            from bugbounty_scanner.program_parser import ProgramParser
+            parser = ProgramParser()
+            program_info = parser.parse(program_url)
+            # Prendi il primo dominio in scope (senza wildcard)
+            for domain in program_info.in_scope_domains:
+                clean = domain.strip().lstrip("*.")
+                if clean:
+                    return clean
+            # Se ci sono URL in scope, usa il primo
+            for url in program_info.in_scope_urls:
+                if url:
+                    return url
+        except Exception as e:
+            logger.error(f"Errore parsing programma {program_url}: {e}")
+
+    # Poi prova dallo scope manuale
+    if scope_text:
+        for line in scope_text.strip().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                return line.lstrip("*.")
+
+    return None
 
 
 def run_scan_background(scan_id, target, mode, modules, options):

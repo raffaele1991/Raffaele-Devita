@@ -34,8 +34,9 @@
         <!-- TARGET E MODALITA -->
         <div class="grid grid-2">
             <div class="form-group">
-                <label>Target</label>
-                <input type="text" name="target" placeholder="example.com o https://example.com/page?id=1" required>
+                <label>Target <span style="color: #8b949e; font-weight: normal;">(opzionale se usi un programma BB)</span></label>
+                <input type="text" name="target" id="target-input" placeholder="example.com o https://example.com/page?id=1">
+                <span class="hint">Lascia vuoto per usare i target dal programma Bug Bounty</span>
             </div>
             <div class="form-group">
                 <label>Modalita</label>
@@ -59,12 +60,13 @@
             <div class="grid grid-2">
                 <div class="form-group">
                     <label>URL Programma</label>
-                    <input type="text" name="program_url" placeholder="https://hackerone.com/example o https://app.intigriti.com/...">
-                    <span class="hint">HackerOne, Intigriti o Bugcrowd. Estrae scope automaticamente.</span>
+                    <input type="text" name="program_url" id="program-url-input" placeholder="https://hackerone.com/example o https://app.intigriti.com/...">
+                    <span class="hint">HackerOne, Intigriti o Bugcrowd. I target vengono estratti automaticamente dallo scope.</span>
                 </div>
                 <div class="form-group">
-                    <label>Oppure: File Scope (un dominio per riga)</label>
-                    <textarea name="scope_text" rows="3" placeholder="example.com&#10;*.example.com&#10;api.example.com"></textarea>
+                    <label>Oppure: Scope Manuale (un dominio per riga)</label>
+                    <textarea name="scope_text" id="scope-text-input" rows="3" placeholder="example.com&#10;*.example.com&#10;api.example.com"></textarea>
+                    <span class="hint">Se inseriti qui, verranno usati come target automaticamente.</span>
                 </div>
             </div>
         </div>
@@ -336,5 +338,17 @@ function toggleSection(id) {
         arrow.innerHTML = '&#9650;';
     }
 }
+
+// Validazione: serve almeno un target O un programma URL O scope text
+document.querySelector('form').addEventListener('submit', function(e) {
+    var target = document.getElementById('target-input').value.trim();
+    var programUrl = document.getElementById('program-url-input').value.trim();
+    var scopeText = document.getElementById('scope-text-input').value.trim();
+
+    if (!target && !programUrl && !scopeText) {
+        e.preventDefault();
+        alert('Inserisci almeno un target, un URL programma Bug Bounty, oppure uno scope manuale.');
+    }
+});
 </script>
 {% endblock %}
