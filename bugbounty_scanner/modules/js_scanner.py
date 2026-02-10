@@ -167,30 +167,23 @@ class JSScanner:
                     # Verifica se il secret è attivo
                     is_active = verify_secret(secret_name, match_value, js_content)
 
-                    if is_active is False:
-                        # Verificato come INATTIVO: non segnalare
-                        logger.info(f"  [JS Scanner] {secret_name} inattivo, scartato")
+                    if is_active is not True:
+                        # Non verificato o inattivo: non segnalare
+                        if is_active is False:
+                            logger.info(f"  [JS Scanner] {secret_name} inattivo, scartato")
+                        else:
+                            logger.info(f"  [JS Scanner] {secret_name} non verificabile, scartato")
                         continue
 
-                    if is_active is True:
-                        status_label = "VERIFICATO ATTIVO"
-                        description = (
-                            f"Un {secret_name} ATTIVO è stato trovato nel file JavaScript. "
-                            f"Questo secret è stato verificato ed è valido."
-                        )
-                    else:
-                        status_label = "Non verificato"
-                        description = (
-                            f"Un possibile {secret_name} è stato trovato nel file JavaScript. "
-                            f"Non è stato possibile verificarne la validità automaticamente."
-                        )
-
                     findings.append(Finding(
-                        title=f"Secret trovato in JS: {secret_name} [{status_label}]",
+                        title=f"Secret trovato in JS: {secret_name} [VERIFICATO ATTIVO]",
                         severity=SEVERITY_HIGH,
                         url=js_url,
-                        description=description,
-                        evidence=f"Pattern: {secret_name}\nStato: {status_label}\nMatch: {match_value[:80]}...",
+                        description=(
+                            f"Un {secret_name} ATTIVO è stato trovato nel file JavaScript. "
+                            f"Questo secret è stato verificato ed è valido."
+                        ),
+                        evidence=f"Pattern: {secret_name}\nStato: VERIFICATO ATTIVO\nMatch: {match_value[:80]}...",
                         remediation=(
                             "Non includere mai secret, API key o token nei file JavaScript. "
                             "Usa variabili di ambiente lato server e proxy le richieste API."
