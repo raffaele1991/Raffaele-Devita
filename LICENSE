@@ -1,0 +1,170 @@
+LICENZA COMMERCIALE - Bug Bounty Vulnerability Scanner Agent
+=============================================================
+
+Copyright (c) 2025-2026 Raffaele De Vita. Tutti i diritti riservati.
+
+CONTRATTO DI LICENZA D'USO DEL SOFTWARE (EULA)
+End-User License Agreement
+
+Leggere attentamente prima dell'acquisto e dell'utilizzo.
+
+------------------------------------------------------------------------
+
+1. DEFINIZIONI
+
+  - "Software": Bug Bounty Vulnerability Scanner Agent, inclusi tutti i
+    file sorgente, moduli, documentazione e materiali correlati.
+  - "Licenziante": Raffaele De Vita, autore e proprietario del Software.
+  - "Licenziatario": la persona fisica o giuridica che acquista la licenza.
+  - "Licenza": il diritto d'uso concesso con il presente contratto.
+
+------------------------------------------------------------------------
+
+2. PIANI DI LICENZA
+
+  LITE (Uso Personale)
+  - Utilizzo da parte di 1 (una) persona fisica
+  - Solo modalita LITE dello scanner
+  - Uso esclusivamente per attivita di bug bounty personali
+  - Nessun supporto tecnico dedicato
+  - Aggiornamenti minori inclusi per 12 mesi
+
+  PRO (Uso Professionale)
+  - Utilizzo da parte di 1 (una) persona fisica o 1 team fino a 5 utenti
+  - Modalita LITE + PRO con tutti i 13 moduli di scansione
+  - Uso professionale per attivita di penetration testing autorizzato
+  - Supporto tecnico via email (risposta entro 48h)
+  - Aggiornamenti inclusi per 12 mesi
+  - Accesso a template Nuclei custom
+
+  ENTERPRISE (Uso Aziendale)
+  - Utilizzo illimitato all'interno di 1 (una) organizzazione
+  - Tutte le funzionalita PRO
+  - Supporto tecnico prioritario (risposta entro 24h)
+  - Aggiornamenti inclusi per 24 mesi
+  - Personalizzazioni su richiesta
+  - Formazione iniziale inclusa (2h)
+  - Integrazione CI/CD dedicata
+
+------------------------------------------------------------------------
+
+3. CONCESSIONE DELLA LICENZA
+
+  Con l'acquisto, il Licenziante concede al Licenziatario una licenza:
+  - Non esclusiva
+  - Non trasferibile
+  - Limitata al piano acquistato
+  - Valida per la durata indicata nel piano
+
+------------------------------------------------------------------------
+
+4. RESTRIZIONI
+
+  Il Licenziatario NON puo:
+
+  a) Ridistribuire, rivendere, sublicenziare o cedere il Software
+     a terzi senza autorizzazione scritta del Licenziante.
+  b) Decompilare, disassemblare o fare reverse engineering del Software
+     oltre quanto consentito dalla legge applicabile.
+  c) Rimuovere o modificare avvisi di copyright, marchi o altre
+     indicazioni di proprieta presenti nel Software.
+  d) Utilizzare il Software per attivita illegali o non autorizzate.
+  e) Condividere le credenziali di accesso con utenti non coperti
+     dalla licenza acquistata.
+  f) Utilizzare il Software contro sistemi senza esplicita
+     autorizzazione scritta del proprietario del sistema target.
+
+------------------------------------------------------------------------
+
+5. PROPRIETA INTELLETTUALE
+
+  Il Software e e rimane proprieta esclusiva del Licenziante.
+  L'acquisto della licenza NON trasferisce la proprieta del codice
+  sorgente o dei diritti di proprieta intellettuale.
+
+------------------------------------------------------------------------
+
+6. GARANZIA E LIMITAZIONE DI RESPONSABILITA
+
+  IL SOFTWARE VIENE FORNITO "COSI COM'E" (AS IS).
+
+  Il Licenziante garantisce che il Software funzionera sostanzialmente
+  come descritto nella documentazione per un periodo di 30 giorni
+  dall'acquisto. In caso contrario, il Licenziatario ha diritto al
+  rimborso completo.
+
+  Il Licenziante NON e responsabile per:
+  - Danni diretti, indiretti, incidentali o consequenziali derivanti
+    dall'uso del Software.
+  - Risultati ottenuti dall'uso del Software.
+  - Utilizzo improprio o non autorizzato del Software da parte del
+    Licenziatario.
+  - La responsabilita massima del Licenziante e limitata all'importo
+    pagato per la licenza.
+
+------------------------------------------------------------------------
+
+7. USO ETICO E LEGALE
+
+  Il Licenziatario si impegna a:
+  - Utilizzare il Software ESCLUSIVAMENTE per attivita di sicurezza
+    autorizzate (bug bounty con programmi ufficiali, penetration
+    testing con contratto scritto).
+  - Rispettare tutte le leggi applicabili, incluse quelle sulla
+    criminalita informatica.
+  - NON utilizzare il Software per accesso non autorizzato a sistemi
+    di terze parti.
+
+  La violazione di questa clausola comporta la revoca immediata
+  della licenza senza diritto a rimborso.
+
+------------------------------------------------------------------------
+
+8. DURATA E RISOLUZIONE
+
+  - La licenza ha durata come specificato nel piano acquistato.
+  - Il Licenziante puo revocare la licenza in caso di violazione
+    dei termini del presente contratto.
+  - Alla scadenza o revoca, il Licenziatario deve cessare l'utilizzo
+    del Software e distruggere tutte le copie in suo possesso.
+
+------------------------------------------------------------------------
+
+9. RIMBORSI
+
+  - Rimborso completo entro 30 giorni dall'acquisto se il Software
+    non funziona come descritto.
+  - Nessun rimborso dopo 30 giorni dall'acquisto.
+  - Nessun rimborso in caso di revoca per violazione dei termini.
+
+------------------------------------------------------------------------
+
+10. AGGIORNAMENTI
+
+  - Gli aggiornamenti sono inclusi per la durata indicata nel piano.
+  - Alla scadenza, il Licenziatario puo rinnovare il piano di
+    aggiornamenti separatamente.
+  - Il Software continuera a funzionare anche senza aggiornamenti,
+    ma senza accesso a nuove versioni.
+
+------------------------------------------------------------------------
+
+11. LEGGE APPLICABILE
+
+  Il presente contratto e regolato dalla legge italiana.
+  Per qualsiasi controversia sara competente il Foro di residenza
+  del Licenziante.
+
+------------------------------------------------------------------------
+
+12. CONTATTI
+
+  Per acquisti, supporto e informazioni:
+  - Email: devita.raffaele@gmail.com
+  - GitHub: https://github.com/Raffaele-Devita
+
+------------------------------------------------------------------------
+
+Accettando questa licenza (tramite acquisto, download o utilizzo del
+Software), il Licenziatario dichiara di aver letto, compreso e accettato
+tutti i termini e le condizioni del presente contratto.

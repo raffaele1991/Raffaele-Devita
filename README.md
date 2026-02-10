@@ -84,22 +84,29 @@ python -m bugbounty_scanner.cli_pro -t example.com \
 | 12 | **Headers** | Analisi header sicurezza, CORS, cookie | Check |
 | 13 | **Sensitive Files** | File e endpoint sensibili esposti | Check |
 
-## Installazione Rapida
+## Installazione
 
-### 1. Dipendenze Python
+### 1. Scarica i file
+Dopo l'acquisto riceverai un archivio con i file eseguibili. Estraili e rendili eseguibili:
 ```bash
-pip install -r requirements.txt
+chmod +x bbscanner bbscanner_pro bbscanner_activate
 ```
 
-### 2. Tool professionali (per modalita PRO)
+### 2. Attiva la licenza
+```bash
+./bbscanner_activate BBSC-LA-TUA-CHIAVE
+```
+
+### 3. (Solo PRO) Installa i tool esterni
+La modalita PRO richiede tool professionali (Nuclei, Nmap, etc.):
 ```bash
 chmod +x install_tools.sh
 ./install_tools.sh
 ```
 
-### 3. Verifica installazione
+### 4. Verifica che tutto funzioni
 ```bash
-python -m bugbounty_scanner.cli_pro -t example.com --check
+./bbscanner_pro -t example.com --check
 ```
 
 ## Esempi di Utilizzo
@@ -243,6 +250,78 @@ install_tools.sh          # Installer automatico tool
 | 1 | Vulnerabilita MEDIE trovate |
 | 2 | Vulnerabilita CRITICHE o ALTE trovate |
 
+## Software a Pagamento - Licenza Richiesta
+
+Questo software e **a pagamento** e protetto da un **sistema di chiavi di licenza**.
+Senza una chiave valida il programma **non si avvia**.
+
+### Piani disponibili
+
+| Piano | Per chi | Cosa include | Supporto | Durata aggiornamenti |
+|-------|---------|-------------|----------|----------------------|
+| **LITE** | Singolo utente | Solo modalita LITE (7 moduli) | - | 12 mesi |
+| **PRO** | Professionista o team (max 5 persone) | LITE + PRO (tutti i 13 moduli) | Email (risposta entro 48h) | 12 mesi |
+| **ENTERPRISE** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (risposta entro 24h) | 24 mesi |
+
+### Come funziona l'acquisto
+
+1. **Contattami** via email a **devita.raffaele@gmail.com** specificando:
+   - Quale piano vuoi (LITE, PRO o ENTERPRISE)
+   - Per quante persone/quale azienda
+2. **Ricevi il preventivo** con il prezzo e le modalita di pagamento:
+   - PayPal
+   - Bonifico bancario
+   - Carta di credito/debito
+3. **Dopo il pagamento** ricevi via email:
+   - I **file eseguibili** del software (gia compilati, pronti all'uso)
+   - La tua **chiave di licenza personale** (formato: `BBSC-...`)
+   - Le istruzioni di installazione
+4. **Attiva la chiave** sul tuo computer:
+   ```bash
+   ./bbscanner_activate BBSC-LA-TUA-CHIAVE
+   ```
+5. **Fatto!** Ora puoi usare lo scanner:
+   ```bash
+   ./bbscanner -t example.com          # Modalita LITE
+   ./bbscanner_pro -t example.com      # Modalita PRO
+   ```
+
+### Protezione anti-pirateria
+
+Il software viene distribuito come **eseguibile compilato** (non come codice sorgente):
+
+- Il codice sorgente **non e incluso**: ricevi solo i file eseguibili
+- Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
+- Ogni chiave ha una **data di scadenza** (12 o 24 mesi in base al piano)
+- Le chiavi sono **firmate crittograficamente**: non possono essere generate, modificate o falsificate
+- Chi ha una licenza **LITE** non puo usare la modalita **PRO**
+- **Senza chiave valida il software non si avvia**
+
+### Verifica stato licenza
+
+Per vedere se la tua licenza e attiva e quando scade:
+```bash
+./bbscanner_activate
+```
+
+### Rinnovo
+
+Alla scadenza della licenza il software smette di funzionare. Per rinnovare scrivi a **devita.raffaele@gmail.com** e riceverai una nuova chiave.
+
+### Garanzia
+
+Rimborso completo entro **30 giorni** dall'acquisto se il software non funziona come descritto in questa documentazione.
+
+### Termini completi
+
+Consulta il file [LICENSE](LICENSE) per tutti i termini e condizioni del contratto di licenza.
+
+---
+
 ## Disclaimer
 
 Questo strumento deve essere utilizzato **esclusivamente** per attivita di sicurezza autorizzate (bug bounty, penetration testing con permesso scritto). L'utilizzo non autorizzato contro sistemi di terze parti e illegale.
+
+---
+
+Copyright (c) 2025-2026 Raffaele De Vita. Tutti i diritti riservati.

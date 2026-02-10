@@ -6,6 +6,7 @@ import logging
 import sys
 import urllib3
 
+from bugbounty_scanner.license_manager import check_license
 from bugbounty_scanner.orchestrator import Orchestrator, DEFAULT_PIPELINE
 from bugbounty_scanner.reporter import Reporter
 
@@ -180,6 +181,10 @@ def main():
 
     if not args.quiet:
         print(BANNER)
+
+    # Verifica licenza (richiede PRO o ENTERPRISE)
+    license_info = check_license(require_pro=True)
+    print(f"  Licenza {license_info['plan']} attiva ({license_info['email']})")
 
     # ==================== SCOPE DEL PROGRAMMA ====================
     program_info = None
