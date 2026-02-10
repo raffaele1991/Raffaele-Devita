@@ -259,26 +259,65 @@ install_tools.sh          # Installer automatico tool
 | 1 | Vulnerabilita MEDIE trovate |
 | 2 | Vulnerabilita CRITICHE o ALTE trovate |
 
-## Piani e Licenza
+## Software a Pagamento - Licenza Richiesta
 
-Questo software e distribuito con **licenza commerciale**. Consulta il file [LICENSE](LICENSE) per i termini completi.
+Questo software e **a pagamento** e protetto da un **sistema di chiavi di licenza**.
+Senza una chiave valida il programma **non si avvia**.
 
-| Piano | Utenti | Funzionalita | Supporto | Aggiornamenti |
-|-------|--------|-------------|----------|---------------|
-| **LITE** | 1 persona | Modalita LITE | - | 12 mesi |
-| **PRO** | 1 persona o team (max 5) | LITE + PRO (13 moduli) | Email (48h) | 12 mesi |
-| **ENTERPRISE** | Illimitati (1 org) | Tutto + personalizzazioni | Prioritario (24h) | 24 mesi |
+### Piani disponibili
 
-### Come acquistare
+| Piano | Per chi | Cosa include | Supporto | Durata aggiornamenti |
+|-------|---------|-------------|----------|----------------------|
+| **LITE** | Singolo utente | Solo modalita LITE (7 moduli) | - | 12 mesi |
+| **PRO** | Professionista o team (max 5 persone) | LITE + PRO (tutti i 13 moduli) | Email (risposta entro 48h) | 12 mesi |
+| **ENTERPRISE** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (risposta entro 24h) | 24 mesi |
 
-1. Scrivi a **devita.raffaele@gmail.com** indicando il piano desiderato (LITE, PRO, ENTERPRISE)
-2. Riceverai un preventivo con le modalita di pagamento (PayPal, bonifico bancario o carta)
-3. Dopo il pagamento riceverai la chiave di licenza e l'accesso al download
-4. Attiva la licenza e inizia a usare lo scanner
+### Come funziona l'acquisto
+
+1. **Contattami** via email a **devita.raffaele@gmail.com** specificando:
+   - Quale piano vuoi (LITE, PRO o ENTERPRISE)
+   - Per quante persone/quale azienda
+2. **Ricevi il preventivo** con il prezzo e le modalita di pagamento:
+   - PayPal
+   - Bonifico bancario
+   - Carta di credito/debito
+3. **Dopo il pagamento** ricevi via email:
+   - Il link per scaricare il software
+   - La tua **chiave di licenza personale** (formato: `BBSC-...`)
+4. **Attiva la chiave** sul tuo computer:
+   ```bash
+   python -m bugbounty_scanner.activate BBSC-LA-TUA-CHIAVE
+   ```
+5. **Fatto!** Ora puoi usare lo scanner
+
+### Protezione anti-pirateria
+
+Il software include un sistema di protezione con chiavi firmate digitalmente:
+
+- Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
+- Ogni chiave ha una **data di scadenza** (12 o 24 mesi in base al piano)
+- Le chiavi sono **firmate crittograficamente** (HMAC-SHA256): non possono essere generate, modificate o falsificate
+- Chi ha una licenza **LITE** non puo usare la modalita **PRO**
+- **Senza chiave valida il software non funziona**
+
+### Verifica stato licenza
+
+Per vedere se la tua licenza e attiva e quando scade:
+```bash
+python -m bugbounty_scanner.activate
+```
+
+### Rinnovo
+
+Alla scadenza della licenza il software smette di funzionare. Per rinnovare scrivi a **devita.raffaele@gmail.com** e riceverai una nuova chiave.
 
 ### Garanzia
 
-Rimborso completo entro **30 giorni** se il software non funziona come descritto nella documentazione.
+Rimborso completo entro **30 giorni** dall'acquisto se il software non funziona come descritto in questa documentazione.
+
+### Termini completi
+
+Consulta il file [LICENSE](LICENSE) per tutti i termini e condizioni del contratto di licenza.
 
 ---
 
@@ -288,7 +327,4 @@ Questo strumento deve essere utilizzato **esclusivamente** per attivita di sicur
 
 ---
 
-## Licenza
-
 Copyright (c) 2025-2026 Raffaele De Vita. Tutti i diritti riservati.
-Distribuito con licenza commerciale. Vedi [LICENSE](LICENSE) per i dettagli completi.
