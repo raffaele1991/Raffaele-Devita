@@ -40,7 +40,7 @@ SECRET_PATTERNS = {
     "Stripe Secret Key": r"sk_(?:live|test)_[0-9a-zA-Z]{24,99}",
     "Stripe Publishable Key": r"pk_(?:live|test)_[0-9a-zA-Z]{24,99}",
     "Twilio API Key": r"SK[0-9a-fA-F]{32}",
-    "Twilio Account SID": r"AC[a-zA-Z0-9_\-]{32}",
+    "Twilio Account SID": r"AC[0-9a-f]{32}",
     "Mailgun API Key": r"key-[0-9a-zA-Z]{32}",
     "SendGrid API Key": r"SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}",
     "JWT Token": r"eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+",
