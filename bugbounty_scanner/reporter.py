@@ -280,8 +280,17 @@ class Reporter:
     def _safe_domain(self):
         """Genera un nome file sicuro dal dominio."""
         from urllib.parse import urlparse
-        domain = urlparse(self.result.target).netloc
-        return domain.replace(":", "_").replace("/", "_")
+        target = self.result.target
+        # Aggiungi schema se mancante per far funzionare urlparse
+        if not target.startswith(("http://", "https://")):
+            target = "https://" + target
+        domain = urlparse(target).netloc
+        if not domain:
+            # Fallback: usa il target pulito come nome
+            domain = self.result.target
+        # Rimuovi caratteri non sicuri per filesystem
+        safe = domain.replace(":", "_").replace("/", "_").replace("*", "").replace("?", "")
+        return safe or "unknown"
 
     def print_summary(self):
         """Stampa un riepilogo sulla console."""

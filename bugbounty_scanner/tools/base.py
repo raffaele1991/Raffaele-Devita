@@ -49,17 +49,22 @@ class BaseTool:
         return args
 
     def _find_binary(self) -> str | None:
-        """Cerca il binario nel PATH e nelle directory comuni."""
-        # Prima prova il PATH standard
-        path = shutil.which(self.binary)
-        if path:
-            return path
+        """Cerca il binario nelle directory Go/local PRIMA del PATH di sistema.
 
-        # Cerca nelle directory aggiuntive
+        Questo evita conflitti come Python httpx (pip) vs Go httpx
+        (projectdiscovery). I tool di sicurezza sono quasi tutti Go-based,
+        quindi le directory Go/local hanno priorità.
+        """
+        # 1) Cerca PRIMA nelle directory Go / local / snap
         for extra_dir in self._EXTRA_PATHS:
             candidate = os.path.join(extra_dir, self.binary)
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 return candidate
+
+        # 2) Fallback al PATH di sistema
+        path = shutil.which(self.binary)
+        if path:
+            return path
 
         return None
 
