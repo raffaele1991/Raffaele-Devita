@@ -14,6 +14,8 @@ from bugbounty_scanner.license_manager import (
     activate_license, get_active_license, verify_license_key, LicenseError
 )
 
+logger = logging.getLogger("bugbounty_scanner")
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
