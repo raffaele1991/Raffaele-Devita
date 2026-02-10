@@ -1,4 +1,4 @@
-# Bug Bounty Vulnerability Scanner Agent
+# Bug Bounty Vulnerability Scanner Agent v2.0
 
 Agent automatico per la scansione di vulnerabilita web, progettato per attivita di bug bounty e penetration testing autorizzato.
 
@@ -11,8 +11,8 @@ Scanner interno con payload propri. Perfetto per iniziare.
 python -m bugbounty_scanner.cli -t example.com
 ```
 
-### Modalita PRO (orchestratore tool professionali)
-Coordina automaticamente: **Subfinder + httpx + Nmap + ffuf + Nuclei + Nikto + Dalfox + SQLMap**.
+### Modalita PRO v2.0 (orchestratore tool professionali)
+Coordina automaticamente **13 fasi di scansione** con tool professionali + moduli interni.
 
 ```bash
 python -m bugbounty_scanner.cli_pro -t example.com
@@ -20,20 +20,69 @@ python -m bugbounty_scanner.cli_pro -t example.com
 
 ---
 
-## Tool Professionali Integrati (Modalita PRO)
+## Funzionalita Principali
 
-| Tool | Cosa fa | Fase |
-|------|---------|------|
-| **Subfinder** | Enumerazione sottodomini passiva (OSINT) | Ricognizione |
-| **httpx** | Probing HTTP, tech detection, status check | Ricognizione |
-| **Nmap** | Scansione porte e fingerprint servizi | Ricognizione |
-| **ffuf** | Fuzzing directory/file (brute-force veloce) | Discovery |
-| **Nuclei** | Migliaia di template per CVE, misconfig, exposure | Scansione |
-| **Nikto** | Scanner web server (CGI, versioni obsolete) | Scansione |
-| **Dalfox** | XSS avanzato con bypass WAF e DOM analysis | Exploit |
-| **SQLMap** | SQL injection con database takeover | Exploit |
+### Scope Automatico da Programma Bug Bounty
+Estrae automaticamente scope e out-of-scope dalla pagina del programma su **HackerOne, Intigriti, Bugcrowd**:
 
-La pipeline li esegue in ordine intelligente: prima trova i target, poi li analizza, poi li testa.
+```bash
+python -m bugbounty_scanner.cli_pro -t example.com \
+  --program "https://hackerone.com/example"
+```
+
+Oppure da un file di testo (un dominio per riga):
+
+```bash
+python -m bugbounty_scanner.cli_pro -t example.com --scope scope.txt
+```
+
+Il tool estrae:
+- Domini in scope e out-of-scope
+- Regole del programma
+- Vulnerabilita escluse (self-xss, ecc.)
+- Blocca automaticamente le richieste verso domini fuori scope
+
+### Identificazione Bug Bounty
+```bash
+python -m bugbounty_scanner.cli_pro -t example.com \
+  -H "X-Bug-Bounty: kobraraf91" \
+  --email kobraraf91@intigriti.me \
+  --rate-limit 5
+```
+
+### Notifiche Telegram e Discord
+Ricevi avvisi sul telefono quando trova vulnerabilita:
+
+```bash
+# Telegram
+python -m bugbounty_scanner.cli_pro -t example.com \
+  --telegram-token "TOKEN_BOT" \
+  --telegram-chat "CHAT_ID"
+
+# Discord
+python -m bugbounty_scanner.cli_pro -t example.com \
+  --discord-webhook "URL_WEBHOOK"
+```
+
+---
+
+## Pipeline di Scansione PRO (13 fasi)
+
+| # | Tool/Modulo | Cosa fa | Fase |
+|---|-------------|---------|------|
+| 1 | **Subfinder** | Enumerazione sottodomini passiva (OSINT) | Ricognizione |
+| 2 | **httpx** | Probing HTTP, tech detection, status check | Ricognizione |
+| 3 | **Nmap** | Scansione porte e fingerprint servizi | Ricognizione |
+| 4 | **Crawler** | Scopre pagine, form, parametri, email | Discovery |
+| 5 | **Wayback** | Cerca endpoint storici dalla Wayback Machine | Discovery |
+| 6 | **ffuf** | Fuzzing directory/file (brute-force veloce) | Discovery |
+| 7 | **JS Scanner** | Estrae API key, secret, endpoint dai file .js | Analisi |
+| 8 | **Nuclei** | Migliaia di template per CVE, misconfig, exposure | Scansione |
+| 9 | **Nikto** | Scanner web server (CGI, versioni obsolete) | Scansione |
+| 10 | **Dalfox** | XSS avanzato con bypass WAF e DOM analysis | Exploit |
+| 11 | **SQLMap** | SQL injection con database takeover | Exploit |
+| 12 | **Headers** | Analisi header sicurezza, CORS, cookie | Check |
+| 13 | **Sensitive Files** | File e endpoint sensibili esposti | Check |
 
 ## Installazione Rapida
 
@@ -53,27 +102,34 @@ chmod +x install_tools.sh
 python -m bugbounty_scanner.cli_pro -t example.com --check
 ```
 
-## Utilizzo - Modalita LITE
+## Esempi di Utilizzo
 
+### Comando completo per bug bounty
+```bash
+python -m bugbounty_scanner.cli_pro \
+  -t example.com \
+  --program "https://app.intigriti.com/researcher/programs/company/program" \
+  -H "X-Bug-Bounty: kobraraf91" \
+  --email kobraraf91@intigriti.me \
+  --rate-limit 5 \
+  --telegram-token "TOKEN" \
+  --telegram-chat "CHAT_ID"
+```
+
+### Modalita LITE
 ```bash
 # Scansione completa
 python -m bugbounty_scanner.cli -t example.com
 
-# Solo XSS e SQLi
-python -m bugbounty_scanner.cli -t example.com -m xss sqli
-
-# Con parametri URL (migliore per XSS/SQLi)
-python -m bugbounty_scanner.cli -t "https://example.com/search?q=test&id=1"
+# Solo XSS e SQLi con header custom
+python -m bugbounty_scanner.cli -t "https://example.com/search?q=test&id=1" \
+  -m xss sqli -H "X-Bug-Bounty: kobraraf91" --rate-limit 5
 
 # Salta ricognizione
 python -m bugbounty_scanner.cli -t example.com --no-recon
-
-# Report solo HTML
-python -m bugbounty_scanner.cli -t example.com -f html
 ```
 
-## Utilizzo - Modalita PRO
-
+### Modalita PRO
 ```bash
 # Scansione completa con tutti i tool
 python -m bugbounty_scanner.cli_pro -t example.com
@@ -81,43 +137,64 @@ python -m bugbounty_scanner.cli_pro -t example.com
 # Solo alcuni tool
 python -m bugbounty_scanner.cli_pro -t example.com --pipeline subfinder httpx nuclei
 
-# Solo vulnerabilita critiche e alte con Nuclei
+# Solo vulnerabilita critiche con Nuclei
 python -m bugbounty_scanner.cli_pro -t example.com --nuclei-severity critical,high
 
-# Nuclei con tag specifici (CVE, misconfig, ecc.)
+# Nuclei con tag specifici
 python -m bugbounty_scanner.cli_pro -t example.com --nuclei-tags cve,misconfig
 
-# Scansione porte completa con Nmap
+# Scansione porte completa
 python -m bugbounty_scanner.cli_pro -t example.com --nmap-scan full
 
-# SQLMap aggressivo (livello 3, rischio 2)
-python -m bugbounty_scanner.cli_pro -t "https://example.com/page?id=1" --sqlmap-level 3 --sqlmap-risk 2
+# SQLMap aggressivo
+python -m bugbounty_scanner.cli_pro -t "https://example.com/page?id=1" \
+  --sqlmap-level 3 --sqlmap-risk 2
 
-# Wordlist custom per ffuf
-python -m bugbounty_scanner.cli_pro -t example.com --ffuf-wordlist /path/to/wordlist.txt
-
-# Output dettagliato
-python -m bugbounty_scanner.cli_pro -t example.com -v -f html
+# Crawler profondo
+python -m bugbounty_scanner.cli_pro -t example.com --crawl-depth 5 --crawl-pages 200
 ```
 
-## Opzioni CLI PRO
+## Tutte le Opzioni CLI PRO
 
 | Flag | Descrizione |
 |------|-------------|
+| **Target** | |
 | `-t, --target` | URL o dominio target (obbligatorio) |
 | `--pipeline` | Tool da eseguire (default: tutti) |
 | `--check` | Verifica tool installati ed esci |
-| `--strict` | Fallisci se un tool manca |
-| `--nuclei-severity` | Filtro gravita Nuclei (es: critical,high) |
-| `--nuclei-tags` | Filtro tag Nuclei (es: cve,misconfig) |
-| `--nuclei-templates` | Path template Nuclei custom |
-| `--nmap-scan` | Tipo scansione: quick, default, full |
-| `--sqlmap-level` | Livello test SQLMap 1-5 |
-| `--sqlmap-risk` | Rischio SQLMap 1-3 |
-| `--ffuf-wordlist` | Wordlist custom per ffuf |
+| **Programma BB** | |
+| `--program` | URL programma HackerOne/Intigriti/Bugcrowd (estrae scope) |
+| `--scope` | File scope (un dominio per riga) |
+| **Identificazione** | |
+| `-H, --header` | Header custom (ripetibile) |
+| `--email` | Email identificativa |
+| `--rate-limit` | Max richieste al secondo (default: 5) |
+| **Notifiche** | |
+| `--telegram-token` | Token bot Telegram |
+| `--telegram-chat` | Chat ID Telegram |
+| `--discord-webhook` | URL webhook Discord |
+| `--notify-severity` | Gravita minima notifiche: CRITICAL, HIGH, MEDIUM, LOW, INFO |
+| **Crawler** | |
+| `--crawl-depth` | Profondita crawling (default: 3) |
+| `--crawl-pages` | Max pagine da crawlare (default: 100) |
+| **Nuclei** | |
+| `--nuclei-severity` | Filtro gravita (es: critical,high) |
+| `--nuclei-tags` | Filtro tag (es: cve,misconfig) |
+| `--nuclei-templates` | Path template custom |
+| `--nuclei-rate` | Rate limit Nuclei (default: 100) |
+| **Nmap** | |
+| `--nmap-scan` | quick, default, full |
+| **SQLMap** | |
+| `--sqlmap-level` | Livello test 1-5 |
+| `--sqlmap-risk` | Rischio 1-3 |
+| **ffuf** | |
+| `--ffuf-wordlist` | Wordlist custom |
+| `--ffuf-threads` | Thread ffuf (default: 40) |
+| **Output** | |
 | `-o, --output-dir` | Cartella report (default: reports) |
-| `-f, --format` | Formato: json, html, markdown, all |
+| `-f, --format` | json, html, markdown, all |
 | `-v, --verbose` | Output dettagliato |
+| `-q, --quiet` | Output minimo |
 
 ## Struttura del Progetto
 
@@ -128,17 +205,24 @@ bugbounty_scanner/
   scanner.py              # Motore scansione LITE
   orchestrator.py         # Motore scansione PRO (orchestratore)
   reporter.py             # Report: JSON, HTML (dark-mode), Markdown
+  http_session.py         # Sessione HTTP con rate limiting e header custom
+  program_parser.py       # Parser programmi BB (HackerOne, Intigriti, Bugcrowd)
+  scope_checker.py        # Verificatore scope in/out
+  notifier.py             # Notifiche Telegram e Discord
   cli.py                  # CLI modalita LITE
-  cli_pro.py              # CLI modalita PRO
-  modules/                # Moduli interni (LITE)
-    recon.py              #   Ricognizione
-    headers.py            #   Security headers
+  cli_pro.py              # CLI modalita PRO v2.0
+  modules/                # Moduli interni
+    recon.py              #   Ricognizione (subdomain, porte, tech)
+    crawler.py            #   Deep crawler (pagine, form, parametri)
+    wayback.py            #   Wayback Machine (endpoint storici)
+    js_scanner.py         #   JavaScript scanner (secret, API key, endpoint)
+    headers.py            #   Security headers e CORS
     xss.py                #   Cross-Site Scripting
     sqli.py               #   SQL Injection
     ssrf.py               #   SSRF
     open_redirect.py      #   Open Redirect
-    sensitive_files.py    #   File sensibili
-  tools/                  # Wrapper tool professionali (PRO)
+    sensitive_files.py    #   File sensibili esposti
+  tools/                  # Wrapper tool professionali
     base.py               #   Classe base wrapper
     subfinder.py          #   Subfinder
     httpx_tool.py         #   httpx
