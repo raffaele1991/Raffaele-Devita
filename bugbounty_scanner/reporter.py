@@ -72,10 +72,6 @@ HTML_TEMPLATE = """\
       <div class="value low">{{ severity_counts.get('LOW', 0) }}</div>
       <div>Bassi</div>
     </div>
-    <div class="summary-card">
-      <div class="value info">{{ severity_counts.get('INFO', 0) }}</div>
-      <div>Info</div>
-    </div>
   </div>
 
   {% if result.subdomains %}
@@ -140,9 +136,10 @@ class Reporter:
         os.makedirs(output_dir, exist_ok=True)
 
     def _sorted_findings(self):
-        """Ordina i risultati per gravita."""
+        """Ordina i risultati per gravita, escludendo INFO."""
+        filtered = [f for f in self.result.findings if f.severity != "INFO"]
         return sorted(
-            self.result.findings,
+            filtered,
             key=lambda f: self.SEVERITY_ORDER.index(f.severity)
             if f.severity in self.SEVERITY_ORDER
             else 99,
@@ -151,7 +148,8 @@ class Reporter:
     def _severity_counts(self):
         counts = {}
         for f in self.result.findings:
-            counts[f.severity] = counts.get(f.severity, 0) + 1
+            if f.severity != "INFO":
+                counts[f.severity] = counts.get(f.severity, 0) + 1
         return counts
 
     def generate_json(self, filename=None) -> str:

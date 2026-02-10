@@ -28,7 +28,7 @@
 
 <!-- Risultati -->
 {% if scan.status == 'completed' and scan.summary %}
-<div class="grid grid-3" style="margin: 16px 0;">
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0;">
     <div class="stat-box">
         <div class="number severity-critical">{{ scan.summary.by_severity.get('CRITICAL', 0) }}</div>
         <div class="label">Critical</div>
@@ -40,6 +40,10 @@
     <div class="stat-box">
         <div class="number severity-medium">{{ scan.summary.by_severity.get('MEDIUM', 0) }}</div>
         <div class="label">Medium</div>
+    </div>
+    <div class="stat-box">
+        <div class="number" style="color: #58a6ff;">{{ scan.summary.by_severity.get('LOW', 0) }}</div>
+        <div class="label">Low</div>
     </div>
 </div>
 {% endif %}

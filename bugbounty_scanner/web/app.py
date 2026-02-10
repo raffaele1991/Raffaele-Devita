@@ -445,11 +445,14 @@ def run_lite_scan(scan_id, target, modules, options):
     if scope_checker:
         result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
 
+    # Filtra via gli INFO - mostra solo CRITICAL, HIGH, MEDIUM, LOW
+    result.findings = [f for f in result.findings if getattr(f, "severity", "INFO") != "INFO"]
+
     findings_list = []
     for f in result.findings:
         findings_list.append({
             "type": getattr(f, "vuln_type", "Unknown"),
-            "severity": getattr(f, "severity", "INFO"),
+            "severity": getattr(f, "severity", "LOW"),
             "url": getattr(f, "url", target),
             "description": getattr(f, "description", str(f)),
         })
@@ -555,11 +558,14 @@ def run_pro_scan(scan_id, target, modules, options):
     if scope_checker:
         result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
 
+    # Filtra via gli INFO - mostra solo CRITICAL, HIGH, MEDIUM, LOW
+    result.findings = [f for f in result.findings if getattr(f, "severity", "INFO") != "INFO"]
+
     findings_list = []
     for f in result.findings:
         findings_list.append({
             "type": getattr(f, "vuln_type", "Unknown"),
-            "severity": getattr(f, "severity", "INFO"),
+            "severity": getattr(f, "severity", "LOW"),
             "url": getattr(f, "url", target),
             "description": getattr(f, "description", str(f)),
         })
