@@ -49,6 +49,9 @@ class SensitiveFilesModule:
         findings = []
         logger.info(f"  [SensitiveFiles] Checking {len(SENSITIVE_PATHS)} paths")
 
+        # Prima richiesta: prendi la baseline (pagina catch-all / 404 custom)
+        baseline_len = self._get_baseline_length(target)
+
         def check_path(path):
             url = f"{target.rstrip('/')}{path}"
             try:
@@ -57,8 +60,15 @@ class SensitiveFilesModule:
                 )
                 if resp.status_code == 200 and len(resp.text) > 0:
                     # Filter out generic error/404 pages
-                    if not self._is_soft_404(resp):
-                        return (path, url, resp)
+                    if self._is_soft_404(resp):
+                        return None
+                    # Catch-all: stessa lunghezza della pagina di default
+                    if baseline_len and abs(len(resp.text) - baseline_len) < 100:
+                        return None
+                    # Verifica che il contenuto sia coerente col tipo di file
+                    if not self._content_matches_path(path, resp.text):
+                        return None
+                    return (path, url, resp)
             except requests.RequestException:
                 pass
             return None
@@ -99,6 +109,56 @@ class SensitiveFilesModule:
             return SEVERITY_MEDIUM
         # Path generici (robots.txt, sitemap, ecc.) sono solo noise
         return SEVERITY_INFO
+
+    def _get_baseline_length(self, target):
+        """Richiedi un path che non esiste per ottenere la pagina catch-all."""
+        try:
+            resp = self.session.get(
+                f"{target.rstrip('/')}/thispagedoesnotexist7391",
+                timeout=DEFAULT_TIMEOUT,
+                allow_redirects=False,
+            )
+            if resp.status_code == 200:
+                return len(resp.text)
+        except requests.RequestException:
+            pass
+        return None
+
+    @staticmethod
+    def _content_matches_path(path, content):
+        """Verifica che il contenuto sia coerente col tipo di file atteso."""
+        body = content.strip().lower()
+
+        # Se il contenuto è HTML e il file non dovrebbe essere HTML → falso positivo
+        is_html = body.startswith(("<!doctype", "<html", "<?xml"))
+
+        # File che NON devono mai essere HTML
+        non_html_files = {
+            "/.env": lambda b: "=" in content and not is_html,
+            "/.git/config": lambda b: "[core]" in b or "[remote" in b,
+            "/.git/HEAD": lambda b: b.startswith("ref:") or len(b) == 40,
+            "/.aws/credentials": lambda b: "[default]" in b or "aws_access" in b,
+            "/backup.sql": lambda b: "create table" in b or "insert into" in b,
+            "/dump.sql": lambda b: "create table" in b or "insert into" in b,
+            "/database.sql": lambda b: "create table" in b or "insert into" in b,
+            "/.htpasswd": lambda b: ":" in content and not is_html and len(content) < 5000,
+            "/phpinfo.php": lambda b: "php version" in b or "phpinfo()" in b,
+            "/wp-config.php": lambda b: "db_name" in b or "db_password" in b,
+            "/config.php": lambda b: not is_html or "password" in b,
+            "/web.config": lambda b: "configuration" in b and "<?xml" in b,
+        }
+
+        validator = non_html_files.get(path)
+        if validator:
+            return validator(body)
+
+        # Per gli altri path: se è HTML generico, probabilmente è una SPA/catch-all
+        # Accetta solo se contiene contenuto specifico del path
+        if is_html and path not in ("/actuator", "/graphql", "/graphiql",
+                                     "/admin", "/administrator", "/phpmyadmin"):
+            return False
+
+        return True
 
     @staticmethod
     def _is_soft_404(response):
