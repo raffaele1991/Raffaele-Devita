@@ -243,6 +243,35 @@ install_tools.sh          # Installer automatico tool
 | 1 | Vulnerabilita MEDIE trovate |
 | 2 | Vulnerabilita CRITICHE o ALTE trovate |
 
+## Piani e Licenza
+
+Questo software e distribuito con **licenza commerciale**. Consulta il file [LICENSE](LICENSE) per i termini completi.
+
+| Piano | Utenti | Funzionalita | Supporto | Aggiornamenti |
+|-------|--------|-------------|----------|---------------|
+| **LITE** | 1 persona | Modalita LITE | - | 12 mesi |
+| **PRO** | 1 persona o team (max 5) | LITE + PRO (13 moduli) | Email (48h) | 12 mesi |
+| **ENTERPRISE** | Illimitati (1 org) | Tutto + personalizzazioni | Prioritario (24h) | 24 mesi |
+
+### Come acquistare
+
+1. Contatta via email: **kobraraf91@intigriti.me**
+2. Specifica il piano desiderato (LITE, PRO, ENTERPRISE)
+3. Riceverai le istruzioni per il pagamento e l'attivazione
+
+### Garanzia
+
+Rimborso completo entro **30 giorni** se il software non funziona come descritto nella documentazione.
+
+---
+
 ## Disclaimer
 
 Questo strumento deve essere utilizzato **esclusivamente** per attivita di sicurezza autorizzate (bug bounty, penetration testing con permesso scritto). L'utilizzo non autorizzato contro sistemi di terze parti e illegale.
+
+---
+
+## Licenza
+
+Copyright (c) 2025-2026 Raffaele De Vita. Tutti i diritti riservati.
+Distribuito con licenza commerciale. Vedi [LICENSE](LICENSE) per i dettagli completi.
