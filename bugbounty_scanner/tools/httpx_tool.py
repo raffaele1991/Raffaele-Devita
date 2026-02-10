@@ -1,9 +1,10 @@
-"""Wrapper per httpx - HTTP probing e fingerprinting."""
+"""Wrapper per httpx - HTTP probing e fingerprinting (ProjectDiscovery Go version)."""
 
 import logging
 import json
+import subprocess
 
-from bugbounty_scanner.tools.base import BaseTool
+from bugbounty_scanner.tools.base import BaseTool, ToolNotFoundError
 from bugbounty_scanner.scanner import Finding
 from bugbounty_scanner.config import SEVERITY_INFO, SEVERITY_LOW
 
@@ -14,11 +15,76 @@ class HttpxTool(BaseTool):
     """
     httpx - tool veloce per HTTP probing, tech detection, status codes.
     https://github.com/projectdiscovery/httpx
+
+    NOTA: NON confondere con Python httpx (pip install httpx) che è una
+    libreria HTTP diversa. Qui serve il binario Go di ProjectDiscovery.
     """
 
     name = "httpx"
     binary = "httpx"
     install_url = "https://github.com/projectdiscovery/httpx"
+
+    def _is_go_httpx(self, binary_path: str) -> bool:
+        """Verifica che il binario sia httpx Go (ProjectDiscovery), non Python httpx."""
+        try:
+            result = subprocess.run(
+                [binary_path, "-version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            combined = (result.stdout + result.stderr).lower()
+            # Go httpx mostra "projectdiscovery" o "httpx v1.x.x" nella version
+            if "projectdiscovery" in combined or "current v" in combined:
+                return True
+            # Python httpx mostra "httpx" con "python" o "pip" related output
+            if "python" in combined or "usage: httpx" in combined:
+                return False
+            # Se supporta -json è Go httpx
+            test = subprocess.run(
+                [binary_path, "-h"],
+                capture_output=True, text=True, timeout=10,
+            )
+            help_text = test.stdout + test.stderr
+            return "-json" in help_text and "-silent" in help_text
+        except Exception:
+            return False
+
+    def _find_binary(self):
+        """Override: cerca httpx Go e verifica che non sia Python httpx."""
+        # 1) Cerca nelle directory Go/local (priorità)
+        import os
+        import shutil
+        for extra_dir in self._EXTRA_PATHS:
+            candidate = os.path.join(extra_dir, self.binary)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                if self._is_go_httpx(candidate):
+                    return candidate
+
+        # 2) Cerca nel PATH di sistema, ma valida
+        path = shutil.which(self.binary)
+        if path and self._is_go_httpx(path):
+            return path
+
+        return None
+
+    def check_installed(self):
+        """Override: messaggio specifico se trova Python httpx."""
+        self._binary_path = self._find_binary()
+        if self._binary_path:
+            return
+        # Controlla se è Python httpx (messaggio di errore specifico)
+        import shutil
+        any_httpx = shutil.which(self.binary)
+        if any_httpx:
+            raise ToolNotFoundError(
+                f"Trovato '{any_httpx}' ma è Python httpx (pip), non il tool Go.\n"
+                f"Installa la versione Go: go install github.com/projectdiscovery/httpx/cmd/httpx@latest\n"
+                f"Assicurati che ~/go/bin sia nel PATH: export PATH=$PATH:~/go/bin"
+            )
+        raise ToolNotFoundError(
+            f"'{self.binary}' (Go - ProjectDiscovery) non trovato.\n"
+            f"Installalo: go install github.com/projectdiscovery/httpx/cmd/httpx@latest\n"
+            f"Info: {self.install_url}"
+        )
 
     def run(self, target, scan_result):
         self.check_installed()
