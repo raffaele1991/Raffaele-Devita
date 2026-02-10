@@ -43,6 +43,16 @@ class SSRFModule:
         parsed = urlparse(target)
         params = parse_qs(parsed.query, keep_blank_values=True)
 
+        # Prendi la baseline: risposta normale del sito senza payload SSRF
+        self._baseline_len = 0
+        self._baseline_body = ""
+        try:
+            baseline_resp = self.session.get(target, timeout=DEFAULT_TIMEOUT, allow_redirects=False)
+            self._baseline_len = len(baseline_resp.text)
+            self._baseline_body = baseline_resp.text.lower()
+        except requests.RequestException:
+            pass
+
         # Test existing parameters that look SSRF-prone
         for param_name in params:
             if param_name.lower() in self.SSRF_PARAMS:
@@ -115,6 +125,10 @@ class SSRFModule:
         """Check response for indicators that SSRF was successful."""
         indicators = []
 
+        # Se la risposta è identica alla baseline, il server ignora il parametro
+        if self._baseline_len and abs(len(body) - self._baseline_len) < 100:
+            return ""
+
         # Cloud metadata indicators
         if "169.254.169.254" in payload or "metadata" in payload:
             metadata_patterns = [
@@ -135,15 +149,8 @@ class SSRFModule:
                 "phpmyadmin", "dashboard",
             ]
             for pat in internal_patterns:
-                if pat in body:
+                if pat in body and pat not in self._baseline_body:
                     indicators.append(f"Internal content pattern: {pat}")
 
-        # Status code based detection
-        if response.status_code == 200 and len(body) > 0:
-            if "127.0.0.1" in payload or "localhost" in payload:
-                # Check if the response differs significantly from a normal error
-                if not any(err in body for err in ["not found", "error", "invalid", "bad request"]):
-                    if len(body) > 500:
-                        indicators.append(f"Large response ({len(body)} chars) from internal URL")
-
+        # Solo indicatori specifici confermano SSRF, non la dimensione della risposta
         return "; ".join(indicators) if indicators else ""
