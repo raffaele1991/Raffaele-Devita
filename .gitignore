@@ -14,6 +14,3 @@ reports/*.html
 reports/*.md
 .mypy_cache/
 .pytest_cache/
-
-# NON distribuire mai lo script genera-licenze
-generate_license.py
