@@ -8,6 +8,7 @@ venv/
 env/
 *.egg-info/
 build/
+*.spec
 reports/*.json
 reports/*.html
 reports/*.md
