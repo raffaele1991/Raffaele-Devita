@@ -48,6 +48,7 @@ def verify_secret(secret_name, match_value, js_content=None):
         "AWS Access Key": _verify_aws,
         "Twilio Account SID": _verify_twilio,
         "Google API Key": _verify_google_api,
+        "Heroku API Key": _verify_heroku,
     }
 
     verifier = verifiers.get(secret_name)
@@ -158,6 +159,26 @@ def _verify_mailgun(key, js_content=None):
         resp = requests.get(
             "https://api.mailgun.net/v3/domains",
             auth=("api", key),
+            timeout=VERIFY_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            return True
+        if resp.status_code in (401, 403):
+            return False
+        return None
+    except requests.RequestException:
+        return None
+
+
+def _verify_heroku(key, js_content=None):
+    """GET https://api.heroku.com/account con la chiave."""
+    try:
+        resp = requests.get(
+            "https://api.heroku.com/account",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Accept": "application/vnd.heroku+json; version=3",
+            },
             timeout=VERIFY_TIMEOUT,
         )
         if resp.status_code == 200:

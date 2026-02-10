@@ -103,16 +103,27 @@ class HeadersModule:
                 ))
 
         # Check for insecure CSP directives
+        # Weak CSP da solo non paga: serve un XSS sullo stesso target.
+        # Se il modulo XSS ha già trovato un finding sullo stesso dominio,
+        # lo segnaliamo come MEDIUM (chain CSP+XSS), altrimenti INFO.
         csp = headers.get("Content-Security-Policy", "")
         if csp:
+            has_xss = any(
+                f.module == "xss" and f.severity in ("HIGH", "CRITICAL")
+                for f in scan_result.findings
+            )
+            csp_severity = SEVERITY_MEDIUM if has_xss else SEVERITY_INFO
             dangerous_directives = ["'unsafe-inline'", "'unsafe-eval'", "data:", "*"]
             for d in dangerous_directives:
                 if d in csp:
+                    desc = f"The CSP header contains '{d}' which weakens the policy."
+                    if has_xss:
+                        desc += " Combined with confirmed XSS on this target, CSP provides no protection."
                     findings.append(Finding(
                         title=f"Weak CSP Directive: {d}",
-                        severity=SEVERITY_MEDIUM,
+                        severity=csp_severity,
                         url=target,
-                        description=f"The CSP header contains '{d}' which weakens the policy.",
+                        description=desc,
                         evidence=f"CSP: {csp[:200]}",
                         remediation=f"Remove '{d}' from the Content-Security-Policy and use nonces/hashes.",
                         module=self.name,
