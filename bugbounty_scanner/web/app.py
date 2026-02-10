@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session, send_file
 
 from bugbounty_scanner.license_manager import (
     activate_license, get_active_license, verify_license_key, LicenseError
@@ -116,10 +116,19 @@ def start_scan():
     target = request.form.get("target", "").strip()
     mode = request.form.get("mode", "lite")
     modules = request.form.getlist("modules")
+    program_url = request.form.get("program_url", "").strip()
+    scope_text = request.form.get("scope_text", "").strip()
 
-    if not target:
-        flash("Inserisci un target.", "error")
-        return redirect(url_for("dashboard"))
+    # Costruisci lista target
+    targets = []
+    if target:
+        targets = [target]
+    else:
+        # Estrai TUTTI i target dal programma o dallo scope
+        targets = _extract_targets_from_scope(program_url, scope_text)
+        if not targets:
+            flash("Inserisci un target oppure un URL programma Bug Bounty / scope manuale.", "error")
+            return redirect(url_for("dashboard"))
 
     if mode == "pro" and not info["plan_info"]["allow_pro"]:
         flash("La modalita PRO richiede una licenza PRO o ENTERPRISE.", "error")
@@ -127,8 +136,8 @@ def start_scan():
 
     # Raccogli tutte le opzioni dal form
     scan_options = {
-        "program_url": request.form.get("program_url", "").strip(),
-        "scope_text": request.form.get("scope_text", "").strip(),
+        "program_url": program_url,
+        "scope_text": scope_text,
         "custom_header": request.form.get("custom_header", "").strip(),
         "email": request.form.get("email", "").strip(),
         "rate_limit": float(request.form.get("rate_limit", 5)),
@@ -151,33 +160,77 @@ def start_scan():
         "output_dir": request.form.get("output_dir", "reports").strip(),
     }
 
-    # Crea scan ID
-    scan_id = f"scan_{int(time.time())}_{target.replace('.', '_').replace('/', '_')[:30]}"
+    # Lancia una scansione per ogni target in scope
+    first_scan_id = None
+    for t in targets:
+        safe_target = t.replace('.', '_').replace('/', '_').replace(':', '_')[:30]
+        scan_id = f"scan_{int(time.time())}_{safe_target}"
 
-    scan_data = {
-        "id": scan_id,
-        "target": target,
-        "mode": mode,
-        "modules": modules,
-        "options": scan_options,
-        "status": "running",
-        "started": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "progress": 0,
-        "current_step": "Avvio scansione...",
-        "findings": [],
-        "summary": None,
-        "report_paths": {},
-    }
+        scan_data = {
+            "id": scan_id,
+            "target": t,
+            "mode": mode,
+            "modules": modules,
+            "options": scan_options,
+            "status": "running",
+            "started": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "progress": 0,
+            "current_step": "Avvio scansione...",
+            "findings": [],
+            "summary": None,
+            "report_paths": {},
+            "_start_time": time.time(),
+        }
 
-    with scan_lock:
-        scans[scan_id] = scan_data
+        with scan_lock:
+            scans[scan_id] = scan_data
 
-    # Avvia la scansione in background
-    thread = threading.Thread(target=run_scan_background, args=(scan_id, target, mode, modules, scan_options))
-    thread.daemon = True
-    thread.start()
+        thread = threading.Thread(target=run_scan_background, args=(scan_id, t, mode, modules, scan_options))
+        thread.daemon = True
+        thread.start()
 
-    return redirect(url_for("scan_status", scan_id=scan_id))
+        if first_scan_id is None:
+            first_scan_id = scan_id
+
+    if len(targets) > 1:
+        flash(f"Avviate {len(targets)} scansioni per tutti i target in scope.", "success")
+        return redirect(url_for("dashboard"))
+    else:
+        return redirect(url_for("scan_status", scan_id=first_scan_id))
+
+
+def _extract_targets_from_scope(program_url, scope_text):
+    """Estrae TUTTI i target dall'URL programma BB o dallo scope manuale."""
+    targets = []
+
+    # Prima prova dal programma bug bounty
+    if program_url:
+        try:
+            from bugbounty_scanner.program_parser import ProgramParser
+            parser = ProgramParser()
+            program_info = parser.parse(program_url)
+            # Prendi tutti i domini in scope (rimuovi wildcard)
+            for domain in program_info.in_scope_domains:
+                clean = domain.strip().lstrip("*.")
+                if clean and clean not in targets:
+                    targets.append(clean)
+            # Aggiungi anche URL specifici in scope
+            for url in program_info.in_scope_urls:
+                if url and url not in targets:
+                    targets.append(url)
+        except Exception as e:
+            logger.error(f"Errore parsing programma {program_url}: {e}")
+
+    # Poi aggiungi dallo scope manuale (se non già presenti)
+    if scope_text:
+        for line in scope_text.strip().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                clean = line.lstrip("*.")
+                if clean and clean not in targets:
+                    targets.append(clean)
+
+    return targets
 
 
 def run_scan_background(scan_id, target, mode, modules, options):
@@ -252,14 +305,33 @@ def generate_reports(scan_id, options):
         from bugbounty_scanner.reporter import Reporter
 
         class SimpleResult:
-            def __init__(self, findings, summary):
-                self.findings = findings
-                self.summary = summary
+            """Oggetto compatibile con Reporter che wrappa i dati della scansione GUI."""
+            def __init__(self, scan_data):
+                self.findings = scan_data.get("_raw_findings", [])
+                self.target = scan_data.get("target", "unknown")
+                self.subdomains = scan_data.get("_subdomains", [])
+                self.open_ports = scan_data.get("_open_ports", [])
+                self.technologies = scan_data.get("_technologies", [])
+                self.errors = scan_data.get("_errors", [])
+                self._summary = scan_data.get("summary", {})
+                # Calcola durata dalla data di avvio
+                self.start_time = scan_data.get("_start_time", 0)
+                self.end_time = scan_data.get("_end_time", time.time())
 
-        result = SimpleResult(scan.get("_raw_findings", []), scan["summary"])
+            @property
+            def duration(self):
+                return self.end_time - self.start_time if self.start_time else 0
+
+            @property
+            def summary(self):
+                return self._summary
+
+        result = SimpleResult(scan)
         reporter = Reporter(result, output_dir=options.get("output_dir", "reports"))
 
         formats = options.get("report_formats", ["html", "json"])
+        if not formats:
+            formats = ["html", "json"]
         paths = {}
         for fmt in formats:
             if fmt == "json":
@@ -271,8 +343,12 @@ def generate_reports(scan_id, options):
 
         with scan_lock:
             scans[scan_id]["report_paths"] = paths
-    except Exception:
-        pass
+
+        logger.info(f"Report generati: {paths}")
+    except Exception as e:
+        logger.error(f"Errore generazione report per {scan_id}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def send_notifications(scan_id, options):
@@ -363,6 +439,12 @@ def run_lite_scan(scan_id, target, modules, options):
         scans[scan_id]["findings"] = findings_list
         scans[scan_id]["summary"] = result.summary
         scans[scan_id]["_raw_findings"] = result.findings
+        scans[scan_id]["_subdomains"] = getattr(result, "subdomains", [])
+        scans[scan_id]["_open_ports"] = getattr(result, "open_ports", [])
+        scans[scan_id]["_technologies"] = getattr(result, "technologies", [])
+        scans[scan_id]["_errors"] = getattr(result, "errors", [])
+        scans[scan_id]["_start_time"] = getattr(result, "start_time", 0)
+        scans[scan_id]["_end_time"] = getattr(result, "end_time", time.time())
 
 
 def run_pro_scan(scan_id, target, modules, options):
@@ -467,6 +549,12 @@ def run_pro_scan(scan_id, target, modules, options):
         scans[scan_id]["findings"] = findings_list
         scans[scan_id]["summary"] = result.summary
         scans[scan_id]["_raw_findings"] = result.findings
+        scans[scan_id]["_subdomains"] = getattr(result, "subdomains", [])
+        scans[scan_id]["_open_ports"] = getattr(result, "open_ports", [])
+        scans[scan_id]["_technologies"] = getattr(result, "technologies", [])
+        scans[scan_id]["_errors"] = getattr(result, "errors", [])
+        scans[scan_id]["_start_time"] = getattr(result, "start_time", 0)
+        scans[scan_id]["_end_time"] = getattr(result, "end_time", time.time())
 
 
 @app.route("/scan/<scan_id>")
@@ -486,7 +574,24 @@ def api_scan_status(scan_id):
     scan = scans.get(scan_id)
     if not scan:
         return jsonify({"error": "Scansione non trovata"}), 404
-    return jsonify(scan)
+    # Escludi campi interni non serializzabili in JSON
+    safe_data = {k: v for k, v in scan.items() if not k.startswith("_")}
+    return jsonify(safe_data)
+
+
+@app.route("/download/<scan_id>/<fmt>")
+@license_required
+def download_report(scan_id, fmt):
+    """Scarica un report generato."""
+    scan = scans.get(scan_id)
+    if not scan:
+        flash("Scansione non trovata.", "error")
+        return redirect(url_for("dashboard"))
+    report_path = scan.get("report_paths", {}).get(fmt)
+    if not report_path or not os.path.isfile(report_path):
+        flash(f"Report {fmt} non trovato.", "error")
+        return redirect(url_for("scan_status", scan_id=scan_id))
+    return send_file(report_path, as_attachment=True)
 
 
 @app.route("/results")

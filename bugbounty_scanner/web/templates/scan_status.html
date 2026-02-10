@@ -77,6 +77,20 @@
 </div>
 {% endif %}
 
+<!-- Report scaricabili -->
+{% if scan.status == 'completed' and scan.report_paths %}
+<div class="card">
+    <div class="card-header">Report generati</div>
+    <div style="padding: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+        {% for fmt, path in scan.report_paths.items() %}
+        <a href="{{ url_for('download_report', scan_id=scan.id, fmt=fmt) }}" class="btn btn-primary" style="text-decoration: none;">
+            Scarica {{ fmt | upper }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div style="margin-top: 16px;">
     <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Torna alla Dashboard</a>
 </div>
