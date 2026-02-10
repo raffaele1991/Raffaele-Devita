@@ -74,6 +74,10 @@ def activate():
     return render_template("activate.html", license_info=info)
 
 
+# Impostazioni persistenti (Telegram, Discord, ecc.)
+saved_settings = {}
+
+
 @app.route("/dashboard")
 @license_required
 def dashboard():
@@ -85,7 +89,24 @@ def dashboard():
         days_left=days_left,
         scans=scans,
         is_pro=info["plan_info"]["allow_pro"],
+        settings=saved_settings,
     )
+
+
+@app.route("/settings", methods=["GET", "POST"])
+@license_required
+def settings():
+    info = get_license_info()
+    if request.method == "POST":
+        saved_settings["telegram_token"] = request.form.get("telegram_token", "").strip()
+        saved_settings["telegram_chat"] = request.form.get("telegram_chat", "").strip()
+        saved_settings["discord_webhook"] = request.form.get("discord_webhook", "").strip()
+        saved_settings["default_header"] = request.form.get("default_header", "").strip()
+        saved_settings["default_email"] = request.form.get("default_email", "").strip()
+        saved_settings["default_rate_limit"] = request.form.get("default_rate_limit", "5").strip()
+        flash("Impostazioni salvate!", "success")
+        return redirect(url_for("settings"))
+    return render_template("settings.html", license_info=info, settings=saved_settings)
 
 
 @app.route("/scan", methods=["POST"])
@@ -104,6 +125,32 @@ def start_scan():
         flash("La modalita PRO richiede una licenza PRO o ENTERPRISE.", "error")
         return redirect(url_for("dashboard"))
 
+    # Raccogli tutte le opzioni dal form
+    scan_options = {
+        "program_url": request.form.get("program_url", "").strip(),
+        "scope_text": request.form.get("scope_text", "").strip(),
+        "custom_header": request.form.get("custom_header", "").strip(),
+        "email": request.form.get("email", "").strip(),
+        "rate_limit": float(request.form.get("rate_limit", 5)),
+        "telegram_token": request.form.get("telegram_token", "").strip(),
+        "telegram_chat": request.form.get("telegram_chat", "").strip(),
+        "discord_webhook": request.form.get("discord_webhook", "").strip(),
+        "notify_severity": request.form.get("notify_severity", "MEDIUM"),
+        "nuclei_severity": request.form.get("nuclei_severity", "").strip(),
+        "nuclei_tags": request.form.get("nuclei_tags", "").strip(),
+        "nuclei_templates": request.form.get("nuclei_templates", "").strip(),
+        "nuclei_rate": int(request.form.get("nuclei_rate", 100)),
+        "nmap_scan": request.form.get("nmap_scan", "default"),
+        "sqlmap_level": int(request.form.get("sqlmap_level", 1)),
+        "sqlmap_risk": int(request.form.get("sqlmap_risk", 1)),
+        "crawl_depth": int(request.form.get("crawl_depth", 3)),
+        "crawl_pages": int(request.form.get("crawl_pages", 100)),
+        "ffuf_wordlist": request.form.get("ffuf_wordlist", "").strip(),
+        "ffuf_threads": int(request.form.get("ffuf_threads", 40)),
+        "report_formats": request.form.getlist("report_format"),
+        "output_dir": request.form.get("output_dir", "reports").strip(),
+    }
+
     # Crea scan ID
     scan_id = f"scan_{int(time.time())}_{target.replace('.', '_').replace('/', '_')[:30]}"
 
@@ -112,40 +159,154 @@ def start_scan():
         "target": target,
         "mode": mode,
         "modules": modules,
+        "options": scan_options,
         "status": "running",
         "started": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "progress": 0,
         "current_step": "Avvio scansione...",
         "findings": [],
         "summary": None,
+        "report_paths": {},
     }
 
     with scan_lock:
         scans[scan_id] = scan_data
 
     # Avvia la scansione in background
-    thread = threading.Thread(target=run_scan_background, args=(scan_id, target, mode, modules))
+    thread = threading.Thread(target=run_scan_background, args=(scan_id, target, mode, modules, scan_options))
     thread.daemon = True
     thread.start()
 
     return redirect(url_for("scan_status", scan_id=scan_id))
 
 
-def run_scan_background(scan_id, target, mode, modules):
+def run_scan_background(scan_id, target, mode, modules, options):
     """Esegue la scansione in un thread separato."""
     try:
         if mode == "lite":
-            run_lite_scan(scan_id, target, modules)
+            run_lite_scan(scan_id, target, modules, options)
         else:
-            run_pro_scan(scan_id, target, modules)
+            run_pro_scan(scan_id, target, modules, options)
+
+        # Genera report
+        generate_reports(scan_id, options)
+
+        # Invia notifiche
+        send_notifications(scan_id, options)
+
     except Exception as e:
         with scan_lock:
             scans[scan_id]["status"] = "error"
             scans[scan_id]["current_step"] = f"Errore: {str(e)}"
 
 
-def run_lite_scan(scan_id, target, modules):
-    """Esegue scansione LITE."""
+def _create_http_session(options):
+    """Crea sessione HTTP con le opzioni dalla GUI."""
+    from bugbounty_scanner.http_session import HttpSession, parse_headers_list
+
+    custom_headers = {}
+    header_str = options.get("custom_header", "")
+    if header_str and ":" in header_str:
+        key, val = header_str.split(":", 1)
+        custom_headers[key.strip()] = val.strip()
+
+    return HttpSession(
+        headers=custom_headers,
+        email=options.get("email", ""),
+        rate_limit=options.get("rate_limit", 5),
+    )
+
+
+def _setup_scope(options):
+    """Configura lo scope dal programma BB o dal testo."""
+    program_url = options.get("program_url", "")
+    scope_text = options.get("scope_text", "")
+
+    if not program_url and not scope_text:
+        return None
+
+    from bugbounty_scanner.program_parser import ProgramParser
+    from bugbounty_scanner.scope_checker import ScopeChecker
+
+    parser = ProgramParser()
+    if program_url:
+        program_info = parser.parse(program_url)
+    else:
+        # Crea scope da testo
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write(scope_text)
+            f.flush()
+            program_info = parser.parse(f.name)
+
+    return ScopeChecker(program_info)
+
+
+def generate_reports(scan_id, options):
+    """Genera i report nei formati richiesti."""
+    scan = scans.get(scan_id)
+    if not scan or scan["status"] != "completed":
+        return
+
+    try:
+        from bugbounty_scanner.reporter import Reporter
+
+        class SimpleResult:
+            def __init__(self, findings, summary):
+                self.findings = findings
+                self.summary = summary
+
+        result = SimpleResult(scan.get("_raw_findings", []), scan["summary"])
+        reporter = Reporter(result, output_dir=options.get("output_dir", "reports"))
+
+        formats = options.get("report_formats", ["html", "json"])
+        paths = {}
+        for fmt in formats:
+            if fmt == "json":
+                paths["json"] = reporter.generate_json()
+            elif fmt == "html":
+                paths["html"] = reporter.generate_html()
+            elif fmt == "markdown":
+                paths["markdown"] = reporter.generate_markdown()
+
+        with scan_lock:
+            scans[scan_id]["report_paths"] = paths
+    except Exception:
+        pass
+
+
+def send_notifications(scan_id, options):
+    """Invia notifiche Telegram/Discord."""
+    scan = scans.get(scan_id)
+    if not scan or scan["status"] != "completed":
+        return
+
+    telegram_token = options.get("telegram_token", "")
+    telegram_chat = options.get("telegram_chat", "")
+    discord_webhook = options.get("discord_webhook", "")
+
+    if not telegram_token and not discord_webhook:
+        return
+
+    try:
+        from bugbounty_scanner.notifier import NotificationManager
+
+        notifier = NotificationManager()
+        if telegram_token and telegram_chat:
+            notifier.add_telegram(telegram_token, telegram_chat)
+        if discord_webhook:
+            notifier.add_discord(discord_webhook)
+
+        notifier.set_min_severity(options.get("notify_severity", "MEDIUM"))
+
+        for finding in scan.get("_raw_findings", []):
+            notifier.notify_finding(finding)
+    except Exception:
+        pass
+
+
+def run_lite_scan(scan_id, target, modules, options):
+    """Esegue scansione LITE con tutte le opzioni."""
     from bugbounty_scanner.scanner import Scanner
     from bugbounty_scanner.modules.recon import ReconModule
     from bugbounty_scanner.modules.headers import HeadersModule
@@ -154,9 +315,10 @@ def run_lite_scan(scan_id, target, modules):
     from bugbounty_scanner.modules.ssrf import SSRFModule
     from bugbounty_scanner.modules.open_redirect import OpenRedirectModule
     from bugbounty_scanner.modules.sensitive_files import SensitiveFilesModule
-    from bugbounty_scanner.http_session import HttpSession
 
-    http_session = HttpSession(rate_limit=5)
+    http_session = _create_http_session(options)
+    scope_checker = _setup_scope(options)
+
     scanner = Scanner(target=target, threads=10, delay=0.5, modules=modules or None, verbose=False)
 
     all_modules = [
@@ -181,6 +343,10 @@ def run_lite_scan(scan_id, target, modules):
 
     result = scanner.run()
 
+    # Filtra risultati fuori scope
+    if scope_checker:
+        result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
+
     findings_list = []
     for f in result.findings:
         findings_list.append({
@@ -196,10 +362,11 @@ def run_lite_scan(scan_id, target, modules):
         scans[scan_id]["current_step"] = "Completata"
         scans[scan_id]["findings"] = findings_list
         scans[scan_id]["summary"] = result.summary
+        scans[scan_id]["_raw_findings"] = result.findings
 
 
-def run_pro_scan(scan_id, target, modules):
-    """Esegue scansione PRO."""
+def run_pro_scan(scan_id, target, modules, options):
+    """Esegue scansione PRO con tutte le opzioni."""
     from bugbounty_scanner.orchestrator import Orchestrator
     from bugbounty_scanner.tools.subfinder import SubfinderTool
     from bugbounty_scanner.tools.httpx_tool import HttpxTool
@@ -214,10 +381,10 @@ def run_pro_scan(scan_id, target, modules):
     from bugbounty_scanner.modules.js_scanner import JSScanner
     from bugbounty_scanner.modules.crawler import CrawlerModule
     from bugbounty_scanner.modules.wayback import WaybackModule
-    from bugbounty_scanner.http_session import HttpSession
     from bugbounty_scanner.cli_pro import InternalToolAdapterWithSession
 
-    http_session = HttpSession(rate_limit=5)
+    http_session = _create_http_session(options)
+    scope_checker = _setup_scope(options)
 
     pipeline = modules if modules else [
         "subfinder", "httpx", "nmap", "crawler", "wayback", "ffuf",
@@ -227,19 +394,50 @@ def run_pro_scan(scan_id, target, modules):
 
     orch = Orchestrator(target_url=target, pipeline=pipeline, skip_missing=True)
 
+    # Tool con opzioni dalla GUI
     orch.register("subfinder", SubfinderTool())
     orch.register("httpx", HttpxTool())
-    orch.register("nmap", NmapTool())
-    orch.register("ffuf", FfufTool())
-    orch.register("nuclei", NucleiTool())
+    orch.register("nmap", NmapTool(scan_type=options.get("nmap_scan", "default")))
+    orch.register("ffuf", FfufTool(
+        wordlist=options.get("ffuf_wordlist") or None,
+        threads=options.get("ffuf_threads", 40),
+    ))
+    orch.register("nuclei", NucleiTool(
+        severity_filter=options.get("nuclei_severity") or None,
+        tags=options.get("nuclei_tags") or None,
+        templates=options.get("nuclei_templates") or None,
+        rate_limit=options.get("nuclei_rate", 100),
+    ))
     orch.register("nikto", NiktoTool())
     orch.register("dalfox", DalfoxTool())
-    orch.register("sqlmap", SqlmapTool())
-    orch.register("crawler", InternalToolAdapterWithSession(CrawlerModule, http_session))
+    orch.register("sqlmap", SqlmapTool(
+        level=options.get("sqlmap_level", 1),
+        risk=options.get("sqlmap_risk", 1),
+    ))
+    orch.register("crawler", InternalToolAdapterWithSession(
+        CrawlerModule, http_session,
+        max_pages=options.get("crawl_pages", 100),
+        max_depth=options.get("crawl_depth", 3),
+    ))
     orch.register("wayback", InternalToolAdapterWithSession(WaybackModule, http_session))
     orch.register("js_scanner", InternalToolAdapterWithSession(JSScanner, http_session))
     orch.register("headers", InternalToolAdapterWithSession(HeadersModule, http_session))
     orch.register("sensitive_files", InternalToolAdapterWithSession(SensitiveFilesModule, http_session))
+
+    # Header per tool esterni
+    all_headers = {}
+    header_str = options.get("custom_header", "")
+    if header_str and ":" in header_str:
+        key, val = header_str.split(":", 1)
+        all_headers[key.strip()] = val.strip()
+    email = options.get("email", "")
+    if email:
+        all_headers.setdefault("X-Bug-Bounty-Contact", email)
+
+    for name in pipeline:
+        tool = orch._tools.get(name)
+        if tool and hasattr(tool, "set_headers") and all_headers:
+            tool.set_headers(all_headers)
 
     total = len(pipeline)
     for i, step in enumerate(pipeline):
@@ -248,6 +446,10 @@ def run_pro_scan(scan_id, target, modules):
             scans[scan_id]["current_step"] = f"[{i + 1}/{total}] {step}..."
 
     result = orch.run()
+
+    # Filtra risultati fuori scope
+    if scope_checker:
+        result.findings = [f for f in result.findings if scope_checker.check(getattr(f, 'url', target))]
 
     findings_list = []
     for f in result.findings:
@@ -264,6 +466,7 @@ def run_pro_scan(scan_id, target, modules):
         scans[scan_id]["current_step"] = "Completata"
         scans[scan_id]["findings"] = findings_list
         scans[scan_id]["summary"] = result.summary
+        scans[scan_id]["_raw_findings"] = result.findings
 
 
 @app.route("/scan/<scan_id>")

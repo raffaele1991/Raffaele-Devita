@@ -30,6 +30,8 @@
     <div class="card-header">Nuova Scansione</div>
 
     <form method="POST" action="{{ url_for('start_scan') }}">
+
+        <!-- TARGET E MODALITA -->
         <div class="grid grid-2">
             <div class="form-group">
                 <label>Target</label>
@@ -48,8 +50,181 @@
             </div>
         </div>
 
-        <div class="form-group">
-            <label>Moduli (lascia vuoto per tutti)</label>
+        <!-- SCOPE BUG BOUNTY -->
+        <div class="section-toggle" onclick="toggleSection('scope-section')">
+            <span>&#127919; Programma Bug Bounty (Scope Automatico)</span>
+            <span class="toggle-arrow" id="scope-section-arrow">&#9660;</span>
+        </div>
+        <div id="scope-section" class="collapsible">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>URL Programma</label>
+                    <input type="text" name="program_url" placeholder="https://hackerone.com/example o https://app.intigriti.com/...">
+                    <span class="hint">HackerOne, Intigriti o Bugcrowd. Estrae scope automaticamente.</span>
+                </div>
+                <div class="form-group">
+                    <label>Oppure: File Scope (un dominio per riga)</label>
+                    <textarea name="scope_text" rows="3" placeholder="example.com&#10;*.example.com&#10;api.example.com"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- IDENTIFICAZIONE BUG BOUNTY -->
+        <div class="section-toggle" onclick="toggleSection('identity-section')">
+            <span>&#128100; Identificazione Bug Bounty</span>
+            <span class="toggle-arrow" id="identity-section-arrow">&#9660;</span>
+        </div>
+        <div id="identity-section" class="collapsible">
+            <div class="grid grid-3">
+                <div class="form-group">
+                    <label>Header Custom</label>
+                    <input type="text" name="custom_header" placeholder="X-Bug-Bounty: kobraraf91">
+                    <span class="hint">Header per identificarti nel traffico</span>
+                </div>
+                <div class="form-group">
+                    <label>Email Identificativa</label>
+                    <input type="text" name="email" placeholder="kobraraf91@intigriti.me">
+                </div>
+                <div class="form-group">
+                    <label>Rate Limit (req/sec)</label>
+                    <input type="number" name="rate_limit" value="5" min="1" max="100">
+                </div>
+            </div>
+        </div>
+
+        <!-- NOTIFICHE -->
+        <div class="section-toggle" onclick="toggleSection('notify-section')">
+            <span>&#128276; Notifiche (Telegram / Discord)</span>
+            <span class="toggle-arrow" id="notify-section-arrow">&#9660;</span>
+        </div>
+        <div id="notify-section" class="collapsible">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Telegram - Token Bot</label>
+                    <input type="text" name="telegram_token" placeholder="123456:ABC-DEF..." value="{{ settings.get('telegram_token', '') }}">
+                </div>
+                <div class="form-group">
+                    <label>Telegram - Chat ID</label>
+                    <input type="text" name="telegram_chat" placeholder="-1001234567890" value="{{ settings.get('telegram_chat', '') }}">
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Discord - Webhook URL</label>
+                    <input type="text" name="discord_webhook" placeholder="https://discord.com/api/webhooks/..." value="{{ settings.get('discord_webhook', '') }}">
+                </div>
+                <div class="form-group">
+                    <label>Gravita Minima Notifiche</label>
+                    <select name="notify_severity">
+                        <option value="CRITICAL">Solo CRITICAL</option>
+                        <option value="HIGH">HIGH e superiori</option>
+                        <option value="MEDIUM" selected>MEDIUM e superiori</option>
+                        <option value="LOW">LOW e superiori</option>
+                        <option value="INFO">Tutte</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- OPZIONI TOOL PRO -->
+        {% if is_pro %}
+        <div class="section-toggle" onclick="toggleSection('pro-section')">
+            <span>&#9881; Opzioni Avanzate PRO</span>
+            <span class="toggle-arrow" id="pro-section-arrow">&#9660;</span>
+        </div>
+        <div id="pro-section" class="collapsible">
+            <h3 style="font-size: 14px; color: #58a6ff; margin: 12px 0 8px;">Nuclei</h3>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Gravita Nuclei</label>
+                    <select name="nuclei_severity">
+                        <option value="">Tutte</option>
+                        <option value="critical,high">Critical + High</option>
+                        <option value="critical,high,medium">Critical + High + Medium</option>
+                        <option value="critical">Solo Critical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tag Nuclei</label>
+                    <input type="text" name="nuclei_tags" placeholder="cve,misconfig,exposure">
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Template Nuclei Custom (path)</label>
+                    <input type="text" name="nuclei_templates" placeholder="/path/to/templates/">
+                </div>
+                <div class="form-group">
+                    <label>Rate Limit Nuclei</label>
+                    <input type="number" name="nuclei_rate" value="100" min="1" max="1000">
+                </div>
+            </div>
+
+            <h3 style="font-size: 14px; color: #58a6ff; margin: 12px 0 8px;">Nmap</h3>
+            <div class="form-group">
+                <label>Tipo Scansione</label>
+                <select name="nmap_scan">
+                    <option value="default">Default</option>
+                    <option value="quick">Quick (veloce)</option>
+                    <option value="full">Full (completa, piu lenta)</option>
+                </select>
+            </div>
+
+            <h3 style="font-size: 14px; color: #58a6ff; margin: 12px 0 8px;">SQLMap</h3>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Livello Test (1-5)</label>
+                    <select name="sqlmap_level">
+                        <option value="1" selected>1 - Base</option>
+                        <option value="2">2</option>
+                        <option value="3">3 - Medio</option>
+                        <option value="4">4</option>
+                        <option value="5">5 - Aggressivo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Rischio (1-3)</label>
+                    <select name="sqlmap_risk">
+                        <option value="1" selected>1 - Basso</option>
+                        <option value="2">2 - Medio</option>
+                        <option value="3">3 - Alto</option>
+                    </select>
+                </div>
+            </div>
+
+            <h3 style="font-size: 14px; color: #58a6ff; margin: 12px 0 8px;">Crawler</h3>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Profondita Crawling</label>
+                    <input type="number" name="crawl_depth" value="3" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label>Max Pagine</label>
+                    <input type="number" name="crawl_pages" value="100" min="10" max="1000">
+                </div>
+            </div>
+
+            <h3 style="font-size: 14px; color: #58a6ff; margin: 12px 0 8px;">ffuf</h3>
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Wordlist Custom (path)</label>
+                    <input type="text" name="ffuf_wordlist" placeholder="Lascia vuoto per default">
+                </div>
+                <div class="form-group">
+                    <label>Thread ffuf</label>
+                    <input type="number" name="ffuf_threads" value="40" min="1" max="200">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- MODULI -->
+        <div class="section-toggle" onclick="toggleSection('modules-section')">
+            <span>&#128295; Selezione Moduli</span>
+            <span class="toggle-arrow" id="modules-section-arrow">&#9660;</span>
+        </div>
+        <div id="modules-section" class="collapsible">
+            <p class="hint" style="margin-bottom: 12px;">Lascia tutto deselezionato per eseguire tutti i moduli</p>
             <div class="checkbox-group">
                 <label><input type="checkbox" name="modules" value="recon"><span>Recon</span></label>
                 <label><input type="checkbox" name="modules" value="headers"><span>Headers</span></label>
@@ -74,7 +249,31 @@
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg">Avvia Scansione</button>
+        <!-- OUTPUT -->
+        <div class="section-toggle" onclick="toggleSection('output-section')">
+            <span>&#128196; Formato Report</span>
+            <span class="toggle-arrow" id="output-section-arrow">&#9660;</span>
+        </div>
+        <div id="output-section" class="collapsible">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label>Formati Report</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="report_format" value="html" checked><span>HTML</span></label>
+                        <label><input type="checkbox" name="report_format" value="json" checked><span>JSON</span></label>
+                        <label><input type="checkbox" name="report_format" value="markdown"><span>Markdown</span></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cartella Report</label>
+                    <input type="text" name="output_dir" value="reports">
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary btn-lg">Avvia Scansione</button>
+        </div>
     </form>
 </div>
 
@@ -88,6 +287,7 @@
                 <th>Target</th>
                 <th>Modalita</th>
                 <th>Stato</th>
+                <th>Vulnerabilita</th>
                 <th>Data</th>
                 <th></th>
             </tr>
@@ -106,6 +306,13 @@
                         <span class="badge badge-critical">Errore</span>
                     {% endif %}
                 </td>
+                <td>
+                    {% if scan.status == 'completed' %}
+                        <span style="color: #f85149;">{{ scan.findings | length }}</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td style="color: #8b949e;">{{ scan.started }}</td>
                 <td><a href="{{ url_for('scan_status', scan_id=id) }}" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">Dettagli</a></td>
             </tr>
@@ -114,4 +321,20 @@
     </table>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSection(id) {
+    var el = document.getElementById(id);
+    var arrow = document.getElementById(id + '-arrow');
+    if (el.classList.contains('open')) {
+        el.classList.remove('open');
+        arrow.innerHTML = '&#9660;';
+    } else {
+        el.classList.add('open');
+        arrow.innerHTML = '&#9650;';
+    }
+}
+</script>
 {% endblock %}

@@ -214,6 +214,45 @@
             .grid-2, .grid-3 { grid-template-columns: 1fr; }
             nav { flex-direction: column; gap: 8px; }
         }
+
+        .section-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            margin: 8px 0 0;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .section-toggle:hover { border-color: #58a6ff; background: #161b22; }
+
+        .collapsible {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0 16px;
+            border: 1px solid transparent;
+        }
+
+        .collapsible.open {
+            max-height: 2000px;
+            padding: 16px;
+            border-color: #30363d;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            background: #0d1117;
+        }
+
+        .toggle-arrow { font-size: 10px; color: #8b949e; }
+
+        .hint { font-size: 12px; color: #8b949e; margin-top: 4px; display: block; }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -224,7 +263,7 @@
             {% if license_info %}
                 <a href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a href="{{ url_for('results') }}">Risultati</a>
-                <a href="{{ url_for('activate') }}">Licenza</a>
+                <a href="{{ url_for('settings') }}">Impostazioni</a>
                 <span class="license-badge">{{ license_info.plan }}</span>
             {% endif %}
         </div>
