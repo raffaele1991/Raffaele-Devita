@@ -49,7 +49,7 @@ SECRET_PATTERNS = {
     "Basic Auth": r"[Bb]asic\s+[A-Za-z0-9+/]+=+",
     "Generic API Key": r"(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*['\"]([A-Za-z0-9_\-]{16,64})['\"]",
     "Generic Secret": r"(?:secret|password|passwd|pwd|token|auth)\s*[:=]\s*['\"]([^\s'\"]{8,64})['\"]",
-    "Heroku API Key": r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+    "Heroku API Key": r"(?i)heroku[_\-\s]*(?:api[_\-\s]*)?(?:key|token)\s*[:=]\s*['\"]?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})['\"]?",
     "S3 Bucket": r"[a-zA-Z0-9._-]+\.s3\.amazonaws\.com|s3://[a-zA-Z0-9._-]+",
 }
 
