@@ -28,7 +28,7 @@ logger = logging.getLogger("bugbounty_scanner")
 
 # Pattern per secret e API key
 SECRET_PATTERNS = {
-    "AWS Access Key": r"(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}",
+    "AWS Access Key": r"(?:AKIA|ASIA)[0-9A-Z]{16}",
     "AWS Secret Key": r"(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*['\"]?([A-Za-z0-9/+=]{40})",
     "Google API Key": r"AIza[0-9A-Za-z\-_]{35}",
     "Google OAuth": r"[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com",
@@ -290,4 +290,13 @@ class JSScanner:
             "00000000", "11111111", "abcdefgh", "12345678",
         ]
         match_lower = match.lower()
-        return any(p in match_lower for p in placeholders)
+        if any(p in match_lower for p in placeholders):
+            return True
+
+        # Troppi caratteri ripetuti = probabilmente base64/padding, non un secret
+        # Es: "ABIAAAAZCAYAAAA8CX6U" ha troppi 'A' consecutivi
+        for char in set(match):
+            if match.count(char) > len(match) * 0.4:
+                return True
+
+        return False
