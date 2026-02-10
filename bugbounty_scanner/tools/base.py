@@ -22,9 +22,20 @@ class BaseTool:
     binary = "base"
     install_url = ""
 
+    # Path aggiuntive dove cercare i binari (Go, snap, usr/local, ecc.)
+    _EXTRA_PATHS = [
+        os.path.expanduser("~/go/bin"),
+        "/usr/local/go/bin",
+        "/usr/local/bin",
+        "/snap/bin",
+        os.path.expanduser("~/.local/bin"),
+        "/opt/homebrew/bin",
+    ]
+
     def __init__(self):
         self.output_dir = None
         self._custom_headers = {}
+        self._binary_path = None  # Cache del path completo trovato
 
     def set_headers(self, headers_dict):
         """Imposta header custom da passare ai tool che li supportano."""
@@ -37,9 +48,25 @@ class BaseTool:
             args.extend([flag, f"{key}: {value}"])
         return args
 
+    def _find_binary(self) -> str | None:
+        """Cerca il binario nel PATH e nelle directory comuni."""
+        # Prima prova il PATH standard
+        path = shutil.which(self.binary)
+        if path:
+            return path
+
+        # Cerca nelle directory aggiuntive
+        for extra_dir in self._EXTRA_PATHS:
+            candidate = os.path.join(extra_dir, self.binary)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+
+        return None
+
     def is_installed(self) -> bool:
         """Verifica se il tool è installato."""
-        return shutil.which(self.binary) is not None
+        self._binary_path = self._find_binary()
+        return self._binary_path is not None
 
     def check_installed(self):
         """Lancia errore se il tool non è installato."""
@@ -50,9 +77,17 @@ class BaseTool:
                 f"Oppure lancia: ./install_tools.sh"
             )
 
+    def _get_binary_cmd(self) -> str:
+        """Restituisce il path completo al binario, o il nome se nel PATH."""
+        if self._binary_path:
+            return self._binary_path
+        # Riprova a cercare
+        found = self._find_binary()
+        return found if found else self.binary
+
     def run_command(self, args, timeout=300, parse_json=False, stdin_data=None):
         """Esegue un comando e ritorna l'output."""
-        cmd = [self.binary] + args
+        cmd = [self._get_binary_cmd()] + args
         logger.debug(f"  [{self.name}] Eseguo: {' '.join(cmd)}")
 
         try:
