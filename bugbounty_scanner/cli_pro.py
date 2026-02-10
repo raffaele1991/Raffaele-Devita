@@ -22,6 +22,9 @@ from bugbounty_scanner.tools.nikto_tool import NiktoTool
 # Moduli interni
 from bugbounty_scanner.modules.headers import HeadersModule
 from bugbounty_scanner.modules.sensitive_files import SensitiveFilesModule
+from bugbounty_scanner.modules.js_scanner import JSScanner
+from bugbounty_scanner.modules.crawler import CrawlerModule
+from bugbounty_scanner.modules.wayback import WaybackModule
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -38,9 +41,16 @@ BANNER = r"""
       ___) | (_| (_| | | | | | | |  __/|  __/|  _ <| |_| |
      |____/ \___\__,_|_| |_|_| |_|\___||_|   |_| \_\\___/
 
-    Bug Bounty Scanner PRO - Orchestratore Tool Professionali
-    Subfinder + httpx + Nmap + ffuf + Nuclei + Nikto + Dalfox + SQLMap
+    Bug Bounty Scanner PRO v2.0
+    Con: Scope Auto + JS Scanner + Crawler + Wayback + Notifiche
 """
+
+# Pipeline aggiornata con i nuovi moduli
+FULL_PIPELINE = [
+    "subfinder", "httpx", "nmap", "crawler", "wayback", "ffuf",
+    "js_scanner", "nuclei", "nikto", "dalfox", "sqlmap",
+    "headers", "sensitive_files",
+]
 
 
 class InternalToolAdapter:
@@ -68,73 +78,96 @@ class InternalToolAdapterWithSession(InternalToolAdapter):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Bug Bounty Scanner PRO - Orchestratore con tool professionali",
+        description="Bug Bounty Scanner PRO v2.0 - Orchestratore con tool professionali",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Esempi:
-  %(prog)s -t example.com                          Scansione completa
-  %(prog)s -t example.com --pipeline subfinder httpx nuclei   Solo questi tool
-  %(prog)s -t example.com --check                  Verifica tool installati
-  %(prog)s -t "https://example.com/page?id=1"      Con parametri per SQLMap/Dalfox
-  %(prog)s -t example.com --nuclei-severity critical,high     Solo vulnerabilità gravi
-  %(prog)s -t example.com --nmap-scan full          Scansione porte completa
+  %(prog)s -t example.com                                              Scansione completa
+  %(prog)s -t example.com --program https://hackerone.com/example      Con scope automatico
+  %(prog)s -t example.com --scope scope.txt                            Scope da file
+  %(prog)s -t example.com --telegram-token TOKEN --telegram-chat ID    Con notifiche Telegram
+  %(prog)s -t example.com --discord-webhook URL                        Con notifiche Discord
+  %(prog)s -t example.com -H "X-Bug-Bounty: kobraraf91" --rate-limit 5
         """,
     )
 
     parser.add_argument("-t", "--target", required=True, help="URL o dominio target")
     parser.add_argument(
-        "--pipeline", nargs="+", choices=DEFAULT_PIPELINE, default=None,
-        help=f"Tool da eseguire in ordine (default: tutti). Opzioni: {', '.join(DEFAULT_PIPELINE)}",
+        "--pipeline", nargs="+", default=None,
+        help=f"Tool da eseguire in ordine (default: tutti).",
     )
-    parser.add_argument("--check", action="store_true", help="Verifica quali tool sono installati ed esci")
-    parser.add_argument("--strict", action="store_true", help="Fallisci se un tool non è installato")
+    parser.add_argument("--check", action="store_true", help="Verifica tool installati ed esci")
+    parser.add_argument("--strict", action="store_true", help="Fallisci se un tool manca")
+
+    # Programma Bug Bounty
+    prog_group = parser.add_argument_group("Programma Bug Bounty")
+    prog_group.add_argument(
+        "--program", default=None,
+        help="URL del programma bug bounty (HackerOne, Intigriti, Bugcrowd). Estrae scope automaticamente.",
+    )
+    prog_group.add_argument(
+        "--scope", default=None,
+        help="File con scope (un dominio per riga). Alternativa a --program.",
+    )
 
     # Identificazione Bug Bounty
-    bb_group = parser.add_argument_group("Bug Bounty ID")
+    bb_group = parser.add_argument_group("Identificazione")
     bb_group.add_argument(
         "-H", "--header", action="append", metavar="'Nome: Valore'",
         help="Header HTTP custom (ripetibile). Es: -H 'X-Bug-Bounty: kobraraf91'",
     )
     bb_group.add_argument(
         "--email", default=None,
-        help="Email identificativa per il programma (es: kobraraf91@intigriti.me)",
+        help="Email identificativa (es: kobraraf91@intigriti.me)",
     )
     bb_group.add_argument(
         "--rate-limit", type=float, default=5,
-        help="Max richieste al secondo (default: 5). Usa 0 per nessun limite.",
+        help="Max richieste al secondo (default: 5)",
     )
+
+    # Notifiche
+    notif_group = parser.add_argument_group("Notifiche")
+    notif_group.add_argument("--telegram-token", default=None, help="Token del bot Telegram")
+    notif_group.add_argument("--telegram-chat", default=None, help="Chat ID Telegram")
+    notif_group.add_argument("--discord-webhook", default=None, help="URL webhook Discord")
+    notif_group.add_argument(
+        "--notify-severity", default="MEDIUM",
+        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
+        help="Gravità minima per le notifiche (default: MEDIUM)",
+    )
+
+    # Crawler
+    crawl_group = parser.add_argument_group("Crawler")
+    crawl_group.add_argument("--crawl-depth", type=int, default=3, help="Profondità crawling (default: 3)")
+    crawl_group.add_argument("--crawl-pages", type=int, default=100, help="Max pagine da crawlare (default: 100)")
 
     # Opzioni Nuclei
     nuclei_group = parser.add_argument_group("Nuclei")
-    nuclei_group.add_argument("--nuclei-severity", default=None, help="Filtro gravità (es: critical,high,medium)")
-    nuclei_group.add_argument("--nuclei-tags", default=None, help="Filtro tag (es: cve,misconfig,exposure)")
-    nuclei_group.add_argument("--nuclei-templates", default=None, help="Path a template Nuclei custom")
-    nuclei_group.add_argument("--nuclei-rate", type=int, default=100, help="Rate limit Nuclei (default: 100)")
+    nuclei_group.add_argument("--nuclei-severity", default=None, help="Filtro gravità Nuclei")
+    nuclei_group.add_argument("--nuclei-tags", default=None, help="Filtro tag Nuclei")
+    nuclei_group.add_argument("--nuclei-templates", default=None, help="Template Nuclei custom")
+    nuclei_group.add_argument("--nuclei-rate", type=int, default=100, help="Rate limit Nuclei")
 
     # Opzioni Nmap
     nmap_group = parser.add_argument_group("Nmap")
-    nmap_group.add_argument("--nmap-scan", choices=["quick", "default", "full"], default="default",
-                            help="Tipo scansione Nmap (default: default)")
+    nmap_group.add_argument("--nmap-scan", choices=["quick", "default", "full"], default="default")
 
     # Opzioni SQLMap
     sqlmap_group = parser.add_argument_group("SQLMap")
-    sqlmap_group.add_argument("--sqlmap-level", type=int, default=1, choices=[1, 2, 3, 4, 5],
-                              help="Livello test SQLMap 1-5 (default: 1)")
-    sqlmap_group.add_argument("--sqlmap-risk", type=int, default=1, choices=[1, 2, 3],
-                              help="Livello rischio SQLMap 1-3 (default: 1)")
+    sqlmap_group.add_argument("--sqlmap-level", type=int, default=1, choices=[1, 2, 3, 4, 5])
+    sqlmap_group.add_argument("--sqlmap-risk", type=int, default=1, choices=[1, 2, 3])
 
     # Opzioni ffuf
     ffuf_group = parser.add_argument_group("ffuf")
     ffuf_group.add_argument("--ffuf-wordlist", default=None, help="Wordlist custom per ffuf")
-    ffuf_group.add_argument("--ffuf-threads", type=int, default=40, help="Thread ffuf (default: 40)")
+    ffuf_group.add_argument("--ffuf-threads", type=int, default=40)
 
     # Output
     output_group = parser.add_argument_group("Output")
-    output_group.add_argument("-o", "--output-dir", default="reports", help="Cartella report (default: reports)")
-    output_group.add_argument("-f", "--format", nargs="+", choices=["json", "html", "markdown", "all"],
-                              default=["all"], help="Formato report")
-    output_group.add_argument("-v", "--verbose", action="store_true", help="Output dettagliato")
-    output_group.add_argument("-q", "--quiet", action="store_true", help="Output minimo")
+    output_group.add_argument("-o", "--output-dir", default="reports")
+    output_group.add_argument("-f", "--format", nargs="+", choices=["json", "html", "markdown", "all"], default=["all"])
+    output_group.add_argument("-v", "--verbose", action="store_true")
+    output_group.add_argument("-q", "--quiet", action="store_true")
 
     return parser.parse_args()
 
@@ -148,7 +181,23 @@ def main():
     if not args.quiet:
         print(BANNER)
 
-    # Parsa header custom e crea sessione HTTP
+    # ==================== SCOPE DEL PROGRAMMA ====================
+    program_info = None
+    scope_checker = None
+
+    if args.program or args.scope:
+        from bugbounty_scanner.program_parser import ProgramParser
+        from bugbounty_scanner.scope_checker import ScopeChecker
+
+        parser = ProgramParser()
+        source = args.program or args.scope
+        print(f"  Caricamento scope da: {source}")
+        program_info = parser.parse(source)
+        print(program_info.summary())
+
+        scope_checker = ScopeChecker(program_info)
+
+    # ==================== SESSIONE HTTP ====================
     from bugbounty_scanner.http_session import HttpSession, parse_headers_list
 
     custom_headers = parse_headers_list(args.header)
@@ -158,55 +207,67 @@ def main():
         rate_limit=args.rate_limit,
     )
 
-    # Mostra configurazione bug bounty
     if custom_headers:
-        print("  Header custom configurati:")
+        print("  Header custom:")
         for k, v in custom_headers.items():
             print(f"    {k}: {v}")
     if args.email:
         print(f"  Email: {args.email}")
     print(f"  Rate limit: {args.rate_limit} req/sec")
 
-    # Crea l'orchestratore
-    pipeline = args.pipeline or DEFAULT_PIPELINE
+    # ==================== NOTIFICHE ====================
+    from bugbounty_scanner.notifier import NotificationManager
+
+    notifier = NotificationManager()
+
+    if args.telegram_token and args.telegram_chat:
+        notifier.add_telegram(args.telegram_token, args.telegram_chat)
+        print("  Notifiche Telegram: configurate")
+
+    if args.discord_webhook:
+        notifier.add_discord(args.discord_webhook)
+        print("  Notifiche Discord: configurate")
+
+    notifier.set_min_severity(args.notify_severity)
+
+    # ==================== ORCHESTRATORE ====================
+    pipeline = args.pipeline or FULL_PIPELINE
     orch = Orchestrator(
         target_url=args.target,
         pipeline=pipeline,
-        skip_missing=not args.strict,
+        skip_missing=True,
     )
 
-    # Componi header completi per i tool (include anche email se presente)
+    # Header per tool esterni
     all_headers = dict(custom_headers)
     if args.email:
         all_headers.setdefault("X-Bug-Bounty-Contact", args.email)
         all_headers.setdefault("From", args.email)
 
-    # Registra i tool professionali e passa header custom
     def register_tool(name, tool):
-        tool.set_headers(all_headers)
+        if hasattr(tool, "set_headers"):
+            tool.set_headers(all_headers)
         orch.register(name, tool)
 
+    # Tool professionali
     register_tool("subfinder", SubfinderTool())
     register_tool("httpx", HttpxTool())
     register_tool("nmap", NmapTool(scan_type=args.nmap_scan))
-    register_tool("ffuf", FfufTool(
-        wordlist=args.ffuf_wordlist,
-        threads=args.ffuf_threads,
-    ))
+    register_tool("ffuf", FfufTool(wordlist=args.ffuf_wordlist, threads=args.ffuf_threads))
     register_tool("nuclei", NucleiTool(
-        severity_filter=args.nuclei_severity,
-        tags=args.nuclei_tags,
-        templates=args.nuclei_templates,
-        rate_limit=args.nuclei_rate,
+        severity_filter=args.nuclei_severity, tags=args.nuclei_tags,
+        templates=args.nuclei_templates, rate_limit=args.nuclei_rate,
     ))
     register_tool("nikto", NiktoTool())
     register_tool("dalfox", DalfoxTool())
-    register_tool("sqlmap", SqlmapTool(
-        level=args.sqlmap_level,
-        risk=args.sqlmap_risk,
-    ))
+    register_tool("sqlmap", SqlmapTool(level=args.sqlmap_level, risk=args.sqlmap_risk))
 
-    # Registra moduli interni con sessione HTTP (header + rate limit)
+    # Moduli interni nuovi
+    orch.register("crawler", InternalToolAdapterWithSession(
+        CrawlerModule, http_session, max_pages=args.crawl_pages, max_depth=args.crawl_depth,
+    ))
+    orch.register("wayback", InternalToolAdapterWithSession(WaybackModule, http_session))
+    orch.register("js_scanner", InternalToolAdapterWithSession(JSScanner, http_session))
     orch.register("headers", InternalToolAdapterWithSession(HeadersModule, http_session))
     orch.register("sensitive_files", InternalToolAdapterWithSession(SensitiveFilesModule, http_session))
 
@@ -215,19 +276,33 @@ def main():
         orch.check_tools()
         sys.exit(0)
 
-    # Verifica e poi scansiona
+    # Verifica e scansiona
     print()
     installed, missing = orch.check_tools()
-
-    if not installed and missing:
-        print("  Nessun tool installato! Lancia ./install_tools.sh")
-        sys.exit(1)
 
     try:
         result = orch.run()
     except KeyboardInterrupt:
         print("\n\n  Scansione interrotta dall'utente.")
         sys.exit(1)
+
+    # Filtra risultati fuori scope
+    if scope_checker:
+        in_scope_findings = []
+        for f in result.findings:
+            if scope_checker.check(f.url):
+                in_scope_findings.append(f)
+        blocked = len(result.findings) - len(in_scope_findings)
+        if blocked > 0:
+            print(f"\n  Scope: {blocked} finding fuori scope filtrati")
+        result.findings = in_scope_findings
+        print(f"  {scope_checker.summary()}")
+
+    # Notifiche per i finding
+    if notifier.is_configured:
+        for finding in result.findings:
+            notifier.notify_finding(finding)
+        notifier.notify_scan_complete(result)
 
     # Report
     reporter = Reporter(result, output_dir=args.output_dir)
