@@ -7,13 +7,10 @@ __pycache__/
 venv/
 env/
 *.egg-info/
-dist/
 build/
+*.spec
 reports/*.json
 reports/*.html
 reports/*.md
 .mypy_cache/
 .pytest_cache/
-
-# NON distribuire mai lo script genera-licenze
-generate_license.py

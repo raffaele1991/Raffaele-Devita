@@ -255,13 +255,15 @@ install_tools.sh          # Installer automatico tool
 Questo software e **a pagamento** e protetto da un **sistema di chiavi di licenza**.
 Senza una chiave valida il programma **non si avvia**.
 
-### Piani disponibili
+### Piani disponibili - Abbonamento mensile
 
-| Piano | Per chi | Cosa include | Supporto | Durata aggiornamenti |
-|-------|---------|-------------|----------|----------------------|
-| **LITE** | Singolo utente | Solo modalita LITE (7 moduli) | - | 12 mesi |
-| **PRO** | Professionista o team (max 5 persone) | LITE + PRO (tutti i 13 moduli) | Email (risposta entro 48h) | 12 mesi |
-| **ENTERPRISE** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (risposta entro 24h) | 24 mesi |
+| Piano | Prezzo | Per chi | Cosa include | Supporto |
+|-------|--------|---------|-------------|----------|
+| **LITE** | **19€/mese** | Singolo utente | Modalita LITE (7 moduli) | - |
+| **PRO** | **49€/mese** | Professionista o team (max 5) | LITE + PRO (tutti i 13 moduli) | Email (48h) |
+| **ENTERPRISE** | **149€/mese** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (24h) |
+
+Risparmia con l'annuale: **2 mesi gratis** (LITE 190€/anno, PRO 490€/anno, ENTERPRISE 1.490€/anno)
 
 ### Come funziona l'acquisto
 
@@ -292,7 +294,7 @@ Il software viene distribuito come **eseguibile compilato** (non come codice sor
 
 - Il codice sorgente **non e incluso**: ricevi solo i file eseguibili
 - Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
-- Ogni chiave ha una **data di scadenza** (12 o 24 mesi in base al piano)
+- Ogni chiave ha una **data di scadenza** (mensile o annuale in base all'abbonamento)
 - Le chiavi sono **firmate crittograficamente**: non possono essere generate, modificate o falsificate
 - Chi ha una licenza **LITE** non puo usare la modalita **PRO**
 - **Senza chiave valida il software non si avvia**

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Attivazione Licenza - Bug Bounty Scanner{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 60px auto; text-align: center;">
+
+    {% if license_info %}
+        <h1>Licenza Attiva</h1>
+        <p class="subtitle">La tua licenza e gia attivata</p>
+
+        <div class="card" style="text-align: left; margin-top: 24px;">
+            <table>
+                <tr><td style="color: #8b949e;">Piano</td><td><strong>{{ license_info.plan }}</strong></td></tr>
+                <tr><td style="color: #8b949e;">Email</td><td>{{ license_info.email }}</td></tr>
+                <tr>
+                    <td style="color: #8b949e;">Scadenza</td>
+                    <td>{{ license_info.expiry | timestamp_to_date }}</td>
+                </tr>
+                <tr>
+                    <td style="color: #8b949e;">Modalita PRO</td>
+                    <td>{% if license_info.plan_info.allow_pro %}Abilitata{% else %}Non inclusa{% endif %}</td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="margin-top: 16px; color: #8b949e; font-size: 13px;">
+            Vuoi aggiornare la licenza? Inserisci una nuova chiave qui sotto.
+        </p>
+    {% else %}
+        <div style="font-size: 48px; margin-bottom: 16px;">&#128274;</div>
+        <h1>Licenza Richiesta</h1>
+        <p class="subtitle">Inserisci la tua chiave di licenza per attivare il software</p>
+    {% endif %}
+
+    <form method="POST" style="margin-top: 24px;">
+        <div class="form-group">
+            <input type="text" name="license_key" placeholder="BBSC-la-tua-chiave-qui..."
+                   style="text-align: center; font-size: 16px; padding: 14px;">
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+            Attiva Licenza
+        </button>
+    </form>
+
+    <p style="margin-top: 24px; color: #8b949e; font-size: 13px;">
+        Non hai una licenza? Scrivi a
+        <a href="mailto:devita.raffaele@gmail.com" style="color: #58a6ff;">devita.raffaele@gmail.com</a>
+    </p>
+</div>
+{% endblock %}

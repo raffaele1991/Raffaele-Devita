@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Bug Bounty Scanner{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+<p class="subtitle">
+    Licenza {{ license_info.plan }} &middot; {{ license_info.email }} &middot; {{ days_left }} giorni rimasti
+</p>
+
+<!-- Stats -->
+<div class="grid grid-3" style="margin-bottom: 24px;">
+    <div class="stat-box">
+        <div class="number" style="color: #3fb950;">{{ scans | length }}</div>
+        <div class="label">Scansioni totali</div>
+    </div>
+    <div class="stat-box">
+        {% set running = scans.values() | selectattr('status', 'equalto', 'running') | list | length %}
+        <div class="number" style="color: #58a6ff;">{{ running }}</div>
+        <div class="label">In corso</div>
+    </div>
+    <div class="stat-box">
+        {% set total_findings = scans.values() | selectattr('status', 'equalto', 'completed') | map(attribute='findings') | map('length') | sum %}
+        <div class="number" style="color: #f85149;">{{ total_findings }}</div>
+        <div class="label">Vulnerabilita trovate</div>
+    </div>
+</div>
+
+<!-- Nuova scansione -->
+<div class="card">
+    <div class="card-header">Nuova Scansione</div>
+
+    <form method="POST" action="{{ url_for('start_scan') }}">
+        <div class="grid grid-2">
+            <div class="form-group">
+                <label>Target</label>
+                <input type="text" name="target" placeholder="example.com o https://example.com/page?id=1" required>
+            </div>
+            <div class="form-group">
+                <label>Modalita</label>
+                <select name="mode">
+                    <option value="lite">LITE - 7 moduli interni</option>
+                    {% if is_pro %}
+                        <option value="pro">PRO - 13 moduli + tool professionali</option>
+                    {% else %}
+                        <option value="pro" disabled>PRO - Richiede licenza PRO</option>
+                    {% endif %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Moduli (lascia vuoto per tutti)</label>
+            <div class="checkbox-group">
+                <label><input type="checkbox" name="modules" value="recon"><span>Recon</span></label>
+                <label><input type="checkbox" name="modules" value="headers"><span>Headers</span></label>
+                <label><input type="checkbox" name="modules" value="xss"><span>XSS</span></label>
+                <label><input type="checkbox" name="modules" value="sqli"><span>SQLi</span></label>
+                <label><input type="checkbox" name="modules" value="ssrf"><span>SSRF</span></label>
+                <label><input type="checkbox" name="modules" value="open_redirect"><span>Open Redirect</span></label>
+                <label><input type="checkbox" name="modules" value="sensitive_files"><span>File Sensibili</span></label>
+                {% if is_pro %}
+                    <label><input type="checkbox" name="modules" value="subfinder"><span>Subfinder</span></label>
+                    <label><input type="checkbox" name="modules" value="httpx"><span>httpx</span></label>
+                    <label><input type="checkbox" name="modules" value="nmap"><span>Nmap</span></label>
+                    <label><input type="checkbox" name="modules" value="nuclei"><span>Nuclei</span></label>
+                    <label><input type="checkbox" name="modules" value="ffuf"><span>ffuf</span></label>
+                    <label><input type="checkbox" name="modules" value="dalfox"><span>Dalfox</span></label>
+                    <label><input type="checkbox" name="modules" value="sqlmap"><span>SQLMap</span></label>
+                    <label><input type="checkbox" name="modules" value="nikto"><span>Nikto</span></label>
+                    <label><input type="checkbox" name="modules" value="crawler"><span>Crawler</span></label>
+                    <label><input type="checkbox" name="modules" value="wayback"><span>Wayback</span></label>
+                    <label><input type="checkbox" name="modules" value="js_scanner"><span>JS Scanner</span></label>
+                {% endif %}
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">Avvia Scansione</button>
+    </form>
+</div>
+
+<!-- Scansioni recenti -->
+{% if scans %}
+<div class="card">
+    <div class="card-header">Scansioni Recenti</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Target</th>
+                <th>Modalita</th>
+                <th>Stato</th>
+                <th>Data</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for id, scan in scans.items() | sort(attribute='1.started', reverse=True) %}
+            <tr>
+                <td><strong>{{ scan.target }}</strong></td>
+                <td>{{ scan.mode | upper }}</td>
+                <td>
+                    {% if scan.status == 'running' %}
+                        <span class="badge badge-running">In corso {{ scan.progress }}%</span>
+                    {% elif scan.status == 'completed' %}
+                        <span class="badge badge-completed">Completata</span>
+                    {% else %}
+                        <span class="badge badge-critical">Errore</span>
+                    {% endif %}
+                </td>
+                <td style="color: #8b949e;">{{ scan.started }}</td>
+                <td><a href="{{ url_for('scan_status', scan_id=id) }}" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">Dettagli</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
