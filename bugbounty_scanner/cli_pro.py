@@ -58,6 +58,14 @@ class InternalToolAdapter:
         return self._module.run(target.base_url, scan_result)
 
 
+class InternalToolAdapterWithSession(InternalToolAdapter):
+    """Adapter che passa anche la sessione HTTP ai moduli interni."""
+
+    def __init__(self, module_class, http_session, **kwargs):
+        module = module_class(http_session=http_session, **kwargs)
+        super().__init__(module)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Bug Bounty Scanner PRO - Orchestratore con tool professionali",
@@ -80,6 +88,21 @@ Esempi:
     )
     parser.add_argument("--check", action="store_true", help="Verifica quali tool sono installati ed esci")
     parser.add_argument("--strict", action="store_true", help="Fallisci se un tool non è installato")
+
+    # Identificazione Bug Bounty
+    bb_group = parser.add_argument_group("Bug Bounty ID")
+    bb_group.add_argument(
+        "-H", "--header", action="append", metavar="'Nome: Valore'",
+        help="Header HTTP custom (ripetibile). Es: -H 'X-Bug-Bounty: kobraraf91'",
+    )
+    bb_group.add_argument(
+        "--email", default=None,
+        help="Email identificativa per il programma (es: kobraraf91@intigriti.me)",
+    )
+    bb_group.add_argument(
+        "--rate-limit", type=float, default=5,
+        help="Max richieste al secondo (default: 5). Usa 0 per nessun limite.",
+    )
 
     # Opzioni Nuclei
     nuclei_group = parser.add_argument_group("Nuclei")
@@ -125,6 +148,25 @@ def main():
     if not args.quiet:
         print(BANNER)
 
+    # Parsa header custom e crea sessione HTTP
+    from bugbounty_scanner.http_session import HttpSession, parse_headers_list
+
+    custom_headers = parse_headers_list(args.header)
+    http_session = HttpSession(
+        headers=custom_headers,
+        email=args.email,
+        rate_limit=args.rate_limit,
+    )
+
+    # Mostra configurazione bug bounty
+    if custom_headers:
+        print("  Header custom configurati:")
+        for k, v in custom_headers.items():
+            print(f"    {k}: {v}")
+    if args.email:
+        print(f"  Email: {args.email}")
+    print(f"  Rate limit: {args.rate_limit} req/sec")
+
     # Crea l'orchestratore
     pipeline = args.pipeline or DEFAULT_PIPELINE
     orch = Orchestrator(
@@ -133,30 +175,40 @@ def main():
         skip_missing=not args.strict,
     )
 
-    # Registra i tool professionali
-    orch.register("subfinder", SubfinderTool())
-    orch.register("httpx", HttpxTool())
-    orch.register("nmap", NmapTool(scan_type=args.nmap_scan))
-    orch.register("ffuf", FfufTool(
+    # Componi header completi per i tool (include anche email se presente)
+    all_headers = dict(custom_headers)
+    if args.email:
+        all_headers.setdefault("X-Bug-Bounty-Contact", args.email)
+        all_headers.setdefault("From", args.email)
+
+    # Registra i tool professionali e passa header custom
+    def register_tool(name, tool):
+        tool.set_headers(all_headers)
+        orch.register(name, tool)
+
+    register_tool("subfinder", SubfinderTool())
+    register_tool("httpx", HttpxTool())
+    register_tool("nmap", NmapTool(scan_type=args.nmap_scan))
+    register_tool("ffuf", FfufTool(
         wordlist=args.ffuf_wordlist,
         threads=args.ffuf_threads,
     ))
-    orch.register("nuclei", NucleiTool(
+    register_tool("nuclei", NucleiTool(
         severity_filter=args.nuclei_severity,
         tags=args.nuclei_tags,
         templates=args.nuclei_templates,
         rate_limit=args.nuclei_rate,
     ))
-    orch.register("nikto", NiktoTool())
-    orch.register("dalfox", DalfoxTool())
-    orch.register("sqlmap", SqlmapTool(
+    register_tool("nikto", NiktoTool())
+    register_tool("dalfox", DalfoxTool())
+    register_tool("sqlmap", SqlmapTool(
         level=args.sqlmap_level,
         risk=args.sqlmap_risk,
     ))
 
-    # Registra moduli interni
-    orch.register("headers", InternalToolAdapter(HeadersModule()))
-    orch.register("sensitive_files", InternalToolAdapter(SensitiveFilesModule()))
+    # Registra moduli interni con sessione HTTP (header + rate limit)
+    orch.register("headers", InternalToolAdapterWithSession(HeadersModule, http_session))
+    orch.register("sensitive_files", InternalToolAdapterWithSession(SensitiveFilesModule, http_session))
 
     # Solo check?
     if args.check:

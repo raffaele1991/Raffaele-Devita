@@ -28,14 +28,16 @@ class ReconModule:
 
     name = "recon"
 
-    def __init__(self, enum_subdomains=True, scan_ports=True, detect_tech=True, threads=10):
+    def __init__(self, enum_subdomains=True, scan_ports=True, detect_tech=True, threads=10, http_session=None):
         self.enum_subdomains = enum_subdomains
         self.scan_ports = scan_ports
         self.detect_tech = detect_tech
         self.threads = threads
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = DEFAULT_USER_AGENT
-        self.session.verify = False
+        if http_session:
+            self.session = http_session
+        else:
+            from bugbounty_scanner.http_session import HttpSession
+            self.session = HttpSession()
 
     def run(self, target, scan_result):
         """Run all recon tasks and return findings."""

@@ -44,11 +44,13 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Esempi di utilizzo:
-  %(prog)s -t example.com                      Scansione completa
-  %(prog)s -t example.com -m xss sqli          Solo moduli XSS e SQLi
-  %(prog)s -t example.com --no-recon            Salta la ricognizione
-  %(prog)s -t example.com -o report -f html     Report HTML nella cartella 'report'
-  %(prog)s -t https://example.com/page?id=1     Scansione con parametri specifici
+  %(prog)s -t example.com                                            Scansione completa
+  %(prog)s -t example.com -m xss sqli                                Solo moduli XSS e SQLi
+  %(prog)s -t example.com --no-recon                                 Salta la ricognizione
+  %(prog)s -t example.com -H "X-Bug-Bounty: kobraraf91"             Header custom
+  %(prog)s -t example.com --email kobraraf91@intigriti.me            Con email identificativa
+  %(prog)s -t example.com --rate-limit 5                             Max 5 req/sec
+  %(prog)s -t example.com -H "X-Bug-Bounty: kobraraf91" --rate-limit 3  Combo completa
         """,
     )
 
@@ -94,6 +96,23 @@ Esempi di utilizzo:
         help="Formato del report (default: all)",
     )
     parser.add_argument(
+        "-H", "--header",
+        action="append",
+        metavar="'Nome: Valore'",
+        help="Header HTTP custom (ripetibile). Es: -H 'X-Bug-Bounty: kobraraf91'",
+    )
+    parser.add_argument(
+        "--email",
+        default=None,
+        help="Email identificativa per il programma bug bounty (aggiunta agli header)",
+    )
+    parser.add_argument(
+        "--rate-limit",
+        type=float,
+        default=5,
+        help="Massimo richieste al secondo (default: 5). Usa 0 per nessun limite.",
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Output dettagliato (debug logging)",
@@ -132,6 +151,24 @@ def main():
         elif "recon" in enabled:
             enabled.remove("recon")
 
+    # Crea sessione HTTP condivisa con header custom e rate limiting
+    from bugbounty_scanner.http_session import HttpSession, parse_headers_list
+
+    custom_headers = parse_headers_list(args.header)
+    http_session = HttpSession(
+        headers=custom_headers,
+        email=args.email,
+        rate_limit=args.rate_limit,
+    )
+
+    # Mostra configurazione
+    if custom_headers:
+        for k, v in custom_headers.items():
+            logger.info(f"Header custom: {k}: {v}")
+    if args.email:
+        logger.info(f"Email: {args.email}")
+    logger.info(f"Rate limit: {args.rate_limit} req/sec")
+
     # Crea lo scanner
     scanner = Scanner(
         target=args.target,
@@ -141,14 +178,14 @@ def main():
         verbose=args.verbose,
     )
 
-    # Registra i moduli
-    scanner.register_module(ReconModule(threads=args.threads))
-    scanner.register_module(HeadersModule())
-    scanner.register_module(XSSModule())
-    scanner.register_module(SQLiModule())
-    scanner.register_module(SSRFModule())
-    scanner.register_module(OpenRedirectModule())
-    scanner.register_module(SensitiveFilesModule(threads=args.threads))
+    # Registra i moduli con la sessione condivisa
+    scanner.register_module(ReconModule(threads=args.threads, http_session=http_session))
+    scanner.register_module(HeadersModule(http_session=http_session))
+    scanner.register_module(XSSModule(http_session=http_session))
+    scanner.register_module(SQLiModule(http_session=http_session))
+    scanner.register_module(SSRFModule(http_session=http_session))
+    scanner.register_module(OpenRedirectModule(http_session=http_session))
+    scanner.register_module(SensitiveFilesModule(threads=args.threads, http_session=http_session))
 
     # Esegui la scansione
     logger.info(f"Target: {scanner.target}")

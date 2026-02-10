@@ -24,6 +24,18 @@ class BaseTool:
 
     def __init__(self):
         self.output_dir = None
+        self._custom_headers = {}
+
+    def set_headers(self, headers_dict):
+        """Imposta header custom da passare ai tool che li supportano."""
+        self._custom_headers = headers_dict or {}
+
+    def get_header_args(self, flag="-H"):
+        """Genera argomenti CLI per gli header custom (formato -H 'Key: Value')."""
+        args = []
+        for key, value in self._custom_headers.items():
+            args.extend([flag, f"{key}: {value}"])
+        return args
 
     def is_installed(self) -> bool:
         """Verifica se il tool è installato."""

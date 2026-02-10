@@ -72,6 +72,9 @@ class NucleiTool(BaseTool):
         if self.templates:
             args.extend(["-t", self.templates])
 
+        # Aggiungi header custom
+        args.extend(self.get_header_args("-H"))
+
         output = self.run_command(args, timeout=600, parse_json=True)
 
         if not output:

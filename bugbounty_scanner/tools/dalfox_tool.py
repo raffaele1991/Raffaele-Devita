@@ -36,6 +36,9 @@ class DalfoxTool(BaseTool):
             "--follow-redirects",
         ]
 
+        # Aggiungi header custom
+        args.extend(self.get_header_args("-H"))
+
         output = self.run_command(args, timeout=300, parse_json=True)
 
         if not output:

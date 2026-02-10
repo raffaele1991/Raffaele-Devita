@@ -171,6 +171,9 @@ class FfufTool(BaseTool):
         if self.rate_limit > 0:
             args.extend(["-rate", str(self.rate_limit)])
 
+        # Aggiungi header custom
+        args.extend(self.get_header_args("-H"))
+
         output = self.run_command(args, timeout=300, parse_json=True)
 
         if not output:

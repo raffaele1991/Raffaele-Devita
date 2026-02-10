@@ -28,10 +28,12 @@ class OpenRedirectModule:
         "continue", "goto", "checkout_url", "forward", "out",
     ]
 
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = DEFAULT_USER_AGENT
-        self.session.verify = False
+    def __init__(self, http_session=None):
+        if http_session:
+            self.session = http_session
+        else:
+            from bugbounty_scanner.http_session import HttpSession
+            self.session = HttpSession()
 
     def run(self, target, scan_result):
         findings = []

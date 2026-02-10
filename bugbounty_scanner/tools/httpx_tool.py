@@ -32,21 +32,19 @@ class HttpxTool(BaseTool):
         # Crea file con la lista degli host
         hosts_file = self.make_temp_file("\n".join(hosts))
 
-        output = self.run_command(
-            [
-                "-l", hosts_file,
-                "-silent",
-                "-json",
-                "-status-code",
-                "-title",
-                "-tech-detect",
-                "-server",
-                "-content-length",
-                "-follow-redirects",
-            ],
-            timeout=180,
-            parse_json=True,
-        )
+        args = [
+            "-l", hosts_file,
+            "-silent",
+            "-json",
+            "-status-code",
+            "-title",
+            "-tech-detect",
+            "-server",
+            "-content-length",
+            "-follow-redirects",
+        ] + self.get_header_args("-H")
+
+        output = self.run_command(args, timeout=180, parse_json=True)
 
         if not output:
             return findings
