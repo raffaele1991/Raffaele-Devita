@@ -119,10 +119,14 @@ def start_scan():
     program_url = request.form.get("program_url", "").strip()
     scope_text = request.form.get("scope_text", "").strip()
 
-    # Se non c'è target manuale, estrai dal programma o dallo scope
-    if not target:
-        target = _extract_target_from_scope(program_url, scope_text)
-        if not target:
+    # Costruisci lista target
+    targets = []
+    if target:
+        targets = [target]
+    else:
+        # Estrai TUTTI i target dal programma o dallo scope
+        targets = _extract_targets_from_scope(program_url, scope_text)
+        if not targets:
             flash("Inserisci un target oppure un URL programma Bug Bounty / scope manuale.", "error")
             return redirect(url_for("dashboard"))
 
@@ -156,65 +160,77 @@ def start_scan():
         "output_dir": request.form.get("output_dir", "reports").strip(),
     }
 
-    # Crea scan ID
-    safe_target = target.replace('.', '_').replace('/', '_').replace(':', '_')[:30]
-    scan_id = f"scan_{int(time.time())}_{safe_target}"
+    # Lancia una scansione per ogni target in scope
+    first_scan_id = None
+    for t in targets:
+        safe_target = t.replace('.', '_').replace('/', '_').replace(':', '_')[:30]
+        scan_id = f"scan_{int(time.time())}_{safe_target}"
 
-    scan_data = {
-        "id": scan_id,
-        "target": target,
-        "mode": mode,
-        "modules": modules,
-        "options": scan_options,
-        "status": "running",
-        "started": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "progress": 0,
-        "current_step": "Avvio scansione...",
-        "findings": [],
-        "summary": None,
-        "report_paths": {},
-        "_start_time": time.time(),
-    }
+        scan_data = {
+            "id": scan_id,
+            "target": t,
+            "mode": mode,
+            "modules": modules,
+            "options": scan_options,
+            "status": "running",
+            "started": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "progress": 0,
+            "current_step": "Avvio scansione...",
+            "findings": [],
+            "summary": None,
+            "report_paths": {},
+            "_start_time": time.time(),
+        }
 
-    with scan_lock:
-        scans[scan_id] = scan_data
+        with scan_lock:
+            scans[scan_id] = scan_data
 
-    # Avvia la scansione in background
-    thread = threading.Thread(target=run_scan_background, args=(scan_id, target, mode, modules, scan_options))
-    thread.daemon = True
-    thread.start()
+        thread = threading.Thread(target=run_scan_background, args=(scan_id, t, mode, modules, scan_options))
+        thread.daemon = True
+        thread.start()
 
-    return redirect(url_for("scan_status", scan_id=scan_id))
+        if first_scan_id is None:
+            first_scan_id = scan_id
+
+    if len(targets) > 1:
+        flash(f"Avviate {len(targets)} scansioni per tutti i target in scope.", "success")
+        return redirect(url_for("dashboard"))
+    else:
+        return redirect(url_for("scan_status", scan_id=first_scan_id))
 
 
-def _extract_target_from_scope(program_url, scope_text):
-    """Estrae il target principale dall'URL programma BB o dallo scope manuale."""
+def _extract_targets_from_scope(program_url, scope_text):
+    """Estrae TUTTI i target dall'URL programma BB o dallo scope manuale."""
+    targets = []
+
     # Prima prova dal programma bug bounty
     if program_url:
         try:
             from bugbounty_scanner.program_parser import ProgramParser
             parser = ProgramParser()
             program_info = parser.parse(program_url)
-            # Prendi il primo dominio in scope (senza wildcard)
+            # Prendi tutti i domini in scope (rimuovi wildcard)
             for domain in program_info.in_scope_domains:
                 clean = domain.strip().lstrip("*.")
-                if clean:
-                    return clean
-            # Se ci sono URL in scope, usa il primo
+                if clean and clean not in targets:
+                    targets.append(clean)
+            # Aggiungi anche URL specifici in scope
             for url in program_info.in_scope_urls:
-                if url:
-                    return url
+                if url and url not in targets:
+                    targets.append(url)
         except Exception as e:
             logger.error(f"Errore parsing programma {program_url}: {e}")
 
-    # Poi prova dallo scope manuale
+    # Poi aggiungi dallo scope manuale (se non già presenti)
     if scope_text:
         for line in scope_text.strip().splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
-                return line.lstrip("*.")
+                clean = line.lstrip("*.")
+                if clean and clean not in targets:
+                    targets.append(clean)
 
-    return None
+    return targets
 
 
 def run_scan_background(scan_id, target, mode, modules, options):
