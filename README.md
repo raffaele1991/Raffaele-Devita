@@ -255,9 +255,10 @@ Questo software e distribuito con **licenza commerciale**. Consulta il file [LIC
 
 ### Come acquistare
 
-1. Contatta via email: **kobraraf91@intigriti.me**
-2. Specifica il piano desiderato (LITE, PRO, ENTERPRISE)
-3. Riceverai le istruzioni per il pagamento e l'attivazione
+1. Scrivi a **devita.raffaele@gmail.com** indicando il piano desiderato (LITE, PRO, ENTERPRISE)
+2. Riceverai un preventivo con le modalita di pagamento (PayPal, bonifico bancario o carta)
+3. Dopo il pagamento riceverai la chiave di licenza e l'accesso al download
+4. Attiva la licenza e inizia a usare lo scanner
 
 ### Garanzia
 
