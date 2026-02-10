@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Scansione {{ scan.target }} - Bug Bounty Scanner{% endblock %}
+
+{% block content %}
+<h1>Scansione: {{ scan.target }}</h1>
+<p class="subtitle">
+    Modalita {{ scan.mode | upper }} &middot; Avviata il {{ scan.started }}
+</p>
+
+<!-- Stato -->
+<div class="card">
+    <div class="card-header">
+        {% if scan.status == 'running' %}
+            <span class="badge badge-running">In corso</span>
+        {% elif scan.status == 'completed' %}
+            <span class="badge badge-completed">Completata</span>
+        {% else %}
+            <span class="badge badge-critical">Errore</span>
+        {% endif %}
+        <span id="current-step">{{ scan.current_step }}</span>
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width: {{ scan.progress }}%;"></div>
+    </div>
+    <div style="text-align: right; font-size: 12px; color: #8b949e;" id="progress-text">{{ scan.progress }}%</div>
+</div>
+
+<!-- Risultati -->
+{% if scan.status == 'completed' and scan.summary %}
+<div class="grid grid-3" style="margin: 16px 0;">
+    <div class="stat-box">
+        <div class="number severity-critical">{{ scan.summary.by_severity.get('CRITICAL', 0) }}</div>
+        <div class="label">Critical</div>
+    </div>
+    <div class="stat-box">
+        <div class="number severity-high">{{ scan.summary.by_severity.get('HIGH', 0) }}</div>
+        <div class="label">High</div>
+    </div>
+    <div class="stat-box">
+        <div class="number severity-medium">{{ scan.summary.by_severity.get('MEDIUM', 0) }}</div>
+        <div class="label">Medium</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Tabella findings -->
+{% if scan.findings %}
+<div class="card">
+    <div class="card-header">Vulnerabilita trovate ({{ scan.findings | length }})</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Gravita</th>
+                <th>Tipo</th>
+                <th>URL</th>
+                <th>Descrizione</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in scan.findings | sort(attribute='severity') %}
+            <tr>
+                <td><span class="badge badge-{{ f.severity | lower }}">{{ f.severity }}</span></td>
+                <td>{{ f.type }}</td>
+                <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ f.url }}</td>
+                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ f.description }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif scan.status == 'completed' %}
+<div class="card" style="text-align: center; padding: 40px;">
+    <div style="font-size: 48px; margin-bottom: 12px;">&#9989;</div>
+    <h2 style="color: #3fb950;">Nessuna vulnerabilita trovata</h2>
+    <p class="subtitle">Il target sembra sicuro (o ben protetto)</p>
+</div>
+{% endif %}
+
+<div style="margin-top: 16px;">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Torna alla Dashboard</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if scan.status == 'running' %}
+<script>
+    function updateStatus() {
+        fetch('/api/scan/{{ scan.id }}')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('progress-fill').style.width = data.progress + '%';
+                document.getElementById('progress-text').textContent = data.progress + '%';
+                document.getElementById('current-step').textContent = data.current_step;
+
+                if (data.status === 'completed' || data.status === 'error') {
+                    location.reload();
+                } else {
+                    setTimeout(updateStatus, 2000);
+                }
+            })
+            .catch(() => setTimeout(updateStatus, 3000));
+    }
+    setTimeout(updateStatus, 2000);
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Risultati - Bug Bounty Scanner{% endblock %}
+
+{% block content %}
+<h1>Risultati Scansioni</h1>
+<p class="subtitle">Tutte le scansioni completate</p>
+
+{% if scans %}
+    {% for id, scan in scans.items() | sort(attribute='1.started', reverse=True) %}
+    <div class="card">
+        <div class="card-header">
+            <span>{{ scan.target }}</span>
+            <span class="badge badge-{{ scan.mode }}">{{ scan.mode | upper }}</span>
+            <span style="color: #8b949e; font-size: 12px; margin-left: auto;">{{ scan.started }}</span>
+        </div>
+
+        {% if scan.summary %}
+        <div class="grid grid-3" style="margin: 12px 0; gap: 8px;">
+            <div style="text-align: center;">
+                <span class="severity-critical" style="font-size: 24px; font-weight: 700;">{{ scan.summary.by_severity.get('CRITICAL', 0) }}</span>
+                <div style="font-size: 11px; color: #8b949e;">CRITICAL</div>
+            </div>
+            <div style="text-align: center;">
+                <span class="severity-high" style="font-size: 24px; font-weight: 700;">{{ scan.summary.by_severity.get('HIGH', 0) }}</span>
+                <div style="font-size: 11px; color: #8b949e;">HIGH</div>
+            </div>
+            <div style="text-align: center;">
+                <span class="severity-medium" style="font-size: 24px; font-weight: 700;">{{ scan.summary.by_severity.get('MEDIUM', 0) }}</span>
+                <div style="font-size: 11px; color: #8b949e;">MEDIUM</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #8b949e; font-size: 13px;">
+                {{ scan.findings | length }} vulnerabilita trovate
+            </span>
+            <a href="{{ url_for('scan_status', scan_id=id) }}" class="btn btn-blue" style="padding: 6px 16px; font-size: 13px;">
+                Vedi dettagli
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="card" style="text-align: center; padding: 60px;">
+        <div style="font-size: 48px; margin-bottom: 12px;">&#128269;</div>
+        <h2>Nessuna scansione completata</h2>
+        <p class="subtitle">Avvia una scansione dalla dashboard</p>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary" style="margin-top: 16px;">Vai alla Dashboard</a>
+    </div>
+{% endif %}
+{% endblock %}
