@@ -6,6 +6,7 @@ import logging
 import sys
 import urllib3
 
+from bugbounty_scanner.license_manager import check_license
 from bugbounty_scanner.scanner import Scanner
 from bugbounty_scanner.modules.recon import ReconModule
 from bugbounty_scanner.modules.headers import HeadersModule
@@ -142,6 +143,10 @@ def main():
 
     if not args.quiet:
         print(BANNER)
+
+    # Verifica licenza (LITE e sufficiente)
+    license_info = check_license(require_pro=False)
+    logger.info(f"Licenza {license_info['plan']} attiva ({license_info['email']})")
 
     # Determina i moduli da eseguire
     enabled = args.modules

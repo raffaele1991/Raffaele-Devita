@@ -97,7 +97,23 @@ chmod +x install_tools.sh
 ./install_tools.sh
 ```
 
-### 3. Verifica installazione
+### 3. Attivazione licenza
+Dopo l'acquisto riceverai una chiave `BBSC-...`. Attivala cosi:
+```bash
+python -m bugbounty_scanner.activate BBSC-LA-TUA-CHIAVE
+```
+
+Oppure imposta la variabile d'ambiente:
+```bash
+export BBSCANNER_LICENSE="BBSC-LA-TUA-CHIAVE"
+```
+
+Per controllare lo stato della licenza:
+```bash
+python -m bugbounty_scanner.activate
+```
+
+### 4. Verifica installazione
 ```bash
 python -m bugbounty_scanner.cli_pro -t example.com --check
 ```
