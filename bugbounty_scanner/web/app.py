@@ -388,7 +388,9 @@ def generate_reports(scan_id, options):
                 return self._summary
 
         result = SimpleResult(scan)
-        reporter = Reporter(result, output_dir=options.get("output_dir", "reports"))
+        # Usa path assoluto per evitare mismatch con Flask send_file
+        output_dir = os.path.abspath(options.get("output_dir", "reports"))
+        reporter = Reporter(result, output_dir=output_dir)
 
         formats = options.get("report_formats", ["html", "json"])
         if not formats:
@@ -655,10 +657,15 @@ def download_report(scan_id, fmt):
         flash("Scansione non trovata.", "error")
         return redirect(url_for("dashboard"))
     report_path = scan.get("report_paths", {}).get(fmt)
-    if not report_path or not os.path.isfile(report_path):
-        flash(f"Report {fmt} non trovato.", "error")
+    if not report_path:
+        flash(f"Report {fmt} non disponibile.", "error")
         return redirect(url_for("scan_status", scan_id=scan_id))
-    return send_file(report_path, as_attachment=True)
+    # Assicurati che sia un path assoluto
+    abs_path = os.path.abspath(report_path)
+    if not os.path.isfile(abs_path):
+        flash(f"File report {fmt} non trovato: {abs_path}", "error")
+        return redirect(url_for("scan_status", scan_id=scan_id))
+    return send_file(abs_path, as_attachment=True)
 
 
 @app.route("/results")

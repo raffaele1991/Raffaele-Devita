@@ -23,13 +23,65 @@ class DalfoxTool(BaseTool):
     binary = "dalfox"
     install_url = "https://github.com/hahwul/dalfox"
 
+    def _parse_output(self, raw_content):
+        """Parsa output Dalfox (JSON, JSONL, o testo [POC]...)."""
+        entries = []
+        if not raw_content:
+            return entries
+
+        # Prova JSON array
+        try:
+            parsed = json.loads(raw_content)
+            if isinstance(parsed, list):
+                return [e for e in parsed if isinstance(e, dict)]
+            if isinstance(parsed, dict):
+                return [parsed]
+        except json.JSONDecodeError:
+            pass
+
+        # Prova JSONL (una riga JSON per linea) + testo plain
+        for line in raw_content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    entries.append(obj)
+                continue
+            except json.JSONDecodeError:
+                pass
+
+            # Testo plain: "[POC][V][GET] https://..." o "[POC][R][GET] https://..."
+            poc_match = re.search(r'https?://\S+', line)
+            if poc_match and ("[POC]" in line or "[V]" in line):
+                entry = {"data": poc_match.group(0), "_raw_line": line}
+                # Estrai parametro dal URL se presente (es: ?param=payload)
+                poc_url = poc_match.group(0)
+                from urllib.parse import urlparse, parse_qs
+                parsed_url = urlparse(poc_url)
+                if parsed_url.query:
+                    params = parse_qs(parsed_url.query)
+                    for p, vals in params.items():
+                        for v in vals:
+                            if any(tag in v.lower() for tag in
+                                   ["<script", "alert(", "onerror", "onload",
+                                    "onfocus", "onmouse", "javascript:", "<img",
+                                    "<svg", "prompt(", "confirm("]):
+                                entry["param"] = p
+                                entry["payload"] = v
+                                break
+                entries.append(entry)
+
+        return entries
+
     def run(self, target, scan_result):
         self.check_installed()
         findings = []
 
         logger.info(f"  [Dalfox] Scansione XSS su {target.base_url}")
 
-        # Usa file di output per evitare che --silence sovrascriva il JSON
+        # Usa file di output come backup
         fd, output_file = tempfile.mkstemp(suffix=".json")
         os.close(fd)
 
@@ -47,51 +99,47 @@ class DalfoxTool(BaseTool):
         # Aggiungi header custom
         args.extend(self.get_header_args("-H"))
 
-        self.run_command(args, timeout=300)
+        # Cattura stdout (contiene --format json output)
+        stdout_output = self.run_command(args, timeout=300) or ""
 
-        # Leggi i risultati dal file di output
+        # Leggi anche il file di output
+        file_content = ""
         try:
             with open(output_file, "r") as f:
-                raw_content = f.read().strip()
+                file_content = f.read().strip()
         except Exception:
-            raw_content = ""
+            pass
         finally:
             try:
                 os.unlink(output_file)
             except Exception:
                 pass
 
-        if not raw_content:
+        # Log per debug
+        if stdout_output:
+            logger.debug(f"  [Dalfox] stdout ({len(stdout_output)} chars): {stdout_output[:500]}")
+        if file_content:
+            logger.debug(f"  [Dalfox] file output ({len(file_content)} chars): {file_content[:500]}")
+
+        # Parsa entrambi gli output e unisci
+        entries_stdout = self._parse_output(stdout_output)
+        entries_file = self._parse_output(file_content)
+
+        # Usa stdout come primario (ha --format json), file come fallback
+        entries = entries_stdout if entries_stdout else entries_file
+
+        if not entries:
             logger.info("  [Dalfox] Nessun XSS trovato")
             return findings
 
-        # Parsa JSON (può essere un array o JSONL)
-        entries = []
-        try:
-            parsed = json.loads(raw_content)
-            if isinstance(parsed, list):
-                entries = parsed
-            elif isinstance(parsed, dict):
-                entries = [parsed]
-        except json.JSONDecodeError:
-            # Prova JSONL (una riga JSON per linea)
-            for line in raw_content.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    # Potrebbe essere output plain text tipo "[POC][V][GET] url"
-                    poc_match = re.search(r'https?://\S+', line)
-                    if poc_match and ("[POC]" in line or "[V]" in line):
-                        entries.append({"data": poc_match.group(0), "_raw_line": line})
+        logger.info(f"  [Dalfox] Parsing {len(entries)} entry...")
 
+        seen_urls = set()  # Evita duplicati
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
 
-            # Dalfox JSON fields
+            # Dalfox JSON fields (copre v2.x e v3.x)
             poc_url = (entry.get("data") or entry.get("proof_of_concept")
                        or entry.get("poc") or "")
             param = entry.get("param", "")
@@ -102,6 +150,18 @@ class DalfoxTool(BaseTool):
             vuln_type = entry.get("type", "")
             cwe = entry.get("cwe", "CWE-79")
             raw_line = entry.get("_raw_line", "")
+            severity_str = entry.get("severity", "")
+
+            # Dedup: se stessa URL PoC, salta
+            dedup_key = poc_url or f"{target.base_url}:{param}:{payload}"
+            if dedup_key in seen_urls:
+                continue
+            seen_urls.add(dedup_key)
+
+            # Se non c'è PoC URL e non c'è payload, è un falso positivo
+            if not poc_url and not payload and not raw_line:
+                logger.debug(f"  [Dalfox] Entry senza PoC/payload scartata: {entry}")
+                continue
 
             severity = SEVERITY_HIGH
             if "dom" in vuln_type.lower() or "dom" in inject_type.lower():
@@ -132,7 +192,7 @@ class DalfoxTool(BaseTool):
 
             # Descrizione dettagliata per Intigriti/HackerOne
             desc_parts = []
-            desc_parts.append(f"Dalfox ha trovato una vulnerabilità XSS (Cross-Site Scripting)")
+            desc_parts.append("Dalfox ha trovato una vulnerabilità XSS (Cross-Site Scripting)")
             if param:
                 desc_parts.append(f"nel parametro `{param}`")
             desc_parts.append(f"su {target.base_url}.")
