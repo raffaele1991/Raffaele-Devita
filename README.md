@@ -84,38 +84,29 @@ python -m bugbounty_scanner.cli_pro -t example.com \
 | 12 | **Headers** | Analisi header sicurezza, CORS, cookie | Check |
 | 13 | **Sensitive Files** | File e endpoint sensibili esposti | Check |
 
-## Installazione Rapida
+## Installazione
 
-### 1. Dipendenze Python
+### 1. Scarica i file
+Dopo l'acquisto riceverai un archivio con i file eseguibili. Estraili e rendili eseguibili:
 ```bash
-pip install -r requirements.txt
+chmod +x bbscanner bbscanner_pro bbscanner_activate
 ```
 
-### 2. Tool professionali (per modalita PRO)
+### 2. Attiva la licenza
+```bash
+./bbscanner_activate BBSC-LA-TUA-CHIAVE
+```
+
+### 3. (Solo PRO) Installa i tool esterni
+La modalita PRO richiede tool professionali (Nuclei, Nmap, etc.):
 ```bash
 chmod +x install_tools.sh
 ./install_tools.sh
 ```
 
-### 3. Attivazione licenza
-Dopo l'acquisto riceverai una chiave `BBSC-...`. Attivala cosi:
+### 4. Verifica che tutto funzioni
 ```bash
-python -m bugbounty_scanner.activate BBSC-LA-TUA-CHIAVE
-```
-
-Oppure imposta la variabile d'ambiente:
-```bash
-export BBSCANNER_LICENSE="BBSC-LA-TUA-CHIAVE"
-```
-
-Per controllare lo stato della licenza:
-```bash
-python -m bugbounty_scanner.activate
-```
-
-### 4. Verifica installazione
-```bash
-python -m bugbounty_scanner.cli_pro -t example.com --check
+./bbscanner_pro -t example.com --check
 ```
 
 ## Esempi di Utilizzo
@@ -282,29 +273,35 @@ Senza una chiave valida il programma **non si avvia**.
    - Bonifico bancario
    - Carta di credito/debito
 3. **Dopo il pagamento** ricevi via email:
-   - Il link per scaricare il software
+   - I **file eseguibili** del software (gia compilati, pronti all'uso)
    - La tua **chiave di licenza personale** (formato: `BBSC-...`)
+   - Le istruzioni di installazione
 4. **Attiva la chiave** sul tuo computer:
    ```bash
-   python -m bugbounty_scanner.activate BBSC-LA-TUA-CHIAVE
+   ./bbscanner_activate BBSC-LA-TUA-CHIAVE
    ```
-5. **Fatto!** Ora puoi usare lo scanner
+5. **Fatto!** Ora puoi usare lo scanner:
+   ```bash
+   ./bbscanner -t example.com          # Modalita LITE
+   ./bbscanner_pro -t example.com      # Modalita PRO
+   ```
 
 ### Protezione anti-pirateria
 
-Il software include un sistema di protezione con chiavi firmate digitalmente:
+Il software viene distribuito come **eseguibile compilato** (non come codice sorgente):
 
+- Il codice sorgente **non e incluso**: ricevi solo i file eseguibili
 - Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
 - Ogni chiave ha una **data di scadenza** (12 o 24 mesi in base al piano)
-- Le chiavi sono **firmate crittograficamente** (HMAC-SHA256): non possono essere generate, modificate o falsificate
+- Le chiavi sono **firmate crittograficamente**: non possono essere generate, modificate o falsificate
 - Chi ha una licenza **LITE** non puo usare la modalita **PRO**
-- **Senza chiave valida il software non funziona**
+- **Senza chiave valida il software non si avvia**
 
 ### Verifica stato licenza
 
 Per vedere se la tua licenza e attiva e quando scade:
 ```bash
-python -m bugbounty_scanner.activate
+./bbscanner_activate
 ```
 
 ### Rinnovo
