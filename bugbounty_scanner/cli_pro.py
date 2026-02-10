@@ -26,6 +26,7 @@ from bugbounty_scanner.modules.sensitive_files import SensitiveFilesModule
 from bugbounty_scanner.modules.js_scanner import JSScanner
 from bugbounty_scanner.modules.crawler import CrawlerModule
 from bugbounty_scanner.modules.wayback import WaybackModule
+from bugbounty_scanner.modules.subdomain_takeover import SubdomainTakeoverModule
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -48,8 +49,8 @@ BANNER = r"""
 
 # Pipeline aggiornata con i nuovi moduli
 FULL_PIPELINE = [
-    "subfinder", "httpx", "nmap", "crawler", "wayback", "ffuf",
-    "js_scanner", "nuclei", "nikto", "dalfox", "sqlmap",
+    "subfinder", "httpx", "subdomain_takeover", "nmap", "crawler", "wayback",
+    "ffuf", "js_scanner", "nuclei", "nikto", "dalfox", "sqlmap",
     "headers", "sensitive_files",
 ]
 
@@ -272,6 +273,7 @@ def main():
         CrawlerModule, http_session, max_pages=args.crawl_pages, max_depth=args.crawl_depth,
     ))
     orch.register("wayback", InternalToolAdapterWithSession(WaybackModule, http_session))
+    orch.register("subdomain_takeover", InternalToolAdapterWithSession(SubdomainTakeoverModule, http_session))
     orch.register("js_scanner", InternalToolAdapterWithSession(JSScanner, http_session))
     orch.register("headers", InternalToolAdapterWithSession(HeadersModule, http_session))
     orch.register("sensitive_files", InternalToolAdapterWithSession(SensitiveFilesModule, http_session))

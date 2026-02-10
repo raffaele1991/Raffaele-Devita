@@ -37,17 +37,18 @@ class Target:
 # Pipeline di default: l'ordine conta!
 # 1. Ricognizione → 2. Probing → 3. Scansione → 4. Exploit testing
 DEFAULT_PIPELINE = [
-    "subfinder",   # 1. Trova sottodomini
-    "httpx",       # 2. Verifica quali sono attivi + tech detection
-    "nmap",        # 3. Scansione porte e servizi
-    "ffuf",        # 4. Directory/file fuzzing
-    "nuclei",      # 5. Vulnerability scanning con template (il pezzo forte)
-    "nikto",       # 6. Web server scanning
-    "dalfox",      # 7. XSS avanzato
-    "sqlmap",      # 8. SQL injection avanzata
+    "subfinder",           # 1. Trova sottodomini
+    "httpx",               # 2. Verifica quali sono attivi + tech detection
+    "subdomain_takeover",  # 3. Cerca subdomain takeover (CNAME dangling)
+    "nmap",                # 4. Scansione porte e servizi
+    "ffuf",                # 5. Directory/file fuzzing
+    "nuclei",              # 6. Vulnerability scanning con template (il pezzo forte)
+    "nikto",               # 7. Web server scanning
+    "dalfox",              # 8. XSS avanzato
+    "sqlmap",              # 9. SQL injection avanzata
     # Moduli interni (dal vecchio scanner)
-    "headers",     # 9. Security headers
-    "sensitive_files",  # 10. File sensibili (backup del ffuf)
+    "headers",             # 10. Security headers
+    "sensitive_files",     # 11. File sensibili (backup del ffuf)
 ]
 
 
