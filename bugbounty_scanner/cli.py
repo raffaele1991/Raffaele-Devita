@@ -15,6 +15,10 @@ from bugbounty_scanner.modules.sqli import SQLiModule
 from bugbounty_scanner.modules.ssrf import SSRFModule
 from bugbounty_scanner.modules.open_redirect import OpenRedirectModule
 from bugbounty_scanner.modules.sensitive_files import SensitiveFilesModule
+from bugbounty_scanner.modules.crawler import CrawlerModule
+from bugbounty_scanner.modules.cmdi import CMDIModule
+from bugbounty_scanner.modules.rce import RCEModule
+from bugbounty_scanner.modules.privesc import PrivEscModule
 from bugbounty_scanner.reporter import Reporter
 
 # Disabilita warning SSL per i test
@@ -36,7 +40,10 @@ BANNER = r"""
      Bug Bounty Vulnerability Scanner Agent v1.0
 """
 
-ALL_MODULES = ["recon", "headers", "xss", "sqli", "ssrf", "open_redirect", "sensitive_files"]
+ALL_MODULES = [
+    "recon", "crawler", "headers", "xss", "sqli", "ssrf",
+    "open_redirect", "sensitive_files", "cmdi", "rce", "privesc",
+]
 
 
 def parse_args():
@@ -184,13 +191,20 @@ def main():
     )
 
     # Registra i moduli con la sessione condivisa
+    # NOTA: CrawlerModule deve essere registrato prima dei moduli di attacco
+    # perché popola scan_result.discovered_forms e scan_result.discovered_params
+    # che vengono usati da CMDi, RCE, PrivEsc, XSS, SQLi, ecc.
     scanner.register_module(ReconModule(threads=args.threads, http_session=http_session))
+    scanner.register_module(CrawlerModule(http_session=http_session, max_pages=100, max_depth=3))
     scanner.register_module(HeadersModule(http_session=http_session))
     scanner.register_module(XSSModule(http_session=http_session))
     scanner.register_module(SQLiModule(http_session=http_session))
     scanner.register_module(SSRFModule(http_session=http_session))
     scanner.register_module(OpenRedirectModule(http_session=http_session))
     scanner.register_module(SensitiveFilesModule(threads=args.threads, http_session=http_session))
+    scanner.register_module(CMDIModule(http_session=http_session))
+    scanner.register_module(RCEModule(http_session=http_session))
+    scanner.register_module(PrivEscModule(http_session=http_session))
 
     # Esegui la scansione
     logger.info(f"Target: {scanner.target}")
