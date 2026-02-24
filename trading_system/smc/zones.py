@@ -18,7 +18,8 @@ class OrderBlock:
     top: float
     bottom: float
     origin_close: float
-    active: bool = True   # False quando il prezzo ci ritorna e la invalida
+    active: bool = True          # False quando il prezzo ci ritorna e la invalida
+    invalidated_at: int = -1     # bar index a cui è stato invalidato (-1 = mai)
 
     @property
     def midpoint(self):
@@ -32,6 +33,7 @@ class FairValueGap:
     top: float
     bottom: float
     filled: bool = False
+    filled_at: int = -1  # bar index a cui è stato riempito (-1 = mai)
 
     @property
     def size(self):
@@ -93,16 +95,21 @@ def find_order_blocks(df: pd.DataFrame, symbol: str) -> List[OrderBlock]:
                     ))
                     break
 
-    # Invalida OB se il prezzo li ha attraversati completamente
+    # Invalida OB solo per i bar SUCCESSIVI alla sua formazione
+    # Registra anche il bar esatto in cui avviene l'invalidazione
     for i in range(len(df)):
         price = df["close"].iloc[i]
         for ob in blocks:
             if not ob.active:
                 continue
+            if i <= ob.index:          # non invalidare prima che l'OB si formi
+                continue
             if ob.direction == "bullish" and price < ob.bottom:
-                ob.active = False
+                ob.active         = False
+                ob.invalidated_at = i
             if ob.direction == "bearish" and price > ob.top:
-                ob.active = False
+                ob.active         = False
+                ob.invalidated_at = i
 
     return blocks
 
@@ -143,17 +150,21 @@ def find_fvg(df: pd.DataFrame, symbol: str) -> List[FairValueGap]:
                     bottom=nxt["high"],
                 ))
 
-    # Marca FVG come riempiti
+    # Marca FVG come riempiti solo per bar SUCCESSIVI alla formazione
     for i in range(len(df)):
         price_high = df["high"].iloc[i]
         price_low  = df["low"].iloc[i]
         for fvg in gaps:
             if fvg.filled:
                 continue
+            if i <= fvg.index:         # non riempire prima che il FVG si formi
+                continue
             if fvg.direction == "bullish" and price_low <= fvg.bottom:
-                fvg.filled = True
+                fvg.filled    = True
+                fvg.filled_at = i
             if fvg.direction == "bearish" and price_high >= fvg.top:
-                fvg.filled = True
+                fvg.filled    = True
+                fvg.filled_at = i
 
     return gaps
 

@@ -271,7 +271,7 @@ def run_backtest(
         # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
             try:
-                feat_df = build_features(ctx_struct)
+                feat_df = build_features(ctx_struct, symbol=symbol)
                 if len(feat_df) == 0:
                     _diag["ml_blocked"] += 1
                     i += 1

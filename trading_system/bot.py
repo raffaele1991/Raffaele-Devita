@@ -266,7 +266,7 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
 
     # Feature engineering per ML
     df_struct = detect_structure(df)
-    df_feat   = build_features(df_struct)
+    df_feat   = build_features(df_struct, symbol=symbol)
 
     if len(df_feat) < 10:
         _reason("info", f"{symbol}: feature insufficienti per ML")

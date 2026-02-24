@@ -113,8 +113,8 @@ def train_symbol(symbol: str):
     print("  Rilevamento struttura SMC...")
     df = detect_structure(df)
 
-    print("  Costruzione feature...")
-    df = build_features(df)
+    print("  Costruzione feature (incluse feature SMC specifiche)...")
+    df = build_features(df, symbol=symbol)
 
     print("  Costruzione etichette (lookahead 30 candele)...")
     labels = build_labels(df, lookahead=30)
@@ -122,10 +122,11 @@ def train_symbol(symbol: str):
 
     # Rimuovi righe senza etichetta o feature incomplete
     df = df.dropna(subset=FEATURE_COLUMNS + ["label"])
-    df = df[df["trend_num"] != 0]  # trada solo quando c'è un trend
+    df = df[df["trend_num"] != 0]    # trada solo quando c'è un trend
+    df = df[df["ob_age_norm"] > 0]   # solo bar con OB attivo = segnali reali SMC
 
     win_rate = df["label"].mean() * 100
-    print(f"  Campioni validi: {len(df):,}  |  Win rate storico: {win_rate:.1f}%")
+    print(f"  Campioni OB-segnale: {len(df):,}  |  Win rate storico: {win_rate:.1f}%")
 
     if len(df) < 500:
         print(f"[WARN] Troppo pochi campioni ({len(df)}). Servono almeno 500.")
