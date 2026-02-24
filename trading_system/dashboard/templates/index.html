@@ -268,6 +268,51 @@
     .badge-loss { background: var(--red-dim);   color: var(--red); }
     .badge-open { background: var(--blue-dim);  color: var(--blue); }
 
+    /* ── IMPOSTAZIONI ───────────────────────────────────────────────────── */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .settings-grid { grid-template-columns: 1fr; } }
+
+    .settings-section { margin-bottom: 18px; }
+    .settings-section-title {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.6px; margin-bottom: 10px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 10px;
+    }
+    .settings-label { font-size: 13px; color: var(--text); flex-shrink: 0; min-width: 160px; }
+    .settings-input {
+      flex: 1; padding: 7px 10px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 13px; max-width: 220px;
+    }
+    .settings-input:focus { outline: none; border-color: var(--accent); }
+    .settings-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    .settings-tag-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .settings-tag {
+      padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .settings-tag.active { background: var(--blue-dim); color: var(--blue); border-color: var(--blue); }
+
+    .settings-save-row {
+      display: flex; align-items: center; gap: 12px; margin-top: 4px; padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-save-settings {
+      padding: 10px 28px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 700; background: var(--accent); color: #0d1117;
+      transition: opacity 0.15s;
+    }
+    .btn-save-settings:hover    { opacity: 0.85; }
+    .btn-save-settings:disabled { opacity: 0.4; cursor: not-allowed; }
+    .settings-save-msg { font-size: 12px; }
+    .settings-save-ok  { color: var(--green); }
+    .settings-save-err { color: var(--red); }
+
     /* ── FOOTER ─────────────────────────────────────────────────────────── */
     .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px; padding: 10px 0; }
   </style>
@@ -334,10 +379,11 @@
 
   <!-- ── TAB NAV ──────────────────────────────────────────────────────────── -->
   <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('dashboard', this)">Dashboard</button>
-    <button class="tab-btn"        onclick="switchTab('dati',      this)">Dati &amp; Modello</button>
-    <button class="tab-btn"        onclick="switchTab('backtest',  this)">Backtest</button>
-    <button class="tab-btn"        onclick="switchTab('log',       this)">Log Live</button>
+    <button class="tab-btn active" onclick="switchTab('dashboard',    this)">Dashboard</button>
+    <button class="tab-btn"        onclick="switchTab('dati',         this)">Dati &amp; Modello</button>
+    <button class="tab-btn"        onclick="switchTab('backtest',     this)">Backtest</button>
+    <button class="tab-btn"        onclick="switchTab('log',          this)">Log Live</button>
+    <button class="tab-btn"        onclick="switchTab('impostazioni', this)">Impostazioni</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -562,6 +608,141 @@
       </div>
     </div>
   </div><!-- /tab-log -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: IMPOSTAZIONI                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-impostazioni" class="tab-pane">
+
+    <div class="settings-grid">
+
+      <!-- ── Colonna sinistra ── -->
+      <div>
+
+        <!-- MT5 -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Connessione MT5</div>
+          <div class="settings-row">
+            <span class="settings-label">Server</span>
+            <input id="cfg_mt5_server" class="settings-input" type="text" placeholder="es. FTMO-Demo" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Login (numero conto)</span>
+            <input id="cfg_mt5_account" class="settings-input" type="text" placeholder="123456" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Password</span>
+            <input id="cfg_mt5_password" class="settings-input" type="password" placeholder="••••••••" />
+          </div>
+        </div>
+
+        <!-- Simboli & Sessioni -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Strumenti &amp; Sessioni</div>
+          <div class="settings-row">
+            <span class="settings-label">Simboli attivi</span>
+            <div class="settings-tag-group">
+              <span id="tag_XAUUSD" class="settings-tag active" onclick="toggleTag('XAUUSD')">XAUUSD</span>
+              <span id="tag_EURUSD" class="settings-tag active" onclick="toggleTag('EURUSD')">EURUSD</span>
+              <span id="tag_GBPUSD" class="settings-tag"       onclick="toggleTag('GBPUSD')">GBPUSD</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Sessione London (08–11)</span>
+            <input id="cfg_session_london" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Sessione New York (14–17)</span>
+            <input id="cfg_session_ny" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Timeframe SMC</span>
+            <select id="cfg_timeframe" class="settings-input" style="max-width:100px;">
+              <option value="M5">M5</option>
+              <option value="M15">M15</option>
+              <option value="H1">H1</option>
+            </select>
+          </div>
+        </div>
+
+      </div><!-- /col-left -->
+
+      <!-- ── Colonna destra ── -->
+      <div>
+
+        <!-- Risk -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Risk Management</div>
+          <div class="settings-row">
+            <span class="settings-label">Rischio per trade (%)</span>
+            <input id="cfg_risk_per_trade_pct" class="settings-input" type="number" min="0.1" max="5" step="0.1" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Max trade al giorno</span>
+            <input id="cfg_max_trades_per_day" class="settings-input" type="number" min="1" max="20" step="1" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">DD giornaliero max (%)</span>
+            <input id="cfg_max_daily_dd_pct" class="settings-input" type="number" min="1" max="10" step="0.5" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">DD totale max (%)</span>
+            <input id="cfg_max_total_dd_pct" class="settings-input" type="number" min="1" max="20" step="0.5" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">R:R minimo</span>
+            <input id="cfg_min_rr" class="settings-input" type="number" min="1" max="5" step="0.5" style="max-width:90px;" />
+          </div>
+        </div>
+
+        <!-- ML -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Modello ML</div>
+          <div class="settings-row">
+            <span class="settings-label">Usa ML</span>
+            <input id="cfg_ml_enabled" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence minima</span>
+            <input id="cfg_ml_confidence_threshold" class="settings-input" type="number" min="0.5" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+        </div>
+
+        <!-- Telegram -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Notifiche Telegram</div>
+          <div class="settings-row">
+            <span class="settings-label">Bot Token</span>
+            <input id="cfg_telegram_token" class="settings-input" type="password" placeholder="••••••••••••••••••••••" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Chat ID</span>
+            <input id="cfg_telegram_chat_id" class="settings-input" type="text" placeholder="123456789" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica trade aperti/chiusi</span>
+            <input id="cfg_notify_trades" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica warning DD</span>
+            <input id="cfg_notify_warnings" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica ogni segnale</span>
+            <input id="cfg_notify_signals" class="settings-checkbox" type="checkbox" />
+          </div>
+        </div>
+
+      </div><!-- /col-right -->
+    </div><!-- /settings-grid -->
+
+    <!-- Salva -->
+    <div class="settings-save-row">
+      <button class="btn-save-settings" id="saveSettingsBtn" onclick="saveSettings()">Salva Impostazioni</button>
+      <span id="saveSettingsMsg" class="settings-save-msg"></span>
+    </div>
+
+  </div><!-- /tab-impostazioni -->
 
   <div class="footer">SMC+ML Trading Bot · Dashboard locale · Aggiornamento ogni 5s</div>
 </div><!-- /page -->
@@ -1118,6 +1299,116 @@ function btSet(id, val, cls) {
 function btSetCls(id, val, cls) { btSet(id, val, cls); }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   IMPOSTAZIONI
+══════════════════════════════════════════════════════════════════════════ */
+const ALL_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD'];
+let _activeSymbols = ['XAUUSD', 'EURUSD'];
+
+function toggleTag(sym) {
+  const tag = document.getElementById('tag_' + sym);
+  if (_activeSymbols.includes(sym)) {
+    if (_activeSymbols.length <= 1) return; // almeno 1 simbolo
+    _activeSymbols = _activeSymbols.filter(s => s !== sym);
+    tag.classList.remove('active');
+  } else {
+    _activeSymbols.push(sym);
+    tag.classList.add('active');
+  }
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+
+    // MT5
+    document.getElementById('cfg_mt5_server').value   = s.mt5_server   || '';
+    document.getElementById('cfg_mt5_account').value  = s.mt5_account  || '';
+    document.getElementById('cfg_mt5_password').value = s.mt5_password  || '';
+
+    // Simboli
+    _activeSymbols = s.symbols || ['XAUUSD', 'EURUSD'];
+    ALL_SYMBOLS.forEach(sym => {
+      const tag = document.getElementById('tag_' + sym);
+      if (tag) tag.classList.toggle('active', _activeSymbols.includes(sym));
+    });
+
+    // Sessioni
+    document.getElementById('cfg_session_london').checked = !!s.session_london;
+    document.getElementById('cfg_session_ny').checked     = !!s.session_ny;
+    document.getElementById('cfg_timeframe').value         = s.timeframe || 'M5';
+
+    // Risk
+    document.getElementById('cfg_risk_per_trade_pct').value       = s.risk_per_trade_pct ?? 0.5;
+    document.getElementById('cfg_max_trades_per_day').value        = s.max_trades_per_day ?? 3;
+    document.getElementById('cfg_max_daily_dd_pct').value          = s.max_daily_dd_pct ?? 3.0;
+    document.getElementById('cfg_max_total_dd_pct').value          = s.max_total_dd_pct ?? 7.0;
+    document.getElementById('cfg_min_rr').value                    = s.min_rr ?? 2.0;
+
+    // ML
+    document.getElementById('cfg_ml_enabled').checked                = !!s.ml_enabled;
+    document.getElementById('cfg_ml_confidence_threshold').value     = s.ml_confidence_threshold ?? 0.65;
+
+    // Telegram
+    document.getElementById('cfg_telegram_token').value    = s.telegram_token   || '';
+    document.getElementById('cfg_telegram_chat_id').value  = s.telegram_chat_id || '';
+    document.getElementById('cfg_notify_trades').checked   = !!s.notify_trades;
+    document.getElementById('cfg_notify_warnings').checked = !!s.notify_warnings;
+    document.getElementById('cfg_notify_signals').checked  = !!s.notify_signals;
+  } catch (e) {}
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('saveSettingsBtn');
+  const msg = document.getElementById('saveSettingsMsg');
+  btn.disabled = true;
+  msg.textContent = '';
+
+  const payload = {
+    mt5_server:                document.getElementById('cfg_mt5_server').value.trim(),
+    mt5_account:               document.getElementById('cfg_mt5_account').value.trim(),
+    mt5_password:              document.getElementById('cfg_mt5_password').value,
+    symbols:                   [..._activeSymbols],
+    session_london:            document.getElementById('cfg_session_london').checked,
+    session_ny:                document.getElementById('cfg_session_ny').checked,
+    timeframe:                 document.getElementById('cfg_timeframe').value,
+    risk_per_trade_pct:        parseFloat(document.getElementById('cfg_risk_per_trade_pct').value) || 0.5,
+    max_trades_per_day:        parseInt(document.getElementById('cfg_max_trades_per_day').value)   || 3,
+    max_daily_dd_pct:          parseFloat(document.getElementById('cfg_max_daily_dd_pct').value)  || 3.0,
+    max_total_dd_pct:          parseFloat(document.getElementById('cfg_max_total_dd_pct').value)  || 7.0,
+    min_rr:                    parseFloat(document.getElementById('cfg_min_rr').value)             || 2.0,
+    ml_enabled:                document.getElementById('cfg_ml_enabled').checked,
+    ml_confidence_threshold:   parseFloat(document.getElementById('cfg_ml_confidence_threshold').value) || 0.65,
+    telegram_token:            document.getElementById('cfg_telegram_token').value,
+    telegram_chat_id:          document.getElementById('cfg_telegram_chat_id').value.trim(),
+    notify_trades:             document.getElementById('cfg_notify_trades').checked,
+    notify_warnings:           document.getElementById('cfg_notify_warnings').checked,
+    notify_signals:            document.getElementById('cfg_notify_signals').checked,
+  };
+
+  try {
+    const res  = await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = 'Impostazioni salvate con successo';
+      msg.className   = 'settings-save-msg settings-save-ok';
+    } else {
+      msg.textContent = 'Errore: ' + (data.error || 'sconosciuto');
+      msg.className   = 'settings-save-msg settings-save-err';
+    }
+  } catch (e) {
+    msg.textContent = 'Errore di rete';
+    msg.className   = 'settings-save-msg settings-save-err';
+  }
+  btn.disabled = false;
+  setTimeout(() => { msg.textContent = ''; }, 4000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    UTILS
 ══════════════════════════════════════════════════════════════════════════ */
 function escHtml(str) {
@@ -1133,6 +1424,7 @@ fetchState();
 fetchLog();
 refreshDataFiles();
 refreshModelFiles();
+loadSettings();
 
 setInterval(fetchState, 5000);
 setInterval(fetchLog,   5000);

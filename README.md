@@ -1,4 +1,4 @@
-# SMC + ML Automated Trading System
+# SMC + ML Automated Trading Bot
 
 Sistema di trading automatico basato su **Smart Money Concepts (SMC)** + **Machine Learning**, progettato per operare su **XAUUSD** e **EURUSD** su timeframe M5.
 Ottimizzato per superare le challenge delle principali **prop firm** (FTMO, MyFundedFX, The5ers).
@@ -7,7 +7,7 @@ Ottimizzato per superare le challenge delle principali **prop firm** (FTMO, MyFu
 
 ---
 
-## Come iniziare – passo per passo
+## Guida rapida – passo per passo
 
 ### Passo 1 — Installa le dipendenze Python
 
@@ -17,54 +17,55 @@ pip install -r requirements.txt
 
 ---
 
-### Passo 2 — Configura il conto MT5
-
-Apri `trading_system/config.py` e compila le credenziali del tuo conto:
-
-```python
-MT5_ACCOUNT  = 123456        # numero conto (es. FTMO demo)
-MT5_PASSWORD = "tuapassword"
-MT5_SERVER   = "FTMO-Demo"   # nome server visibile nel login MT5
-```
-
----
-
-### Passo 3 — Avvia la dashboard
+### Passo 2 — Avvia la dashboard
 
 ```bash
 python run_dashboard.py
 ```
 
-La dashboard si apre nel browser su **http://localhost:5050**
+La dashboard si apre automaticamente nel browser su **http://localhost:5050**
 
-Da qui puoi fare tutto senza usare il terminale:
+Da qui puoi fare **tutto senza toccare il codice**.
 
 ---
 
-### Passo 4 — Scarica i dati storici (dalla dashboard)
+### Passo 3 — Configura le impostazioni (tab "Impostazioni")
 
-Nella sezione **"Dati Storici MT5"** della dashboard:
+Nella dashboard, clicca il tab **Impostazioni** e compila:
+
+| Sezione | Cosa inserire |
+|---|---|
+| **Connessione MT5** | Server (es. `FTMO-Demo`), numero conto, password |
+| **Strumenti & Sessioni** | Simboli attivi, sessioni London/NY, timeframe |
+| **Risk Management** | Rischio per trade, max trade/giorno, limiti drawdown |
+| **Modello ML** | Abilita/disabilita ML, soglia confidence minima |
+| **Notifiche Telegram** | Token bot, Chat ID, quali notifiche ricevere |
+
+Clicca **"Salva Impostazioni"** — il sistema aggiorna automaticamente `config.py` e `settings.json`.
+
+> **Alternativa manuale:** puoi modificare direttamente `trading_system/config.py`
+
+---
+
+### Passo 4 — Scarica i dati storici (tab "Dati & Modello")
 
 1. Assicurati che **MetaTrader 5 sia aperto** e connesso al conto
 2. Scegli quanti anni di storico vuoi (default: **4 anni**)
 3. Clicca **"Scarica da MT5"**
-4. Aspetta: il sistema scarica automaticamente i dati M5 per XAUUSD e EURUSD e li salva in `trading_system/data/`
+4. Aspetta il completamento — vedi la barra di avanzamento per ogni simbolo
 
-Vedrai una barra di avanzamento per ogni simbolo con il numero di candele scaricate e il periodo coperto.
+I file vengono salvati in `trading_system/data/XAUUSD_M5.csv` e `EURUSD_M5.csv`.
 
-> **Alternativa manuale:** se preferisci, puoi esportare i CSV da MT5 manualmente:
-> `Strumenti → History Center → XAUUSD → M5 → Export → XAUUSD_M5.csv`
-> e copiare i file in `trading_system/data/`
+> **Alternativa manuale:** esporta da MT5 → `Strumenti → History Center → XAUUSD → M5 → Export`
+> e copia i file in `trading_system/data/`
 
 ---
 
-### Passo 5 — Addestra il modello ML (dalla dashboard)
-
-Nella sezione **"Training Modello ML"** della dashboard:
+### Passo 5 — Addestra il modello ML (tab "Dati & Modello")
 
 1. Clicca **"Addestra Modello"**
-2. Segui l'output in tempo reale direttamente nella dashboard
-3. Al termine vedrai i modelli `.pkl` elencati con data e dimensione
+2. Segui l'output in tempo reale nella dashboard
+3. Al termine vedrai i file `.pkl` elencati con data e dimensione
 
 Oppure da terminale:
 
@@ -92,84 +93,60 @@ Output atteso:
 
 ---
 
-### Passo 6 — Avvia il bot
+### Passo 6 — Avvia il bot (tab "Dashboard")
 
-Apri un secondo terminale e lancia il bot:
+Clicca **"Avvia Bot"** nella dashboard oppure da terminale:
 
 ```bash
 python trading_system/bot.py
 ```
 
-Oppure usa il pulsante **"Avvia Bot"** direttamente dalla dashboard.
+Il bot inizia a operare nelle sessioni configurate (London / NY).
 
 ---
 
-## Dashboard
+### Passo 7 — Esegui un backtest (tab "Backtest")
 
-La dashboard è l'interfaccia centrale del sistema. Aprila con:
+1. Scegli il simbolo (XAUUSD / EURUSD)
+2. Imposta il periodo (data inizio / data fine)
+3. Clicca **"Esegui Backtest"**
+4. Visualizza i risultati: Win Rate, Profit Factor, Net R, Max Drawdown, Sharpe Ratio, storico trade completo
 
-```bash
-python run_dashboard.py
-```
+---
 
-Poi vai su **http://localhost:5050**
+## Dashboard — 5 Tab
 
-### Sezioni disponibili
+### Tab 1 · Dashboard
+- **Stato bot** — ONLINE / OFFLINE con timer sessione attiva
+- **KPI in tempo reale** — Saldo, DD giornaliero, DD totale, Win Rate, Trade oggi
+- **Segnali SMC live** — direzione, confluenze rilevate, confidence ML
+- **Posizioni aperte** — simbolo, direzione, entry, SL, TP, P&L corrente
+- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo (sessione chiusa, news, DD superato, ecc.)
+- **Storico trade di oggi** — con P&L e esito WIN/LOSS
 
-#### Stato e controllo bot
-- **Status pill** — RUNNING / STOPPED / OFFLINE con indicatore animato
-- **Sessione attiva** — LONDON (08–11) / NY (14–17) / CLOSED con countdown
-- **Pulsante Avvia / Stop** — controlla il bot in modo sicuro
+### Tab 2 · Dati & Modello
+- **Scarica dati da MT5** — download automatico 1–10 anni di storico M5
+- **Barre di avanzamento** per simbolo con stato e numero candele
+- **Lista CSV presenti** con righe, date e dimensione
+- **Addestra modello ML** — avvia il training con output live in tempo reale
+- **Lista modelli .pkl** con data di aggiornamento e dimensione
 
-#### KPI in tempo reale
-- **Saldo** corrente del conto
-- **Drawdown giornaliero** con barra colorata (verde → giallo → rosso, limite 3%)
-- **Drawdown totale** con barra (limite 7%)
-- **Win rate** globale (win / loss)
-- **Trade oggi** su massimo 3 al giorno
+### Tab 3 · Backtest
+- Seleziona simbolo, periodo e avvia il backtest
+- **Metriche**: Trade totali, Win Rate, Profit Factor, Net R, Max Drawdown, Balance finale, Net P&L, Sharpe Ratio, Avg Win R, Avg Loss R
+- **Storico completo** di tutti i trade con entry, SL, TP, exit, R e P&L
 
-#### Segnali e posizioni
-- **Segnali SMC live** per XAUUSD e EURUSD — direzione, confidence ML, motivo
-- **Posizioni aperte** con simbolo, direzione, lot size, entry price, P&L corrente
-
-#### Analisi
-- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo (sessione chiusa, news, DD superato, etc.)
-- **Storico trade** della giornata con esito WIN/LOSS e P&L
-
-#### Dati & Modello *(novità)*
-- **Scarica dati da MT5** — download automatico di 1–10 anni di storico M5 direttamente da MT5
-  - Barre di avanzamento per simbolo con stato e numero candele
-  - Lista CSV presenti con righe, date e dimensione
-- **Addestra modello ML** — avvia il training con output live
-  - Log di training in tempo reale nella dashboard
-  - Lista modelli `.pkl` con data di aggiornamento
-
-#### Log live
+### Tab 4 · Log Live
 - Log colorato in tempo reale con auto-scroll
-- Colori per tipo: errori (rosso), warning (giallo), trade (verde), SMC/ML (blu)
+- **Verde** = trade / successi, **Rosso** = errori, **Giallo** = warning, **Grigio** = info
 
----
-
-## Download automatico dati MT5
-
-Il sistema include un modulo dedicato per scaricare automaticamente lo storico da MT5:
-
-```python
-# Da codice
-from trading_system.data.downloader import start_download, get_status
-
-start_download(years=4)   # avvia in background
-status = get_status()     # controlla lo stato
-```
-
-```bash
-# Da terminale
-python trading_system/data/downloader.py 4   # scarica 4 anni
-```
-
-Il file viene salvato automaticamente in `trading_system/data/XAUUSD_M5.csv` e `EURUSD_M5.csv`, pronti per il training.
-
-**Requisito:** MetaTrader 5 deve essere aperto e connesso al conto configurato in `config.py`.
+### Tab 5 · Impostazioni
+- **Connessione MT5** — server, conto, password (salvati in `settings.json`)
+- **Strumenti & Sessioni** — simboli attivi, sessioni London/NY, timeframe
+- **Risk Management** — rischio per trade, max trade/giorno, limiti DD, R:R minimo
+- **Modello ML** — abilita/disabilita, soglia confidence
+- **Notifiche Telegram** — token bot, chat ID, tipologie di notifica
+- Il pulsante **"Salva Impostazioni"** aggiorna automaticamente anche `config.py`
 
 ---
 
@@ -185,7 +162,7 @@ Dati MT5 (OHLCV M5)
          │ segnale SMC
          ▼
 ┌─────────────────┐
-│   ML Classifier │  Gradient Boosting – 29 feature – soglia 78%
+│   ML Classifier │  Gradient Boosting – 29 feature – soglia configurabile
 └────────┬────────┘
          │ conferma
          ▼
@@ -196,12 +173,17 @@ Dati MT5 (OHLCV M5)
          │ via libera
          ▼
 ┌─────────────────┐
-│  Risk Manager   │  Sizing 0.5%/trade · max 3% DD giornaliero · max 7% totale
+│  Risk Manager   │  Sizing configurabile · DD giornaliero · DD totale
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
 │  MT5 Executor   │  Ordini a mercato con SL/TP · chiusura EOD automatica
+└─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Telegram Bot   │  Notifiche trade / warning / segnali
 └─────────────────┘
 ```
 
@@ -222,42 +204,32 @@ Dati MT5 (OHLCV M5)
 
 ---
 
-## Struttura del progetto
+## SMC – Logica del segnale
 
-```
-trading_system/
-├── config.py              ← tutti i parametri configurabili
-├── bot.py                 ← avvio del bot live
-├── data/
-│   ├── downloader.py      ← download automatico storico da MT5
-│   ├── XAUUSD_M5.csv      ← (generato dopo download)
-│   └── EURUSD_M5.csv      ← (generato dopo download)
-├── models/
-│   ├── model_xauusd.pkl   ← (generato dopo training)
-│   └── model_eurusd.pkl   ← (generato dopo training)
-├── dashboard/
-│   ├── app.py             ← server Flask con API download/training/bot
-│   └── templates/
-│       └── index.html     ← UI web dark theme
-├── smc/
-│   ├── structure.py       ← rilevamento BOS, CHoCH, trend
-│   ├── zones.py           ← Order Block, FVG, Liquidity levels
-│   └── detector.py        ← segnale SMC finale
-├── ml/
-│   ├── features.py        ← feature engineering (29 feature)
-│   ├── model.py           ← Gradient Boosting Classifier
-│   └── train.py           ← script di training
-├── filters/
-│   ├── session.py         ← kill zone (London / NY)
-│   └── news.py            ← blocco eventi macro (ForexFactory)
-├── risk/
-│   └── manager.py         ← sizing, drawdown, prop firm rules
-└── mt5/
-    ├── connector.py       ← connessione, fetch dati e download storico
-    └── executor.py        ← apertura / chiusura ordini
+Un trade viene aperto solo se si verificano **tutti** questi elementi:
 
-run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
-```
+1. **Trend confermato** — BOS o CHoCH rilevato sulla struttura M5
+2. **Order Block attivo** — prezzo ritorna su un OB non invalidato nella direzione del trend
+3. **Confluenza FVG** — Fair Value Gap presente nella stessa zona (bonus)
+4. **Sweep di liquidità** — equal highs/lows spazzati prima dell'inversione (bonus)
+5. **ML confidence ≥ soglia** — il modello conferma il setup (configurabile da dashboard)
+6. **Kill zone attiva** — siamo in London (08–11) o NY (14–17) CET
+7. **No news** — nessun evento macro nelle prossime 30 minuti
+
+---
+
+## Regole prop firm integrate
+
+| Regola | Default | Limite prop firm |
+|--------|---------|-----------------|
+| Max daily drawdown | 3% | 4–5% |
+| Max total drawdown | 7% | 8–10% |
+| Rischio per trade | 0.5% | — |
+| Max trade al giorno | 3 | — |
+| Chiusura EOD | 21:00 CET | no overnight |
+| R:R minimo | 1:2 | — |
+
+Tutti i valori sono modificabili dal tab **Impostazioni** senza toccare il codice.
 
 ---
 
@@ -275,33 +247,53 @@ run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
 | POST | `/api/train` | Avvia training modello ML |
 | GET | `/api/train/status` | Stato training + output live |
 | GET | `/api/models/files` | Elenco modelli `.pkl` |
+| POST | `/api/backtest` | Avvia backtest `{"symbol", "start_date", "end_date"}` |
+| GET | `/api/backtest/status` | Stato e risultati del backtest |
+| GET | `/api/settings` | Legge le impostazioni correnti |
+| POST | `/api/settings` | Salva impostazioni e aggiorna config.py |
 
 ---
 
-## Regole prop firm integrate
+## Struttura del progetto
 
-| Regola | Valore configurato | Limite prop firm |
-|--------|-------------------|-----------------|
-| Max daily drawdown | 3% | 4–5% |
-| Max total drawdown | 7% | 8–10% |
-| Rischio per trade | 0.5% | — |
-| Max trade al giorno | 3 | — |
-| Chiusura EOD | 21:00 CET | no overnight |
-| R:R minimo | 1:2 | — |
+```
+trading_system/
+├── config.py              ← parametri configurabili (aggiornato automaticamente dalla dashboard)
+├── settings.json          ← impostazioni salvate dalla dashboard (generato automaticamente)
+├── bot.py                 ← avvio del bot live
+├── data/
+│   ├── downloader.py      ← download automatico storico da MT5
+│   ├── XAUUSD_M5.csv      ← (generato dopo download)
+│   └── EURUSD_M5.csv      ← (generato dopo download)
+├── models/
+│   ├── model_xauusd.pkl   ← (generato dopo training)
+│   └── model_eurusd.pkl   ← (generato dopo training)
+├── dashboard/
+│   ├── app.py             ← server Flask con tutte le API
+│   └── templates/
+│       └── index.html     ← UI web dark theme (5 tab)
+├── smc/
+│   ├── structure.py       ← rilevamento BOS, CHoCH, trend
+│   ├── zones.py           ← Order Block, FVG, Liquidity levels
+│   └── detector.py        ← segnale SMC finale
+├── ml/
+│   ├── features.py        ← feature engineering (29 feature)
+│   ├── model.py           ← Gradient Boosting Classifier
+│   └── train.py           ← script di training
+├── filters/
+│   ├── session.py         ← kill zone (London / NY)
+│   └── news.py            ← blocco eventi macro (ForexFactory)
+├── risk/
+│   └── manager.py         ← sizing, drawdown, prop firm rules
+├── backtest/
+│   └── engine.py          ← motore di backtest su dati storici
+└── mt5/
+    ├── connector.py       ← connessione, fetch dati e download storico
+    └── executor.py        ← apertura / chiusura ordini
 
----
-
-## SMC – Logica del segnale
-
-Un trade viene aperto solo se si verificano **tutti** questi elementi:
-
-1. **Trend confermato** — BOS o CHoCH rilevato sulla struttura M5
-2. **Order Block attivo** — prezzo ritorna su un OB non invalidato nella direzione del trend
-3. **Confluenza FVG** — Fair Value Gap presente nella stessa zona (bonus)
-4. **Sweep di liquidità** — equal highs/lows spazzati prima dell'inversione (bonus)
-5. **ML confidence ≥ 78%** — il modello conferma il setup
-6. **Kill zone attiva** — siamo in London (08–11) o NY (14–17) CET
-7. **No news** — nessun evento macro nelle prossime 30 minuti
+run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
+requirements.txt           ← dipendenze Python
+```
 
 ---
 
@@ -311,6 +303,7 @@ Un trade viene aperto solo se si verificano **tutti** questi elementi:
 |---------|------|------|
 | XAUUSD | Oro / USD | 1 pip = $0.01 |
 | EURUSD | Forex | 1 pip = $0.0001 |
+| GBPUSD | Forex | abilitabile dalle impostazioni |
 
 ---
 

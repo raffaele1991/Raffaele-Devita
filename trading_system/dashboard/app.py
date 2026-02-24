@@ -21,6 +21,8 @@ API:
     GET  /api/models/files    → elenco modelli .pkl
     POST /api/backtest        → avvia backtest {"symbol", "start_date", "end_date"}
     GET  /api/backtest/status → stato e risultati del backtest
+    GET  /api/settings        → legge le impostazioni correnti (JSON)
+    POST /api/settings        → salva le impostazioni e riscrive config.py
 """
 
 import os
@@ -40,6 +42,8 @@ CONTROL_FILE = ROOT / "trading_system" / "control.json"
 LOG_FILE     = ROOT / "trading_system" / "trading.log"
 DATA_DIR     = ROOT / "trading_system" / "data"
 MODELS_DIR   = ROOT / "trading_system" / "models"
+CONFIG_FILE  = ROOT / "trading_system" / "config.py"
+SETTINGS_FILE = ROOT / "trading_system" / "settings.json"
 
 sys.path.insert(0, str(ROOT))
 
@@ -254,6 +258,107 @@ def api_models_files():
             "modified": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
         })
     return jsonify({"models": models})
+
+
+# ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+_SETTINGS_DEFAULTS = {
+    "mt5_account":               "",
+    "mt5_password":              "",
+    "mt5_server":                "",
+    "symbols":                   ["XAUUSD", "EURUSD"],
+    "session_london":            True,
+    "session_ny":                True,
+    "timeframe":                 "M5",
+    "risk_per_trade_pct":        0.5,
+    "max_trades_per_day":        3,
+    "max_daily_dd_pct":          3.0,
+    "max_total_dd_pct":          7.0,
+    "min_rr":                    2.0,
+    "ml_confidence_threshold":   0.65,
+    "ml_enabled":                True,
+    "telegram_token":            "",
+    "telegram_chat_id":          "",
+    "notify_trades":             True,
+    "notify_warnings":           True,
+    "notify_signals":            False,
+}
+
+
+def _load_settings() -> dict:
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            merged = dict(_SETTINGS_DEFAULTS)
+            merged.update(saved)
+            return merged
+        except (json.JSONDecodeError, OSError):
+            pass
+    return dict(_SETTINGS_DEFAULTS)
+
+
+def _patch_config(data: dict) -> None:
+    """Riscrive le variabili chiave in config.py."""
+    if not CONFIG_FILE.exists():
+        return
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    replacements = {
+        "MT5_ACCOUNT":             repr(data.get("mt5_account", "")),
+        "MT5_PASSWORD":            repr(data.get("mt5_password", "")),
+        "MT5_SERVER":              repr(data.get("mt5_server", "")),
+        "TELEGRAM_BOT_TOKEN":      repr(data.get("telegram_token", "")),
+        "TELEGRAM_CHAT_ID":        repr(data.get("telegram_chat_id", "")),
+        "RISK_PER_TRADE_PCT":      str(round(float(data.get("risk_per_trade_pct", 0.5)) / 100, 4)),
+        "PROP_MAX_TRADES_PER_DAY": str(int(data.get("max_trades_per_day", 3))),
+        "PROP_MAX_DAILY_LOSS_PCT": str(round(float(data.get("max_daily_dd_pct", 3.0)) / 100, 4)),
+        "PROP_MAX_TOTAL_LOSS_PCT": str(round(float(data.get("max_total_dd_pct", 7.0)) / 100, 4)),
+        "MIN_RISK_REWARD":         str(float(data.get("min_rr", 2.0))),
+        "ML_CONFIDENCE_THRESHOLD": str(float(data.get("ml_confidence_threshold", 0.65))),
+    }
+
+    new_lines = []
+    for line in lines:
+        written = False
+        for key, val in replacements.items():
+            if line.startswith(key + " ") or line.startswith(key + "="):
+                comment = ""
+                if "#" in line:
+                    comment = "  " + line[line.index("#"):]
+                new_lines.append(f"{key} = {val}{comment if comment else ''}\n")
+                written = True
+                break
+        if not written:
+            new_lines.append(line)
+
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+
+def _save_settings(data: dict) -> None:
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    _patch_config(data)
+
+
+@app.route("/api/settings", methods=["GET"])
+def api_settings_get():
+    return jsonify(_load_settings())
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_settings_post():
+    data = request.get_json(silent=True) or {}
+    current = _load_settings()
+    current.update(data)
+    try:
+        _save_settings(current)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ─── BACKTEST ──────────────────────────────────────────────────────────────────
