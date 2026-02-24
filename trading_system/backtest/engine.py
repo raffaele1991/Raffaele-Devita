@@ -274,6 +274,7 @@ def run_backtest(
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
+                _log(f"  [ML] conf={conf:.3f} soglia={config.ML_CONFIDENCE_THRESHOLD} dir={signal.direction}")
                 if conf < config.ML_CONFIDENCE_THRESHOLD:
                     _diag["ml_blocked"] += 1
                     i += 1
