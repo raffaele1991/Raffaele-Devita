@@ -31,6 +31,7 @@ import json
 import glob
 import subprocess
 import threading
+import signal as _signal
 from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 
@@ -44,8 +45,50 @@ DATA_DIR     = ROOT / "trading_system" / "data"
 MODELS_DIR   = ROOT / "trading_system" / "models"
 CONFIG_FILE  = ROOT / "trading_system" / "config.py"
 SETTINGS_FILE = ROOT / "trading_system" / "settings.json"
+BOT_SCRIPT    = ROOT / "trading_system" / "bot.py"
 
 sys.path.insert(0, str(ROOT))
+
+# ─── BOT SUBPROCESS ───────────────────────────────────────────────────────────
+
+_bot_proc: "subprocess.Popen | None" = None
+_bot_lock = threading.Lock()
+
+
+def _bot_running() -> bool:
+    with _bot_lock:
+        return _bot_proc is not None and _bot_proc.poll() is None
+
+
+def _start_bot_proc() -> "tuple[bool, str]":
+    global _bot_proc
+    with _bot_lock:
+        if _bot_proc is not None and _bot_proc.poll() is None:
+            return False, "Bot già in esecuzione"
+        try:
+            _bot_proc = subprocess.Popen(
+                [sys.executable, str(BOT_SCRIPT)],
+                cwd=str(ROOT),
+            )
+            return True, ""
+        except Exception as e:
+            return False, str(e)
+
+
+def _stop_bot_proc() -> "tuple[bool, str]":
+    global _bot_proc
+    with _bot_lock:
+        if _bot_proc is None or _bot_proc.poll() is not None:
+            return False, "Bot non in esecuzione"
+        try:
+            _bot_proc.terminate()
+            try:
+                _bot_proc.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                _bot_proc.kill()
+            return True, ""
+        except Exception as e:
+            return False, str(e)
 
 # Import downloader (lazy, per non bloccare avvio se MT5 non disponibile)
 try:
@@ -143,17 +186,21 @@ def index():
 
 @app.route("/api/state")
 def api_state():
+    proc_running = _bot_running()
     if STATE_FILE.exists():
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 state = json.load(f)
-            # normalizza: aggiunge 'running' basato su bot_status se non presente
-            if "running" not in state:
-                state["running"] = state.get("bot_status", "offline") in ("online", "running", "active")
+            # usa stato processo reale come fonte di verità
+            state["running"] = proc_running
+            if not proc_running:
+                state["bot_status"] = "offline"
             return jsonify(state)
         except (json.JSONDecodeError, OSError):
             pass
-    return jsonify(_default_state())
+    base = _default_state()
+    base["running"] = proc_running
+    return jsonify(base)
 
 
 @app.route("/api/log")
@@ -179,12 +226,20 @@ def api_control():
     if action not in ("start", "stop"):
         return jsonify({"ok": False, "error": "action deve essere 'start' o 'stop'"}), 400
 
-    try:
-        with open(CONTROL_FILE, "w", encoding="utf-8") as f:
-            json.dump({"action": action}, f)
-        return jsonify({"ok": True, "action": action})
-    except OSError as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    if action == "start":
+        ok, err = _start_bot_proc()
+        if not ok:
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": True, "action": "start"})
+    else:
+        # Scrivi control.json per shutdown pulito, poi termina il processo
+        try:
+            with open(CONTROL_FILE, "w", encoding="utf-8") as f:
+                json.dump({"action": "stop"}, f)
+        except OSError:
+            pass
+        ok, err = _stop_bot_proc()
+        return jsonify({"ok": True, "action": "stop"})
 
 
 # ─── DATA DOWNLOAD ─────────────────────────────────────────────────────────────

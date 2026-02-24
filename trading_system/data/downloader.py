@@ -80,17 +80,16 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    date_to   = datetime.utcnow()          # MT5 vuole datetime naive in UTC
-    date_from = date_to - timedelta(days=365 * years)
-
     # Seleziona il simbolo
     if not mt5.symbol_select(symbol, True):
         _set_symbol(symbol, state="error", msg=f"Simbolo '{symbol}' non disponibile su MT5")
         return
 
-    _set_symbol(symbol, msg=f"Download {symbol} da {date_from.strftime('%Y-%m-%d')} a {date_to.strftime('%Y-%m-%d')}...")
+    # Numero barre M5 per gli anni richiesti (288 barre/giorno × 365 × years)
+    count = years * 365 * 288
+    _set_symbol(symbol, msg=f"Download {symbol} – ultime {count:,} barre M5 (~{years} anni)...")
 
-    rates = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M5, date_from, date_to)
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, count)
 
     if rates is None or len(rates) == 0:
         err = mt5.last_error()
