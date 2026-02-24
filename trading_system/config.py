@@ -1,103 +1,95 @@
 """
 Trading System Configuration
 =============================
-Parametri configurabili per il sistema di trading automatico.
+Sistema ibrido SMC + ML per XAUUSD e EURUSD su M5.
+Ottimizzato per prop firm (FTMO, MyFundedFX, The5ers).
 """
 
-# ─── DATA SOURCES ────────────────────────────────────────────────────────────
+# ─── SIMBOLI ──────────────────────────────────────────────────────────────────
 
-# Default timeframe per i candlestick
-DEFAULT_INTERVAL = "1h"          # 1m, 5m, 15m, 30m, 1h, 4h, 1d
-DEFAULT_PERIOD = "60d"           # quanti dati storici scaricare
+SYMBOLS = ["XAUUSD", "EURUSD"]
+TIMEFRAME = "M5"
 
-# ─── INDICATORI TECNICI ───────────────────────────────────────────────────────
+# ─── CARTELLE ─────────────────────────────────────────────────────────────────
 
-RSI_PERIOD = 14
-RSI_OVERSOLD = 30               # segnale BUY sotto questa soglia
-RSI_OVERBOUGHT = 70             # segnale SELL sopra questa soglia
+DATA_DIR   = "trading_system/data"     # metti qui i CSV esportati da MT5
+MODELS_DIR = "trading_system/models"  # qui vengono salvati i modelli addestrati
 
-MACD_FAST = 12
-MACD_SLOW = 26
-MACD_SIGNAL = 9
+# ─── SESSIONI (Kill Zone) ──────────────────────────────────────────────────────
+# Orari in CET (Central European Time, UTC+1 / UTC+2 in estate)
+# Il bot opera SOLO in queste finestre
 
-BB_PERIOD = 20
-BB_STD = 2.0
+SESSION_LONDON_START = "08:00"
+SESSION_LONDON_END   = "11:00"
 
-EMA_SHORT = 9
-EMA_LONG = 21
-EMA_TREND = 50                  # EMA di tendenza principale
+SESSION_NY_START     = "14:00"
+SESSION_NY_END       = "17:00"
 
-ADX_PERIOD = 14
-ADX_THRESHOLD = 25              # trend forte sopra questa soglia
+# ─── FILTRO NEWS ──────────────────────────────────────────────────────────────
 
-STOCH_K = 14
-STOCH_D = 3
-STOCH_SMOOTH = 3
-STOCH_OVERSOLD = 20
-STOCH_OVERBOUGHT = 80
+NEWS_BUFFER_MINUTES = 30   # stop trading X minuti prima/dopo news ad alto impatto
 
-VOLUME_MA_PERIOD = 20           # media mobile volume
-VOLUME_MULTIPLIER = 1.5         # volume deve essere X volte la media
+# ─── SMC – SMART MONEY CONCEPTS ───────────────────────────────────────────────
 
-# ─── SIGNAL GENERATOR ─────────────────────────────────────────────────────────
+# Structure
+SMC_SWING_LOOKBACK    = 10   # candele per identificare swing high/low
+SMC_BOS_CONFIRMATION  = 2    # candele di chiusura oltre il livello per confermare BOS
 
-# Pesi degli indicatori per il calcolo del punteggio di confidenza
-INDICATOR_WEIGHTS = {
-    "rsi": 0.20,
-    "macd": 0.20,
-    "ema_cross": 0.20,
-    "bollinger": 0.15,
-    "stochastic": 0.10,
-    "adx": 0.10,
-    "volume": 0.05,
-}
+# Order Block
+OB_LOOKBACK           = 20   # quante candele cercare per l'OB
+OB_MIN_CANDLE_BODY_PCT = 0.4  # corpo della candela OB deve essere almeno 40% del range
 
-# Soglia minima di confidenza per generare un segnale (0.0 - 1.0)
-# 0.75 = almeno il 75% degli indicatori devono concordare
-MIN_CONFIDENCE_THRESHOLD = 0.75
+# Fair Value Gap
+FVG_MIN_SIZE_PIPS     = {"XAUUSD": 1.0, "EURUSD": 0.0005}  # dimensione minima FVG
 
-# ─── RISK MANAGEMENT ──────────────────────────────────────────────────────────
+# Liquidity
+LIQ_LOOKBACK          = 50   # candele per trovare livelli di liquidità (equal highs/lows)
+LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equal"
 
-# Stop-loss e take-profit di default (percentuale dal prezzo di entrata)
-DEFAULT_STOP_LOSS_PCT = 0.02     # 2%
-DEFAULT_TAKE_PROFIT_PCT = 0.04   # 4%  (risk/reward 1:2)
+# ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
-# ATR-based stop loss (usa volatilità reale del mercato)
-USE_ATR_STOP = True
-ATR_PERIOD = 14
-ATR_MULTIPLIER = 2.0             # stop = ATR * moltiplicatore
+ML_CONFIDENCE_THRESHOLD = 0.78   # il modello deve essere almeno 78% sicuro
+ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
+ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
+ML_RANDOM_SEED          = 42
 
-# Dimensione posizione (percentuale del capitale)
-POSITION_SIZE_PCT = 0.10         # rischia max 10% del capitale per trade
-MAX_RISK_PER_TRADE = 0.02        # rischia max 2% del capitale per stop
+# Parametri modello (GradientBoosting)
+ML_N_ESTIMATORS     = 300
+ML_MAX_DEPTH        = 5
+ML_LEARNING_RATE    = 0.05
+ML_SUBSAMPLE        = 0.8
 
-# Numero massimo di posizioni aperte contemporaneamente
-MAX_OPEN_POSITIONS = 3
+# ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
-# ─── BACKTESTING ──────────────────────────────────────────────────────────────
+# Regole prop firm standard (compatibile FTMO / MyFundedFX / The5ers)
+PROP_MAX_DAILY_LOSS_PCT  = 0.03   # bot si ferma al 3% (prop limit è 4-5%)
+PROP_MAX_TOTAL_LOSS_PCT  = 0.07   # bot si ferma al 7% (prop limit è 8-10%)
+PROP_MAX_TRADES_PER_DAY  = 3      # massimo 3 trade al giorno
+PROP_CLOSE_EOD_HOUR      = 21     # chiude tutto alle 21:00 CET (no overnight)
 
-BACKTEST_INITIAL_CAPITAL = 10_000.0   # capitale iniziale simulato (€/$)
-BACKTEST_COMMISSION = 0.001           # 0.1% commissione per trade (Binance/IBKR)
-BACKTEST_SLIPPAGE = 0.0005            # 0.05% slippage simulato
+# Sizing
+RISK_PER_TRADE_PCT       = 0.005  # rischia 0.5% del capitale per trade
+MIN_RISK_REWARD          = 2.0    # minimo R:R 1:2 per entrare
 
-# ─── PAPER TRADING ────────────────────────────────────────────────────────────
+# Stop Loss via ATR
+ATR_PERIOD               = 14
+ATR_SL_MULTIPLIER        = 1.5    # SL = ATR * 1.5
 
-PAPER_INITIAL_CAPITAL = 10_000.0
+# Consecutive losses protection
+MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
 
-# ─── LIVE TRADING (Binance) ───────────────────────────────────────────────────
-# Mettere le chiavi API qui o in variabili di ambiente:
-# BINANCE_API_KEY e BINANCE_SECRET_KEY
+# ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
-BINANCE_API_KEY = ""             # oppure os.environ.get("BINANCE_API_KEY")
-BINANCE_SECRET_KEY = ""          # oppure os.environ.get("BINANCE_SECRET_KEY")
-BINANCE_TESTNET = True           # True = testnet (sicuro), False = mainnet (reale)
+MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo
+MT5_PASSWORD = ""       # password conto
+MT5_SERVER   = ""       # server FTMO (es. "FTMO-Demo")
 
-# ─── NOTIFICHE ────────────────────────────────────────────────────────────────
+# ─── NOTIFICHE TELEGRAM ───────────────────────────────────────────────────────
 
 TELEGRAM_BOT_TOKEN = ""
-TELEGRAM_CHAT_ID = ""
+TELEGRAM_CHAT_ID   = ""
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
 
-LOG_LEVEL = "INFO"               # DEBUG, INFO, WARNING, ERROR
-LOG_FILE = "trading.log"
+LOG_LEVEL = "INFO"
+LOG_FILE  = "trading_system/trading.log"
