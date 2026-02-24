@@ -332,7 +332,7 @@ def _patch_config(data: dict) -> None:
         lines = f.readlines()
 
     replacements = {
-        "MT5_ACCOUNT":             repr(data.get("mt5_account", "")),
+        "MT5_ACCOUNT":             str(int(data["mt5_account"])) if str(data.get("mt5_account", "")).strip().isdigit() else "0",
         "MT5_PASSWORD":            repr(data.get("mt5_password", "")),
         "MT5_SERVER":              repr(data.get("mt5_server", "")),
         "TELEGRAM_BOT_TOKEN":      repr(data.get("telegram_token", "")),

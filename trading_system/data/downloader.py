@@ -141,9 +141,14 @@ def _run_download(years: int):
         _set("error", "MetaTrader5 non installato. Esegui: pip install MetaTrader5  (richiede Windows + MT5)")
         return
 
-    # Inizializza MT5
+    # Inizializza MT5 (login deve essere int)
+    try:
+        mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
+    except (ValueError, TypeError):
+        mt5_login = None
+
     ok = mt5.initialize(
-        login=config.MT5_ACCOUNT if config.MT5_ACCOUNT else None,
+        login=mt5_login,
         password=config.MT5_PASSWORD if config.MT5_PASSWORD else None,
         server=config.MT5_SERVER if config.MT5_SERVER else None,
     )
