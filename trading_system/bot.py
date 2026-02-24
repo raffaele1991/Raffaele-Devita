@@ -97,6 +97,12 @@ def initialize():
 
 # Stato per la dashboard (aggiornato ad ogni ciclo)
 _symbol_signals: dict = {}
+_block_reasons:  list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
+
+
+def _reason(level: str, msg: str):
+    """Aggiunge un motivo alla lista corrente di block reasons."""
+    _block_reasons.append({"level": level, "msg": msg})
 
 
 def write_state(risk_manager, session_f, bot_status: str = "running"):
@@ -133,6 +139,7 @@ def write_state(risk_manager, session_f, bot_status: str = "running"):
             "total_wins":         status["total_wins"],
             "total_losses":       status["total_losses"],
             "symbols":            _symbol_signals,
+            "block_reasons":      list(_block_reasons),
             "open_trades":        [trade_to_dict(t) for t in risk_manager.open_trades],
             "closed_trades":      [trade_to_dict(t) for t in risk_manager.closed_trades],
         }
@@ -164,7 +171,8 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
     """
     Eseguito ogni 60 secondi (inizio candela M5 = ogni 300s, ma controlliamo ogni 60s).
     """
-    global _symbol_signals
+    global _symbol_signals, _block_reasons
+    _block_reasons = []   # reset ad ogni ciclo
     now = datetime.now()
 
     # Aggiorna saldo
@@ -177,6 +185,7 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
         if open_pos:
             logger.info("[BOT] EOD: chiusura tutte le posizioni aperte")
             executor.close_all()
+        _reason("warn", f"EOD – nessun nuovo trade oltre le {config.PROP_CLOSE_EOD_HOUR}:00")
         return
 
     # ── 2. SESSIONE ───────────────────────────────────────────────────────────
@@ -185,17 +194,23 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
         mins = session_f.minutes_to_next_session()
         if now.minute % 30 == 0:  # log ogni 30 min
             logger.info(f"[BOT] Sessione {session} | Prossima kill zone tra {mins} min")
+        h, m = divmod(mins, 60)
+        timer_str = f"{h}h {m}m" if h else f"{m}m"
+        _reason("info", f"Sessione chiusa – prossima kill zone tra {timer_str}")
         return
 
     # ── 3. NEWS FILTER ────────────────────────────────────────────────────────
     if not news_f.is_safe():
-        logger.info(f"[BOT] Blocco news attivo | {news_f.next_blocked_event()}")
+        event = news_f.next_blocked_event()
+        logger.info(f"[BOT] Blocco news attivo | {event}")
+        _reason("warn", f"News ad alto impatto: {event}")
         return
 
     # ── 4. RISK CHECK ─────────────────────────────────────────────────────────
     can, reason = risk_manager.can_trade()
     if not can:
         logger.warning(f"[BOT] Trading bloccato: {reason}")
+        _reason("warn", reason)
         return
 
     # ── 5. ANALISI SIMBOLI ────────────────────────────────────────────────────
@@ -208,6 +223,7 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
             )
         except Exception as e:
             logger.error(f"[BOT] Errore analisi {symbol}: {e}", exc_info=True)
+            _reason("warn", f"{symbol}: errore analisi – {e}")
 
     # Status log ogni 5 minuti
     if now.minute % 5 == 0:
@@ -231,12 +247,14 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     # Recupera ultime 200 candele M5
     df = connector.get_ohlcv(symbol, timeframe=config.TIMEFRAME, n_candles=200)
     if df is None or len(df) < 100:
+        _reason("info", f"{symbol}: dati insufficienti")
         return
 
     # SMC analysis
     signal = smc_detector.analyze(df)
     if signal is None:
         _symbol_signals[symbol] = {"last_signal": None, "confidence": 0.0, "reason": None}
+        _reason("info", f"{symbol}: nessun setup SMC valido (struttura non confermata)")
         return
 
     logger.info(
@@ -248,6 +266,7 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     df_feat   = build_features(df_struct)
 
     if len(df_feat) < 10:
+        _reason("info", f"{symbol}: feature insufficienti per ML")
         return
 
     # ML confidence check
@@ -263,12 +282,18 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
 
     if confidence < config.ML_CONFIDENCE_THRESHOLD:
         logger.info(f"[ML]  {symbol} segnale scartato (confidence insufficiente)")
+        _reason(
+            "info",
+            f"{symbol}: segnale {signal.direction.upper()} scartato – "
+            f"ML {confidence:.2f} < soglia {config.ML_CONFIDENCE_THRESHOLD}",
+        )
         return
 
     # Verifica che non ci siano già posizioni aperte per questo simbolo
     open_pos = connector.get_open_positions(symbol=symbol)
     if open_pos:
         logger.info(f"[BOT] {symbol} posizione già aperta, skip")
+        _reason("info", f"{symbol}: posizione già aperta, attendo chiusura")
         return
 
     # Calcola lot size
@@ -280,6 +305,7 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
 
     if lot <= 0:
         logger.warning(f"[Risk] Lot size non valido per {symbol}")
+        _reason("warn", f"{symbol}: lot size non calcolabile (SL troppo vicino all'entry?)")
         return
 
     logger.info(
@@ -299,6 +325,9 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
 
     if trade:
         risk_manager.register_trade_open(trade)
+        _reason("ok", f"{symbol}: trade {signal.direction.upper()} aperto – lot={lot} | {signal.reason} | ML={confidence:.2f}")
+    else:
+        _reason("warn", f"{symbol}: ordine rifiutato da MT5")
 
 
 # ─── ENTRY POINT ──────────────────────────────────────────────────────────────

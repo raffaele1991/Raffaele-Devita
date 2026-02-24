@@ -200,6 +200,21 @@
     .pnl-zero { color: var(--muted); }
     .no-pos { color: var(--muted); font-size: 13px; padding: 16px 0; }
 
+    /* ── PERCHÉ NON TRADE ──────────────────────────────────────────────── */
+    .why-section { margin-bottom: 16px; }
+    .reason-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .reason-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-size: 13px;
+      border: 1px solid transparent;
+    }
+    .reason-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+    .reason-ok   { background: var(--green-dim);  border-color: #2ea04326; color: #b3f0c0; }
+    .reason-warn { background: var(--yellow-dim); border-color: #d2992226; color: #f0d080; }
+    .reason-info { background: var(--surface2);   border-color: var(--border); color: var(--muted); }
+
     /* ── CLOSED TRADES ─────────────────────────────────────────────────── */
     .closed-section { margin-bottom: 16px; }
 
@@ -337,6 +352,17 @@
 
   </div>
 
+  <!-- ── PERCHÉ NON TRADE ────────────────────────────────────────────────── -->
+  <div class="card why-section">
+    <div class="card-title">Perché non apro posizioni?</div>
+    <ul class="reason-list" id="reasonList">
+      <li class="reason-item reason-info">
+        <span class="reason-icon">⏳</span>
+        <span>In attesa del primo ciclo del bot...</span>
+      </li>
+    </ul>
+  </div>
+
   <!-- ── CLOSED TRADES ────────────────────────────────────────────────────── -->
   <div class="card closed-section">
     <div class="card-title">Storico Trade (oggi)</div>
@@ -468,6 +494,9 @@ function updateUI(s) {
 
   // Closed trades
   renderClosed(s.closed_trades || []);
+
+  // Block reasons
+  renderReasons(s.block_reasons || []);
 
   // Control button
   const isRunning = s.bot_status === 'running';
@@ -656,6 +685,27 @@ function renderLog(lines) {
   if (autoScroll && atBottom) {
     body.scrollTop = body.scrollHeight;
   }
+}
+
+/* ── REASONS RENDER ─────────────────────────────────────────────────────── */
+function renderReasons(reasons) {
+  const list = document.getElementById('reasonList');
+
+  if (!reasons || reasons.length === 0) {
+    list.innerHTML = '<li class="reason-item reason-info"><span class="reason-icon">⏳</span><span>In attesa del prossimo ciclo...</span></li>';
+    return;
+  }
+
+  const iconMap = { ok: '✅', warn: '🚫', info: '💤' };
+
+  list.innerHTML = reasons.map(r => {
+    const cls  = 'reason-' + (r.level || 'info');
+    const icon = iconMap[r.level] || '•';
+    return `<li class="reason-item ${cls}">
+      <span class="reason-icon">${icon}</span>
+      <span>${escHtml(r.msg)}</span>
+    </li>`;
+  }).join('');
 }
 
 /* ── HELPERS ────────────────────────────────────────────────────────────── */
