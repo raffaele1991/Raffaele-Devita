@@ -292,12 +292,13 @@ def api_data_files():
         info = {"name": csv_path.name, "rows": 0, "from": "", "to": "", "size_mb": 0}
         try:
             info["size_mb"] = round(csv_path.stat().st_size / 1024 / 1024, 2)
-            df = __import__("pandas").read_csv(csv_path, index_col=0, parse_dates=True, nrows=1)
+            pd = __import__("pandas")
+            df = pd.read_csv(csv_path, index_col=0, parse_dates=True, date_format="mixed", nrows=1)
             # conta righe velocemente
             with open(csv_path, "rb") as f:
                 info["rows"] = sum(1 for _ in f) - 1   # sottrai header
-            df_dates = __import__("pandas").read_csv(csv_path, index_col=0, parse_dates=True,
-                                                      usecols=[0])
+            df_dates = pd.read_csv(csv_path, index_col=0, parse_dates=True,
+                                   date_format="mixed", usecols=[0])
             info["from"] = str(df_dates.index[0].date())
             info["to"]   = str(df_dates.index[-1].date())
         except Exception:
