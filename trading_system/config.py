@@ -48,7 +48,8 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equ
 
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
-ML_CONFIDENCE_THRESHOLD = 0.55   # soglia confidence ML (abbassata da 0.78 — riaddestra il modello per alzarla)
+USE_ML_FILTER           = False  # True = filtra segnali con ML | False = solo SMC (usa False se AUC-ROC < 0.55)
+ML_CONFIDENCE_THRESHOLD = 0.35   # soglia confidence ML calibrata (modello ricalibrato con IsotonicRegression)
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42

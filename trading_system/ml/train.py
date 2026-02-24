@@ -43,11 +43,17 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
         df = pd.read_csv(filepath, sep="\t")
         df.columns = [c.strip("<>").lower() for c in df.columns]
 
+        # Se la lettura tab ha prodotto una sola colonna, il file è CSV a virgola
+        if len(df.columns) < 4:
+            raise ValueError("Formato tab non valido — provo CSV a virgola")
+
         # Colonne attese: date, time, open, high, low, close, tickvol, vol, spread
         if "date" in df.columns and "time" in df.columns:
             df["datetime"] = pd.to_datetime(df["date"] + " " + df["time"])
         elif "datetime" in df.columns:
             df["datetime"] = pd.to_datetime(df["datetime"])
+        else:
+            raise ValueError("Colonna datetime non trovata nel formato tab")
 
         df = df.rename(columns={
             "tickvol": "volume",
@@ -55,7 +61,7 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
         })
 
     except Exception:
-        # Prova formato CSV standard
+        # Prova formato CSV standard (virgola)
         df = pd.read_csv(filepath)
         df.columns = [c.strip().lower() for c in df.columns]
         if "date" in df.columns and "time" in df.columns:
@@ -110,8 +116,8 @@ def train_symbol(symbol: str):
     print("  Costruzione feature...")
     df = build_features(df)
 
-    print("  Costruzione etichette (lookahead 10 candele)...")
-    labels = build_labels(df, lookahead=10)
+    print("  Costruzione etichette (lookahead 30 candele)...")
+    labels = build_labels(df, lookahead=30)
     df["label"] = labels
 
     # Rimuovi righe senza etichetta o feature incomplete

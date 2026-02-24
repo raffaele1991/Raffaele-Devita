@@ -72,22 +72,25 @@ def initialize():
     session_f    = SessionFilter()
     news_f       = NewsFilter()
 
-    # Carica modelli ML
+    # Carica modelli ML (solo se USE_ML_FILTER abilitato)
     ml_models = {}
-    for symbol in config.SYMBOLS:
-        ml = SMCMLModel(symbol)
-        try:
-            ml.load()
-            ml_models[symbol] = ml
-        except FileNotFoundError as e:
-            logger.error(str(e))
-            sys.exit(1)
+    if config.USE_ML_FILTER:
+        for symbol in config.SYMBOLS:
+            ml = SMCMLModel(symbol)
+            try:
+                ml.load()
+                ml_models[symbol] = ml
+            except FileNotFoundError as e:
+                logger.error(str(e))
+                sys.exit(1)
+        logger.info(f"Modelli ML caricati: {list(ml_models.keys())}")
+    else:
+        logger.info("Filtro ML disabilitato (USE_ML_FILTER=False) — solo SMC")
 
     # SMC Detectors
     smc_detectors = {s: SMCDetector(s) for s in config.SYMBOLS}
 
     logger.info(f"Simboli: {config.SYMBOLS}")
-    logger.info(f"Modelli ML caricati: {list(ml_models.keys())}")
     logger.info("Sistema pronto. In attesa kill zone...\n")
 
     return connector, executor, risk_manager, session_f, news_f, ml_models, smc_detectors
