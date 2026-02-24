@@ -13,12 +13,17 @@ Prerequisiti:
 import os
 import sys
 import time
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 
 # Aggiungi root al path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+STATE_FILE   = os.path.join(ROOT, "trading_system", "state.json")
+CONTROL_FILE = os.path.join(ROOT, "trading_system", "control.json")
 
 from trading_system import config
 from trading_system.mt5.connector import MT5Connector
@@ -88,12 +93,78 @@ def initialize():
     return connector, executor, risk_manager, session_f, news_f, ml_models, smc_detectors
 
 
+# ─── STATE FILE ───────────────────────────────────────────────────────────────
+
+# Stato per la dashboard (aggiornato ad ogni ciclo)
+_symbol_signals: dict = {}
+
+
+def write_state(risk_manager, session_f, bot_status: str = "running"):
+    """Scrive lo stato corrente su state.json per la dashboard."""
+    try:
+        status = risk_manager.status()
+
+        def trade_to_dict(t):
+            return {
+                "symbol":      t.symbol,
+                "direction":   t.direction,
+                "lot_size":    t.lot_size,
+                "entry_price": t.entry,
+                "sl":          t.sl,
+                "tp":          t.tp,
+                "pnl":         t.pnl,
+                "open_time":   t.open_time.isoformat() if t.open_time else None,
+                "close_time":  t.close_time.isoformat() if t.close_time else None,
+                "result":      t.result,
+            }
+
+        state = {
+            "bot_status":         bot_status,
+            "timestamp":          datetime.now().isoformat(),
+            "session":            session_f.active_session(),
+            "minutes_to_next":    session_f.minutes_to_next_session(),
+            "balance":            status["balance"],
+            "daily_dd_pct":       status["daily_drawdown_pct"],
+            "total_dd_pct":       status["total_drawdown_pct"],
+            "trades_today":       status["trades_today"],
+            "win_rate":           status["win_rate"],
+            "consecutive_losses": status["consecutive_losses"],
+            "open_positions":     status["open_positions"],
+            "total_wins":         status["total_wins"],
+            "total_losses":       status["total_losses"],
+            "symbols":            _symbol_signals,
+            "open_trades":        [trade_to_dict(t) for t in risk_manager.open_trades],
+            "closed_trades":      [trade_to_dict(t) for t in risk_manager.closed_trades],
+        }
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        logger.debug(f"[Dashboard] Errore scrittura state.json: {e}")
+
+
+def check_control() -> str:
+    """
+    Legge control.json scritto dalla dashboard.
+    Ritorna 'stop', 'start' o '' se nessun comando.
+    """
+    if not os.path.exists(CONTROL_FILE):
+        return ""
+    try:
+        with open(CONTROL_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        os.remove(CONTROL_FILE)
+        return data.get("action", "")
+    except Exception:
+        return ""
+
+
 # ─── CICLO PRINCIPALE ─────────────────────────────────────────────────────────
 
 def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, smc_detectors):
     """
     Eseguito ogni 60 secondi (inizio candela M5 = ogni 300s, ma controlliamo ogni 60s).
     """
+    global _symbol_signals
     now = datetime.now()
 
     # Aggiorna saldo
@@ -149,9 +220,13 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
             f"Sessione={session}"
         )
 
+    # Aggiorna dashboard
+    write_state(risk_manager, session_f)
+
 
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
     """Analizza un singolo simbolo e apre un trade se il setup è valido."""
+    global _symbol_signals
 
     # Recupera ultime 200 candele M5
     df = connector.get_ohlcv(symbol, timeframe=config.TIMEFRAME, n_candles=200)
@@ -161,6 +236,7 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     # SMC analysis
     signal = smc_detector.analyze(df)
     if signal is None:
+        _symbol_signals[symbol] = {"last_signal": None, "confidence": 0.0, "reason": None}
         return
 
     logger.info(
@@ -177,6 +253,13 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     # ML confidence check
     confidence = ml_model.predict_proba(df_feat)
     logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {config.ML_CONFIDENCE_THRESHOLD})")
+
+    # Aggiorna segnale per la dashboard
+    _symbol_signals[symbol] = {
+        "last_signal": signal.direction.upper(),
+        "confidence":  round(float(confidence), 3),
+        "reason":      signal.reason,
+    }
 
     if confidence < config.ML_CONFIDENCE_THRESHOLD:
         logger.info(f"[ML]  {symbol} segnale scartato (confidence insufficiente)")
@@ -226,6 +309,13 @@ if __name__ == "__main__":
 
     try:
         while True:
+            # Controlla comandi dalla dashboard
+            cmd = check_control()
+            if cmd == "stop":
+                logger.info("[BOT] Comando STOP ricevuto dalla dashboard.")
+                write_state(components[2], components[3], bot_status="stopped")
+                break
+
             run_cycle(*components)
             time.sleep(60)   # check ogni 60 secondi
 

@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMC+ML Trading Bot</title>
+  <style>
+    /* ── RESET & BASE ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2130;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --green:     #3fb950;
+      --green-dim: #1a4429;
+      --red:       #f85149;
+      --red-dim:   #4a1b1b;
+      --yellow:    #d29922;
+      --yellow-dim:#3d2e00;
+      --blue:      #388bfd;
+      --blue-dim:  #0d2358;
+      --accent:    #58a6ff;
+      --radius:    10px;
+      --shadow:    0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── LAYOUT ────────────────────────────────────────────────────────── */
+    .page { max-width: 1280px; margin: 0 auto; padding: 16px; }
+
+    /* ── HEADER ────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--accent); }
+
+    .status-pill {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .status-pill .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .status-running { background: var(--green-dim); color: var(--green); }
+    .status-running .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.5s infinite; }
+    .status-stopped { background: var(--red-dim); color: var(--red); }
+    .status-stopped .dot { background: var(--red); }
+    .status-offline { background: #1c2130; color: var(--muted); }
+    .status-offline .dot { background: var(--muted); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .session-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px; color: var(--muted);
+    }
+    .session-badge .session-name {
+      font-weight: 700; font-size: 13px;
+    }
+    .session-london  { color: #58a6ff; }
+    .session-ny      { color: #bc8cff; }
+    .session-closed  { color: var(--muted); }
+    .session-eod     { color: var(--yellow); }
+
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      padding: 7px 18px;
+      border-radius: 7px;
+      border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-stop  { background: var(--red);   color: #fff; }
+    .btn-start { background: var(--green); color: #0d1117; }
+    .btn:hover { opacity: 0.85; }
+
+    .last-update { font-size: 11px; color: var(--muted); }
+
+    /* ── KPI CARDS ─────────────────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .card-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .card-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* DD gauge bar */
+    .gauge-wrap { margin-top: 8px; }
+    .gauge-track {
+      height: 5px; border-radius: 3px;
+      background: var(--surface2);
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .gauge-fill {
+      height: 100%; border-radius: 3px;
+      transition: width 0.6s ease, background 0.4s;
+    }
+    .gauge-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+    /* ── MIDDLE GRID ───────────────────────────────────────────────────── */
+    .middle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 750px) { .middle-grid { grid-template-columns: 1fr; } }
+
+    .card-title {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.6px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Signal row */
+    .signal-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .signal-row:last-child { border-bottom: none; }
+    .signal-symbol { font-weight: 700; font-size: 15px; }
+    .signal-dir {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 5px;
+      font-size: 12px; font-weight: 700;
+    }
+    .dir-buy  { background: var(--blue-dim);  color: var(--blue); }
+    .dir-sell { background: var(--red-dim);   color: var(--red); }
+    .dir-none { background: var(--surface2);  color: var(--muted); }
+    .signal-conf {
+      display: flex; align-items: center; gap: 6px; font-size: 12px;
+    }
+    .conf-bar { width: 60px; height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .conf-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .conf-ok   { background: var(--green); }
+    .conf-low  { background: var(--red); }
+    .signal-reason { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* Positions table */
+    .pos-table { width: 100%; border-collapse: collapse; }
+    .pos-table th {
+      font-size: 11px; color: var(--muted); font-weight: 600;
+      text-align: left; padding: 0 0 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .pos-table td { padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+    .pos-table tr:last-child td { border-bottom: none; }
+    .pnl-pos { color: var(--green); font-weight: 700; }
+    .pnl-neg { color: var(--red);   font-weight: 700; }
+    .pnl-zero { color: var(--muted); }
+    .no-pos { color: var(--muted); font-size: 13px; padding: 16px 0; }
+
+    /* ── CLOSED TRADES ─────────────────────────────────────────────────── */
+    .closed-section { margin-bottom: 16px; }
+
+    /* ── LOG ───────────────────────────────────────────────────────────── */
+    .log-card { padding: 0; overflow: hidden; }
+    .log-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .log-header .card-title { margin: 0; padding: 0; border: none; }
+    .log-autoscroll-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted); cursor: pointer;
+    }
+    .log-autoscroll-toggle input { cursor: pointer; accent-color: var(--accent); }
+
+    .log-body {
+      background: #0a0e14;
+      height: 220px; overflow-y: auto;
+      padding: 12px 14px;
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 12px; line-height: 1.7;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-error   { color: var(--red); }
+    .log-warning { color: var(--yellow); }
+    .log-info    { color: #58a6ff; }
+    .log-status  { color: #bc8cff; }
+    .log-trade   { color: var(--green); }
+    .log-default { color: #8b949e; }
+
+    /* ── FOOTER ─────────────────────────────────────────────────────────── */
+    .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px; padding: 10px 0; }
+
+    /* ── UTILS ──────────────────────────────────────────────────────────── */
+    .text-green  { color: var(--green); }
+    .text-red    { color: var(--red); }
+    .text-yellow { color: var(--yellow); }
+    .text-blue   { color: var(--blue); }
+    .text-muted  { color: var(--muted); }
+    .text-accent { color: var(--accent); }
+
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 4px; font-size: 11px; font-weight: 600;
+    }
+    .badge-win  { background: var(--green-dim); color: var(--green); }
+    .badge-loss { background: var(--red-dim);   color: var(--red); }
+    .badge-open { background: var(--blue-dim);  color: var(--blue); }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── HEADER ──────────────────────────────────────────────────────────── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">SMC<span>+ML</span> Bot</div>
+
+      <div id="statusPill" class="status-pill status-offline">
+        <div class="dot"></div>
+        <span id="statusText">OFFLINE</span>
+      </div>
+
+      <div class="session-badge">
+        <span class="session-name" id="sessionName">—</span>
+        <span id="sessionTimer" style="font-size:11px;"></span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="last-update" id="lastUpdate">Mai aggiornato</span>
+      <button id="controlBtn" class="btn btn-start" onclick="sendControl()">Avvia Bot</button>
+    </div>
+  </div>
+
+  <!-- ── KPI ─────────────────────────────────────────────────────────────── -->
+  <div class="kpi-grid">
+
+    <div class="card">
+      <div class="card-label">Saldo</div>
+      <div class="card-value text-accent" id="balance">—</div>
+      <div class="card-sub" id="balanceSub">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">DD Giornaliero</div>
+      <div class="card-value" id="dailyDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">DD Totale</div>
+      <div class="card-value" id="totalDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Win Rate</div>
+      <div class="card-value" id="winRate">—</div>
+      <div class="card-sub" id="winRateSub">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Trade Oggi</div>
+      <div class="card-value" id="tradesToday">—</div>
+      <div class="card-sub" id="tradesSub">—</div>
+    </div>
+
+  </div>
+
+  <!-- ── SIGNALS + POSITIONS ─────────────────────────────────────────────── -->
+  <div class="middle-grid">
+
+    <div class="card">
+      <div class="card-title">Segnali Live</div>
+      <div id="signalsContainer">
+        <div class="text-muted">In attesa del bot...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Posizioni Aperte</div>
+      <div id="positionsContainer">
+        <div class="no-pos">Nessuna posizione aperta</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── CLOSED TRADES ────────────────────────────────────────────────────── -->
+  <div class="card closed-section">
+    <div class="card-title">Storico Trade (oggi)</div>
+    <div id="closedContainer">
+      <div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>
+    </div>
+  </div>
+
+  <!-- ── LOG ──────────────────────────────────────────────────────────────── -->
+  <div class="card log-card">
+    <div class="log-header">
+      <div class="card-title">Log Live</div>
+      <label class="log-autoscroll-toggle">
+        <input type="checkbox" id="autoScrollCheck" checked />
+        Auto-scroll
+      </label>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-default">In attesa del log...</div>
+    </div>
+  </div>
+
+  <div class="footer">SMC+ML Trading Bot · Dashboard locale · Aggiornamento ogni 5s</div>
+</div>
+
+<script>
+/* ── STATE ──────────────────────────────────────────────────────────────── */
+let currentAction = 'start';   // toggles between start/stop
+
+/* ── FETCH STATE ────────────────────────────────────────────────────────── */
+async function fetchState() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) return;
+    const s = await res.json();
+    updateUI(s);
+  } catch (e) { /* ignore fetch errors */ }
+}
+
+/* ── FETCH LOG ──────────────────────────────────────────────────────────── */
+async function fetchLog() {
+  try {
+    const res = await fetch('/api/log?lines=80');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderLog(data.lines);
+  } catch (e) { /* ignore */ }
+}
+
+/* ── CONTROL ────────────────────────────────────────────────────────────── */
+async function sendControl() {
+  const action = currentAction;
+  try {
+    const res = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      console.log('Control sent:', action);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+/* ── UI UPDATE ──────────────────────────────────────────────────────────── */
+function updateUI(s) {
+  // Last update
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent =
+    'Aggiornato ' + now.toLocaleTimeString('it-IT');
+
+  // Status pill
+  updateStatus(s.bot_status);
+
+  // Session
+  updateSession(s.session, s.minutes_to_next);
+
+  // Balance
+  const bal = s.balance || 0;
+  document.getElementById('balance').textContent =
+    bal > 0 ? '$' + bal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+  document.getElementById('balanceSub').textContent =
+    s.open_positions > 0 ? s.open_positions + ' posizione/i aperta/e' : 'Nessuna posizione aperta';
+
+  // Daily DD
+  const ddd = s.daily_dd_pct || 0;
+  const ddEl = document.getElementById('dailyDD');
+  ddEl.textContent = ddd.toFixed(2) + '%';
+  ddEl.className = 'card-value ' + ddColor(ddd, 3);
+  const dailyPct = Math.min((ddd / 3) * 100, 100);
+  const dg = document.getElementById('dailyGauge');
+  dg.style.width = dailyPct + '%';
+  dg.style.background = gaugeColor(dailyPct);
+
+  // Total DD
+  const tdd = s.total_dd_pct || 0;
+  const tdEl = document.getElementById('totalDD');
+  tdEl.textContent = tdd.toFixed(2) + '%';
+  tdEl.className = 'card-value ' + ddColor(tdd, 7);
+  const totalPct = Math.min((tdd / 7) * 100, 100);
+  const tg = document.getElementById('totalGauge');
+  tg.style.width = totalPct + '%';
+  tg.style.background = gaugeColor(totalPct);
+
+  // Win rate
+  const wr = s.win_rate || 0;
+  const wrEl = document.getElementById('winRate');
+  wrEl.textContent = wr.toFixed(1) + '%';
+  wrEl.className = 'card-value ' + (wr >= 50 ? 'text-green' : 'text-red');
+  document.getElementById('winRateSub').textContent =
+    (s.total_wins || 0) + ' win · ' + (s.total_losses || 0) + ' loss';
+
+  // Trades today
+  const tt = s.trades_today || 0;
+  const ttEl = document.getElementById('tradesToday');
+  ttEl.textContent = tt + ' / 3';
+  ttEl.className = 'card-value ' + (tt >= 3 ? 'text-yellow' : 'text-text');
+  document.getElementById('tradesSub').textContent =
+    s.consecutive_losses > 0
+      ? s.consecutive_losses + ' loss consecutiv' + (s.consecutive_losses === 1 ? 'a' : 'e')
+      : 'Nessuna perdita consecutiva';
+
+  // Signals
+  renderSignals(s.symbols || {});
+
+  // Open positions
+  renderPositions(s.open_trades || []);
+
+  // Closed trades
+  renderClosed(s.closed_trades || []);
+
+  // Control button
+  const isRunning = s.bot_status === 'running';
+  currentAction = isRunning ? 'stop' : 'start';
+  const btn = document.getElementById('controlBtn');
+  if (isRunning) {
+    btn.textContent = 'Stop Bot';
+    btn.className = 'btn btn-stop';
+  } else {
+    btn.textContent = 'Avvia Bot';
+    btn.className = 'btn btn-start';
+  }
+}
+
+function updateStatus(status) {
+  const pill = document.getElementById('statusPill');
+  const text = document.getElementById('statusText');
+  pill.className = 'status-pill';
+  if (status === 'running') {
+    pill.classList.add('status-running');
+    text.textContent = 'RUNNING';
+  } else if (status === 'stopped') {
+    pill.classList.add('status-stopped');
+    text.textContent = 'STOPPED';
+  } else {
+    pill.classList.add('status-offline');
+    text.textContent = 'OFFLINE';
+  }
+}
+
+function updateSession(session, minsToNext) {
+  const nameEl = document.getElementById('sessionName');
+  const timerEl = document.getElementById('sessionTimer');
+
+  const colorMap = {
+    'LONDON': 'session-london',
+    'NY':     'session-ny',
+    'CLOSED': 'session-closed',
+    'EOD':    'session-eod',
+  };
+  nameEl.className = 'session-name ' + (colorMap[session] || 'session-closed');
+  nameEl.textContent = session || '—';
+
+  if (session === 'LONDON') {
+    timerEl.textContent = '08:00–11:00 CET';
+  } else if (session === 'NY') {
+    timerEl.textContent = '14:00–17:00 CET';
+  } else if (minsToNext != null) {
+    const h = Math.floor(minsToNext / 60);
+    const m = minsToNext % 60;
+    timerEl.textContent = h > 0 ? `prossima tra ${h}h ${m}m` : `prossima tra ${m}m`;
+  } else {
+    timerEl.textContent = '';
+  }
+}
+
+/* ── SIGNALS RENDER ─────────────────────────────────────────────────────── */
+function renderSignals(symbols) {
+  const container = document.getElementById('signalsContainer');
+  const keys = Object.keys(symbols);
+
+  if (keys.length === 0) {
+    container.innerHTML = '<div class="text-muted">In attesa del bot...</div>';
+    return;
+  }
+
+  container.innerHTML = keys.map(sym => {
+    const d = symbols[sym];
+    const dir = d.last_signal;
+    const conf = d.confidence || 0;
+    const threshold = 0.78;
+    const confOk = conf >= threshold;
+
+    const dirHtml = dir
+      ? `<span class="signal-dir dir-${dir.toLowerCase()}">${dir === 'BUY' ? '▲' : '▼'} ${dir}</span>`
+      : `<span class="signal-dir dir-none">— NESSUNO</span>`;
+
+    const confColor = confOk ? 'conf-ok' : 'conf-low';
+    const confText  = dir ? conf.toFixed(2) + (confOk ? ' ✓' : ' ✗') : '—';
+    const confPct   = dir ? Math.min(conf * 100, 100) + '%' : '0%';
+
+    return `
+      <div class="signal-row">
+        <div>
+          <div class="signal-symbol">${sym}</div>
+          ${d.reason ? `<div class="signal-reason">${d.reason}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          ${dirHtml}
+          <div class="signal-conf" style="justify-content:flex-end; margin-top:6px;">
+            <div class="conf-bar"><div class="conf-fill ${confColor}" style="width:${confPct}"></div></div>
+            <span class="${confOk ? 'text-green' : 'text-red'}" style="font-size:11px;">${confText}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ── POSITIONS RENDER ───────────────────────────────────────────────────── */
+function renderPositions(trades) {
+  const container = document.getElementById('positionsContainer');
+
+  if (!trades || trades.length === 0) {
+    container.innerHTML = '<div class="no-pos">Nessuna posizione aperta</div>';
+    return;
+  }
+
+  const rows = trades.map(t => {
+    const pnl = t.pnl != null ? t.pnl : null;
+    const pnlHtml = pnl != null
+      ? `<span class="${pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero'}">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`
+      : '<span class="text-muted">—</span>';
+    const dirColor = t.direction === 'buy' ? 'text-blue' : 'text-red';
+    return `
+      <tr>
+        <td><strong>${t.symbol}</strong></td>
+        <td class="${dirColor}">${t.direction.toUpperCase()}</td>
+        <td>lot ${t.lot_size}</td>
+        <td class="text-muted" style="font-size:11px;">${t.entry_price ? t.entry_price.toFixed(t.symbol.includes('XAU') ? 2 : 5) : '—'}</td>
+        <td>${pnlHtml}</td>
+      </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="pos-table">
+      <thead><tr>
+        <th>Simbolo</th><th>Dir.</th><th>Size</th><th>Entry</th><th>P&amp;L</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── CLOSED TRADES RENDER ───────────────────────────────────────────────── */
+function renderClosed(trades) {
+  const container = document.getElementById('closedContainer');
+
+  if (!trades || trades.length === 0) {
+    container.innerHTML = '<div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>';
+    return;
+  }
+
+  const rows = [...trades].reverse().slice(0, 10).map(t => {
+    const pnl = t.pnl != null ? t.pnl : 0;
+    const result = t.result || (pnl > 0 ? 'win' : 'loss');
+    const badgeCls = result === 'win' ? 'badge-win' : 'badge-loss';
+    const pnlCls   = pnl > 0 ? 'pnl-pos' : 'pnl-neg';
+    const closeTime = t.close_time ? new Date(t.close_time).toLocaleTimeString('it-IT') : '—';
+    const dirColor = t.direction === 'buy' ? 'text-blue' : 'text-red';
+
+    return `
+      <tr>
+        <td><strong>${t.symbol}</strong></td>
+        <td class="${dirColor}">${t.direction.toUpperCase()}</td>
+        <td>lot ${t.lot_size}</td>
+        <td class="${pnlCls}">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+        <td><span class="badge ${badgeCls}">${result.toUpperCase()}</span></td>
+        <td class="text-muted" style="font-size:11px;">${closeTime}</td>
+      </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="pos-table">
+      <thead><tr>
+        <th>Simbolo</th><th>Dir.</th><th>Size</th><th>P&amp;L</th><th>Esito</th><th>Ora</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── LOG RENDER ─────────────────────────────────────────────────────────── */
+function renderLog(lines) {
+  const body = document.getElementById('logBody');
+  const autoScroll = document.getElementById('autoScrollCheck').checked;
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 30;
+
+  body.innerHTML = lines.map(line => {
+    let cls = 'log-default';
+    if (line.includes('[ERROR]') || line.includes('Errore') || line.includes('CRITICO')) cls = 'log-error';
+    else if (line.includes('[WARNING]') || line.includes('LOSS') || line.includes('bloccato')) cls = 'log-warning';
+    else if (line.includes('[STATUS]') || line.includes('Balance=')) cls = 'log-status';
+    else if (line.includes('APERTURA') || line.includes('WIN') || line.includes('trade aperto')) cls = 'log-trade';
+    else if (line.includes('[SMC]') || line.includes('[ML]') || line.includes('[BOT]')) cls = 'log-info';
+    return `<div class="log-line ${cls}">${escHtml(line)}</div>`;
+  }).join('');
+
+  if (autoScroll && atBottom) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+/* ── HELPERS ────────────────────────────────────────────────────────────── */
+function ddColor(val, limit) {
+  const pct = val / limit;
+  if (pct < 0.5) return 'text-green';
+  if (pct < 0.8) return 'text-yellow';
+  return 'text-red';
+}
+
+function gaugeColor(pct) {
+  if (pct < 50)  return '#3fb950';
+  if (pct < 80)  return '#d29922';
+  return '#f85149';
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── POLLING ────────────────────────────────────────────────────────────── */
+fetchState();
+fetchLog();
+setInterval(fetchState, 5000);
+setInterval(fetchLog,   5000);
+</script>
+</body>
+</html>
