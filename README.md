@@ -3,6 +3,112 @@
 Sistema di trading automatico basato su **Smart Money Concepts (SMC)** + **Machine Learning**, progettato per operare su **XAUUSD** e **EURUSD** su timeframe M5.
 Ottimizzato per superare le challenge delle principali **prop firm** (FTMO, MyFundedFX, The5ers).
 
+> **Requisiti di sistema:** Windows con MetaTrader 5 installato · Python 3.10+
+
+---
+
+## Come iniziare – passo per passo
+
+### Passo 1 — Installa le dipendenze Python
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### Passo 2 — Configura il conto MT5
+
+Apri `trading_system/config.py` e compila le credenziali del tuo conto:
+
+```python
+MT5_ACCOUNT  = 123456        # numero conto (es. FTMO demo)
+MT5_PASSWORD = "tuapassword"
+MT5_SERVER   = "FTMO-Demo"   # nome server visibile nel login MT5
+```
+
+---
+
+### Passo 3 — Esporta i dati storici da MT5
+
+Servono almeno **6 mesi** di dati M5 per ciascun simbolo (meglio 1–2 anni).
+
+1. Apri **MetaTrader 5**
+2. Menu `Strumenti` → `History Center`
+3. Seleziona `XAUUSD` → `M5` → `Export` → salva come **`XAUUSD_M5.csv`**
+4. Ripeti per `EURUSD` → salva come **`EURUSD_M5.csv`**
+5. Copia entrambi i file nella cartella `trading_system/data/`
+
+```
+trading_system/
+└── data/
+    ├── XAUUSD_M5.csv   ← metti qui
+    └── EURUSD_M5.csv   ← metti qui
+```
+
+---
+
+### Passo 4 — Addestra i modelli ML
+
+```bash
+python trading_system/ml/train.py
+```
+
+Lo script legge i CSV, calcola le feature SMC+ML e salva i modelli addestrati.
+Output atteso:
+
+```
+============================================================
+  Addestramento modello: XAUUSD
+============================================================
+  Candele totali caricate: 120,000
+  Periodo: 2023-01-02 → 2024-12-31
+
+  ── RISULTATI TEST ──────────────────────────────
+  Accuracy : 0.71
+  Precision: 0.74
+  Recall   : 0.68
+  F1       : 0.71
+  AUC-ROC  : 0.78
+  Modello salvato in: trading_system/models/model_xauusd.pkl
+```
+
+I modelli vengono salvati in `trading_system/models/`.
+
+---
+
+### Passo 5 — Avvia il bot e la dashboard
+
+Apri **due terminali separati**:
+
+**Terminale 1 – Bot di trading:**
+```bash
+python trading_system/bot.py
+```
+
+**Terminale 2 – Dashboard web:**
+```bash
+python run_dashboard.py
+```
+
+La dashboard si apre automaticamente nel browser su **http://localhost:5050**
+
+---
+
+## Dashboard
+
+La dashboard mostra in tempo reale:
+
+- **Saldo** corrente del conto
+- **Drawdown giornaliero e totale** con barra colorata (verde → giallo → rosso)
+- **Sessione attiva** (LONDON / NY / CLOSED) con countdown
+- **Segnali SMC live** per XAUUSD e EURUSD con confidence ML
+- **Posizioni aperte** con P&L in tempo reale
+- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo
+- **Storico trade** della giornata
+- **Log live** con auto-scroll e colori per tipo di messaggio
+- **Pulsante Stop** per fermare il bot in modo sicuro
+
 ---
 
 ## Architettura del sistema
@@ -47,6 +153,10 @@ trading_system/
 ├── bot.py                 ← avvio del bot live
 ├── data/                  ← metti qui i CSV esportati da MT5
 ├── models/                ← modelli ML salvati dopo il training
+├── dashboard/
+│   ├── app.py             ← server Flask della dashboard
+│   └── templates/
+│       └── index.html     ← UI web dark theme
 ├── smc/
 │   ├── structure.py       ← rilevamento BOS, CHoCH, trend
 │   ├── zones.py           ← Order Block, FVG, Liquidity levels
@@ -63,55 +173,8 @@ trading_system/
 └── mt5/
     ├── connector.py       ← connessione e fetch dati MT5
     └── executor.py        ← apertura / chiusura ordini
-```
 
----
-
-## Setup e utilizzo
-
-### 1. Installa le dipendenze
-
-```bash
-pip install -r requirements.txt
-```
-
-> **Nota:** `MetaTrader5` funziona **solo su Windows** con MT5 installato.
-
-### 2. Esporta i dati da MT5
-
-1. Apri MetaTrader 5
-2. Menu `Strumenti` → `History Center`
-3. Seleziona `XAUUSD` → `M5` → `Export` → salva come `XAUUSD_M5.csv`
-4. Ripeti per `EURUSD` → `EURUSD_M5.csv`
-5. Copia entrambi i file in `trading_system/data/`
-
-### 3. Addestra i modelli ML
-
-```bash
-python trading_system/ml/train.py
-```
-
-Output atteso:
-```
-Candele totali caricate: 120,000
-Accuracy : 0.71
-Precision: 0.74
-AUC-ROC  : 0.78
-Modello salvato in: trading_system/models/model_xauusd.pkl
-```
-
-### 4. Configura MT5 in config.py
-
-```python
-MT5_ACCOUNT  = 123456        # numero conto FTMO demo
-MT5_PASSWORD = "password"
-MT5_SERVER   = "FTMO-Demo"
-```
-
-### 5. Avvia il bot
-
-```bash
-python trading_system/bot.py
+run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
 ```
 
 ---
@@ -138,7 +201,7 @@ Un trade viene aperto solo se si verificano **tutti** questi elementi:
 3. **Confluenza FVG** — Fair Value Gap presente nella stessa zona (bonus)
 4. **Sweep di liquidità** — equal highs/lows spazzati prima dell'inversione (bonus)
 5. **ML confidence ≥ 78%** — il modello conferma il setup
-6. **Kill zone attiva** — siamo in London o NY
+6. **Kill zone attiva** — siamo in London (08–11) o NY (14–17) CET
 7. **No news** — nessun evento macro nelle prossime 30 minuti
 
 ---
