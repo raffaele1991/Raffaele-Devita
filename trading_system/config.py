@@ -54,6 +54,10 @@ ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42
 
+# Data cutoff: il modello viene trainato SOLO sui dati precedenti a questa data.
+# Il backtest out-of-sample va eseguito da questa data in poi.
+TRAIN_CUTOFF_DATE       = "2025-09-19"  # 70k barre train | 30k barre test
+
 # Parametri modello (GradientBoosting)
 ML_N_ESTIMATORS     = 300
 ML_MAX_DEPTH        = 5
