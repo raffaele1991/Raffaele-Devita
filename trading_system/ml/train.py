@@ -76,10 +76,10 @@ def train_symbol(symbol: str):
     print(f"  Addestramento modello: {symbol}")
     print(f"{'='*60}")
 
-    # Trova CSV per questo simbolo
+    # Trova CSV per questo simbolo (deduplicato per evitare doppio caricamento)
     pattern  = os.path.join(DATA_DIR_ABS, f"{symbol}*.csv")
     pattern2 = os.path.join(DATA_DIR_ABS, f"{symbol.lower()}*.csv")
-    files = glob.glob(pattern) + glob.glob(pattern2)
+    files = list(dict.fromkeys(glob.glob(pattern) + glob.glob(pattern2)))
 
     if not files:
         print(f"[WARN] Nessun CSV trovato per {symbol} in {config.DATA_DIR}/")
