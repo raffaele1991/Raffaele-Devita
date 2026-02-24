@@ -61,14 +61,19 @@ class SMCDetector:
             return (None, df) if return_struct else None
 
         current_price = last["close"]
+        last_low  = last["low"]
+        last_high = last["high"]
 
         # ── LONG SETUP ─────────────────────────────────────────────────────
         if trend == 1:
+            # Bullish OB touch: il LOW della candela ha toccato/penetrato la zona OB
+            # e il CLOSE è rimasto sopra il fondo (rimbalzo confermato)
             active_bull_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bullish"
                 and ob.active
-                and ob.bottom <= current_price <= ob.top
+                and last_low <= ob.top        # il low ha toccato l'OB
+                and current_price >= ob.bottom  # il close è sopra il fondo OB
             ]
 
             for ob in active_bull_obs:
@@ -119,11 +124,14 @@ class SMCDetector:
 
         # ── SHORT SETUP ────────────────────────────────────────────────────
         if trend == -1:
+            # Bearish OB touch: l'HIGH ha toccato/penetrato la zona OB
+            # e il CLOSE è rimasto sotto il top (distribuzione confermata)
             active_bear_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bearish"
                 and ob.active
-                and ob.bottom <= current_price <= ob.top
+                and last_high >= ob.bottom      # l'high ha toccato l'OB
+                and current_price <= ob.top     # il close è sotto il top OB
             ]
 
             for ob in active_bear_obs:
