@@ -29,40 +29,57 @@ MT5_SERVER   = "FTMO-Demo"   # nome server visibile nel login MT5
 
 ---
 
-### Passo 3 — Esporta i dati storici da MT5
+### Passo 3 — Avvia la dashboard
 
-Servono almeno **6 mesi** di dati M5 per ciascun simbolo (meglio 1–2 anni).
-
-1. Apri **MetaTrader 5**
-2. Menu `Strumenti` → `History Center`
-3. Seleziona `XAUUSD` → `M5` → `Export` → salva come **`XAUUSD_M5.csv`**
-4. Ripeti per `EURUSD` → salva come **`EURUSD_M5.csv`**
-5. Copia entrambi i file nella cartella `trading_system/data/`
-
+```bash
+python run_dashboard.py
 ```
-trading_system/
-└── data/
-    ├── XAUUSD_M5.csv   ← metti qui
-    └── EURUSD_M5.csv   ← metti qui
-```
+
+La dashboard si apre nel browser su **http://localhost:5050**
+
+Da qui puoi fare tutto senza usare il terminale:
 
 ---
 
-### Passo 4 — Addestra i modelli ML
+### Passo 4 — Scarica i dati storici (dalla dashboard)
+
+Nella sezione **"Dati Storici MT5"** della dashboard:
+
+1. Assicurati che **MetaTrader 5 sia aperto** e connesso al conto
+2. Scegli quanti anni di storico vuoi (default: **4 anni**)
+3. Clicca **"Scarica da MT5"**
+4. Aspetta: il sistema scarica automaticamente i dati M5 per XAUUSD e EURUSD e li salva in `trading_system/data/`
+
+Vedrai una barra di avanzamento per ogni simbolo con il numero di candele scaricate e il periodo coperto.
+
+> **Alternativa manuale:** se preferisci, puoi esportare i CSV da MT5 manualmente:
+> `Strumenti → History Center → XAUUSD → M5 → Export → XAUUSD_M5.csv`
+> e copiare i file in `trading_system/data/`
+
+---
+
+### Passo 5 — Addestra il modello ML (dalla dashboard)
+
+Nella sezione **"Training Modello ML"** della dashboard:
+
+1. Clicca **"Addestra Modello"**
+2. Segui l'output in tempo reale direttamente nella dashboard
+3. Al termine vedrai i modelli `.pkl` elencati con data e dimensione
+
+Oppure da terminale:
 
 ```bash
 python trading_system/ml/train.py
 ```
 
-Lo script legge i CSV, calcola le feature SMC+ML e salva i modelli addestrati.
 Output atteso:
 
 ```
 ============================================================
   Addestramento modello: XAUUSD
 ============================================================
-  Candele totali caricate: 120,000
-  Periodo: 2023-01-02 → 2024-12-31
+  Candele totali caricate: 210,000
+  Periodo: 2021-01-04 → 2024-12-31
 
   ── RISULTATI TEST ──────────────────────────────
   Accuracy : 0.71
@@ -73,41 +90,86 @@ Output atteso:
   Modello salvato in: trading_system/models/model_xauusd.pkl
 ```
 
-I modelli vengono salvati in `trading_system/models/`.
-
 ---
 
-### Passo 5 — Avvia il bot e la dashboard
+### Passo 6 — Avvia il bot
 
-Apri **due terminali separati**:
+Apri un secondo terminale e lancia il bot:
 
-**Terminale 1 – Bot di trading:**
 ```bash
 python trading_system/bot.py
 ```
 
-**Terminale 2 – Dashboard web:**
-```bash
-python run_dashboard.py
-```
-
-La dashboard si apre automaticamente nel browser su **http://localhost:5050**
+Oppure usa il pulsante **"Avvia Bot"** direttamente dalla dashboard.
 
 ---
 
 ## Dashboard
 
-La dashboard mostra in tempo reale:
+La dashboard è l'interfaccia centrale del sistema. Aprila con:
 
+```bash
+python run_dashboard.py
+```
+
+Poi vai su **http://localhost:5050**
+
+### Sezioni disponibili
+
+#### Stato e controllo bot
+- **Status pill** — RUNNING / STOPPED / OFFLINE con indicatore animato
+- **Sessione attiva** — LONDON (08–11) / NY (14–17) / CLOSED con countdown
+- **Pulsante Avvia / Stop** — controlla il bot in modo sicuro
+
+#### KPI in tempo reale
 - **Saldo** corrente del conto
-- **Drawdown giornaliero e totale** con barra colorata (verde → giallo → rosso)
-- **Sessione attiva** (LONDON / NY / CLOSED) con countdown
-- **Segnali SMC live** per XAUUSD e EURUSD con confidence ML
-- **Posizioni aperte** con P&L in tempo reale
-- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo
-- **Storico trade** della giornata
-- **Log live** con auto-scroll e colori per tipo di messaggio
-- **Pulsante Stop** per fermare il bot in modo sicuro
+- **Drawdown giornaliero** con barra colorata (verde → giallo → rosso, limite 3%)
+- **Drawdown totale** con barra (limite 7%)
+- **Win rate** globale (win / loss)
+- **Trade oggi** su massimo 3 al giorno
+
+#### Segnali e posizioni
+- **Segnali SMC live** per XAUUSD e EURUSD — direzione, confidence ML, motivo
+- **Posizioni aperte** con simbolo, direzione, lot size, entry price, P&L corrente
+
+#### Analisi
+- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo (sessione chiusa, news, DD superato, etc.)
+- **Storico trade** della giornata con esito WIN/LOSS e P&L
+
+#### Dati & Modello *(novità)*
+- **Scarica dati da MT5** — download automatico di 1–10 anni di storico M5 direttamente da MT5
+  - Barre di avanzamento per simbolo con stato e numero candele
+  - Lista CSV presenti con righe, date e dimensione
+- **Addestra modello ML** — avvia il training con output live
+  - Log di training in tempo reale nella dashboard
+  - Lista modelli `.pkl` con data di aggiornamento
+
+#### Log live
+- Log colorato in tempo reale con auto-scroll
+- Colori per tipo: errori (rosso), warning (giallo), trade (verde), SMC/ML (blu)
+
+---
+
+## Download automatico dati MT5
+
+Il sistema include un modulo dedicato per scaricare automaticamente lo storico da MT5:
+
+```python
+# Da codice
+from trading_system.data.downloader import start_download, get_status
+
+start_download(years=4)   # avvia in background
+status = get_status()     # controlla lo stato
+```
+
+```bash
+# Da terminale
+python trading_system/data/downloader.py 4   # scarica 4 anni
+```
+
+Il file viene salvato automaticamente in `trading_system/data/XAUUSD_M5.csv` e `EURUSD_M5.csv`, pronti per il training.
+
+**Requisito:** MetaTrader 5 deve essere aperto e connesso al conto configurato in `config.py`.
 
 ---
 
@@ -123,7 +185,7 @@ Dati MT5 (OHLCV M5)
          │ segnale SMC
          ▼
 ┌─────────────────┐
-│   ML Classifier │  Gradient Boosting – 26 feature – soglia 78%
+│   ML Classifier │  Gradient Boosting – 29 feature – soglia 78%
 └────────┬────────┘
          │ conferma
          ▼
@@ -145,16 +207,36 @@ Dati MT5 (OHLCV M5)
 
 ---
 
+## Feature del modello ML (29 feature)
+
+| Categoria | Feature |
+|-----------|---------|
+| **Candela** | body %, ombre superiore/inferiore, direzione |
+| **Rendimenti** | ret 1 / 3 / 5 / 10 / 20 candele |
+| **EMA** | distanza dal prezzo vs EMA 9 / 21 / 50 / 100 / 200 |
+| **Volatilità** | ATR %, volatilità storica 5 / 20 candele |
+| **Momentum** | RSI, MACD, istogramma MACD, Stochastic K/D |
+| **SMC** | trend, BOS bull/bear, CHoCH bull/bear, barre dall'ultimo segnale |
+
+**Label:** il trade nella direzione del trend tocca il TP prima dello SL entro 10 candele?
+
+---
+
 ## Struttura del progetto
 
 ```
 trading_system/
 ├── config.py              ← tutti i parametri configurabili
 ├── bot.py                 ← avvio del bot live
-├── data/                  ← metti qui i CSV esportati da MT5
-├── models/                ← modelli ML salvati dopo il training
+├── data/
+│   ├── downloader.py      ← download automatico storico da MT5
+│   ├── XAUUSD_M5.csv      ← (generato dopo download)
+│   └── EURUSD_M5.csv      ← (generato dopo download)
+├── models/
+│   ├── model_xauusd.pkl   ← (generato dopo training)
+│   └── model_eurusd.pkl   ← (generato dopo training)
 ├── dashboard/
-│   ├── app.py             ← server Flask della dashboard
+│   ├── app.py             ← server Flask con API download/training/bot
 │   └── templates/
 │       └── index.html     ← UI web dark theme
 ├── smc/
@@ -162,7 +244,7 @@ trading_system/
 │   ├── zones.py           ← Order Block, FVG, Liquidity levels
 │   └── detector.py        ← segnale SMC finale
 ├── ml/
-│   ├── features.py        ← feature engineering (26 feature)
+│   ├── features.py        ← feature engineering (29 feature)
 │   ├── model.py           ← Gradient Boosting Classifier
 │   └── train.py           ← script di training
 ├── filters/
@@ -171,11 +253,28 @@ trading_system/
 ├── risk/
 │   └── manager.py         ← sizing, drawdown, prop firm rules
 └── mt5/
-    ├── connector.py       ← connessione e fetch dati MT5
+    ├── connector.py       ← connessione, fetch dati e download storico
     └── executor.py        ← apertura / chiusura ordini
 
 run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
 ```
+
+---
+
+## API della dashboard
+
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/` | Dashboard HTML |
+| GET | `/api/state` | Stato bot corrente (JSON) |
+| GET | `/api/log` | Ultime N righe di log |
+| POST | `/api/control` | `{"action": "start"\|"stop"}` |
+| POST | `/api/data/download` | Avvia download dati MT5 `{"years": 4}` |
+| GET | `/api/data/status` | Stato e progresso del download |
+| GET | `/api/data/files` | Elenco CSV con statistiche |
+| POST | `/api/train` | Avvia training modello ML |
+| GET | `/api/train/status` | Stato training + output live |
+| GET | `/api/models/files` | Elenco modelli `.pkl` |
 
 ---
 
