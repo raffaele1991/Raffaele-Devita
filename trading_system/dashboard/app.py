@@ -18,6 +18,9 @@ API:
     GET  /api/data/files      → elenco CSV presenti in data/
     POST /api/train           → avvia training del modello ML
     GET  /api/train/status    → stato del training
+    GET  /api/models/files    → elenco modelli .pkl
+    POST /api/backtest        → avvia backtest {"symbol", "start_date", "end_date"}
+    GET  /api/backtest/status → stato e risultati del backtest
 """
 
 import os
@@ -48,6 +51,15 @@ except Exception:
     _downloader_ok = False
     def start_download(years=4): return False
     def get_download_status(): return {"running": False, "done": False, "error": "Downloader non disponibile", "symbols": {}}
+
+# Import backtest engine (lazy)
+try:
+    from trading_system.backtest.engine import start_backtest, get_status as get_backtest_status
+    _backtest_ok = True
+except Exception:
+    _backtest_ok = False
+    def start_backtest(symbol, start_date, end_date): return False
+    def get_backtest_status(): return {"running": False, "status": "error", "error": "Modulo backtest non disponibile", "progress": 0, "results": None, "log": []}
 
 # ─── TRAINING STATE ────────────────────────────────────────────────────────────
 
@@ -242,6 +254,36 @@ def api_models_files():
             "modified": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
         })
     return jsonify({"models": models})
+
+
+# ─── BACKTEST ──────────────────────────────────────────────────────────────────
+
+VALID_SYMBOLS = {"XAUUSD", "EURUSD"}
+
+@app.route("/api/backtest", methods=["POST"])
+def api_backtest():
+    data       = request.get_json(silent=True) or {}
+    symbol     = data.get("symbol", "XAUUSD").upper()
+    start_date = data.get("start_date", "").strip()
+    end_date   = data.get("end_date", "").strip()
+
+    if symbol not in VALID_SYMBOLS:
+        return jsonify({"ok": False, "error": f"Simbolo non valido: {symbol}"}), 400
+    if not start_date or not end_date:
+        return jsonify({"ok": False, "error": "start_date e end_date sono obbligatori"}), 400
+    if start_date >= end_date:
+        return jsonify({"ok": False, "error": "start_date deve essere precedente a end_date"}), 400
+
+    started = start_backtest(symbol, start_date, end_date)
+    if not started:
+        return jsonify({"ok": False, "error": "Backtest già in corso — attendi il completamento"}), 409
+
+    return jsonify({"ok": True, "symbol": symbol, "start_date": start_date, "end_date": end_date})
+
+
+@app.route("/api/backtest/status")
+def api_backtest_status():
+    return jsonify(get_backtest_status())
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────

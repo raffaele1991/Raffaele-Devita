@@ -28,274 +28,232 @@
       --shadow:    0 4px 24px rgba(0,0,0,0.4);
     }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      font-size: 14px;
-      line-height: 1.5;
-      min-height: 100vh;
-    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
 
-    /* ── LAYOUT ────────────────────────────────────────────────────────── */
-    .page { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    .page { max-width: 1200px; margin: 0 auto; padding: 0 16px 32px; }
 
-    /* ── HEADER ────────────────────────────────────────────────────────── */
+    /* ── HEADER ─────────────────────────────────────────────────────────── */
     .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 20px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-      box-shadow: var(--shadow);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;
     }
-    .header-left { display: flex; align-items: center; gap: 16px; }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
-    .logo span { color: var(--accent); }
+    .header-left  { display: flex; align-items: center; gap: 14px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .logo { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: -0.4px; }
+    .logo span { color: var(--text); }
 
     .status-pill {
-      display: flex; align-items: center; gap: 7px;
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
-      text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase;
     }
-    .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .status-running { background: var(--green-dim); color: var(--green); }
-    .status-running .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.5s infinite; }
-    .status-stopped { background: var(--red-dim); color: var(--red); }
-    .status-stopped .dot { background: var(--red); }
-    .status-offline { background: #1c2130; color: var(--muted); }
-    .status-offline .dot { background: var(--muted); }
+    .status-online  { background: var(--green-dim); color: var(--green); }
+    .status-offline { background: var(--red-dim);   color: var(--red);   }
+    .status-paused  { background: var(--yellow-dim);color: var(--yellow);}
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+    .session-badge { font-size: 12px; color: var(--muted); }
 
-    .session-badge {
-      display: flex; align-items: center; gap: 8px;
-      padding: 5px 14px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 12px; color: var(--muted);
-    }
-    .session-badge .session-name { font-weight: 700; font-size: 13px; }
-    .session-london { color: #58a6ff; }
-    .session-ny     { color: #bc8cff; }
-    .session-closed { color: var(--muted); }
-    .session-eod    { color: var(--yellow); }
-
-    .header-right { display: flex; align-items: center; gap: 10px; }
-    .btn {
-      padding: 7px 18px;
-      border-radius: 7px; border: none; cursor: pointer;
-      font-size: 13px; font-weight: 600;
-      transition: opacity 0.15s, transform 0.1s;
-    }
-    .btn:active { transform: scale(0.97); }
-    .btn-stop  { background: var(--red);   color: #fff; }
-    .btn-start { background: var(--green); color: #0d1117; }
-    .btn:hover { opacity: 0.85; }
     .last-update { font-size: 11px; color: var(--muted); }
 
-    /* ── TAB NAV ───────────────────────────────────────────────────────── */
-    .tab-nav {
-      display: flex;
-      gap: 4px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 6px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow);
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 9px 14px;
-      border: none; border-radius: 7px;
-      background: transparent;
-      color: var(--muted);
-      font-size: 13px; font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      display: flex; align-items: center; justify-content: center; gap: 7px;
-    }
-    .tab-btn:hover { background: var(--surface2); color: var(--text); }
-    .tab-btn.active { background: var(--surface2); color: var(--accent); border: 1px solid var(--border); }
-    .tab-icon { font-size: 15px; }
+    .btn { padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-start { background: var(--green);  color: #0d1117; }
+    .btn-stop  { background: var(--red);    color: #fff; }
 
-    /* ── TAB PANELS ────────────────────────────────────────────────────── */
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-
-    /* ── CARD ──────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      box-shadow: var(--shadow);
-    }
-    .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
-    .card-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
-    .card-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
-    .card-title {
-      font-size: 12px; font-weight: 600; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.6px;
-      margin-bottom: 14px; padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    /* ── KPI GRID ──────────────────────────────────────────────────────── */
+    /* ── KPI STRIP ──────────────────────────────────────────────────────── */
     .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 12px;
-      margin-bottom: 16px;
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 10px; margin-bottom: 16px;
     }
     @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
-    /* DD gauge bar */
-    .gauge-wrap { margin-top: 8px; }
-    .gauge-track { height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; margin-top: 4px; }
-    .gauge-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease, background 0.4s; }
-    .gauge-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
-
-    /* ── MIDDLE GRID ───────────────────────────────────────────────────── */
-    .middle-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 16px;
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
     }
-    @media (max-width: 750px) { .middle-grid { grid-template-columns: 1fr; } }
+    .card-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .card-value { font-size: 22px; font-weight: 700; }
+    .card-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
 
-    /* ── SIGNAL ROWS ───────────────────────────────────────────────────── */
-    .signal-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 0; border-bottom: 1px solid var(--border);
+    .gauge-wrap  { margin-top: 8px; }
+    .gauge-track { height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .gauge-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.5s; }
+    .gauge-labels{ display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* ── TAB NAV ─────────────────────────────────────────────────────────── */
+    .tab-nav {
+      display: flex; gap: 4px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border); padding-bottom: 0;
     }
+    .tab-btn {
+      padding: 8px 18px; border: none; background: transparent;
+      color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── SIGNALS & POSITIONS ────────────────────────────────────────────── */
+    .middle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .middle-grid { grid-template-columns: 1fr; } }
+
+    .signal-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
     .signal-row:last-child { border-bottom: none; }
-    .signal-symbol { font-weight: 700; font-size: 15px; }
-    .signal-dir {
-      display: inline-flex; align-items: center; gap: 5px;
-      padding: 3px 10px; border-radius: 5px; font-size: 12px; font-weight: 700;
-    }
-    .dir-buy  { background: var(--blue-dim); color: var(--blue); }
-    .dir-sell { background: var(--red-dim);  color: var(--red); }
-    .dir-none { background: var(--surface2); color: var(--muted); }
-    .signal-conf { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-    .conf-bar { width: 60px; height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
-    .conf-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
-    .conf-ok  { background: var(--green); }
-    .conf-low { background: var(--red); }
-    .signal-reason { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .sig-dir { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .sig-long  { background: var(--blue-dim);  color: var(--blue);  }
+    .sig-short { background: var(--red-dim);   color: var(--red);   }
 
-    /* ── POSITIONS TABLE ───────────────────────────────────────────────── */
+    .no-pos { font-size: 12px; color: var(--muted); padding: 8px 0; }
+
+    /* Positions table */
     .pos-table { width: 100%; border-collapse: collapse; }
-    .pos-table th { font-size: 11px; color: var(--muted); font-weight: 600; text-align: left; padding: 0 0 8px 0; border-bottom: 1px solid var(--border); }
+    .pos-table th {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      text-align: left; padding: 0 8px 8px 0; border-bottom: 1px solid var(--border);
+    }
     .pos-table td { padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
     .pos-table tr:last-child td { border-bottom: none; }
-    .pnl-pos  { color: var(--green); font-weight: 700; }
-    .pnl-neg  { color: var(--red);   font-weight: 700; }
-    .pnl-zero { color: var(--muted); }
-    .no-pos   { color: var(--muted); font-size: 13px; padding: 16px 0; }
 
-    /* ── REASONS ───────────────────────────────────────────────────────── */
-    .reason-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-    .reason-item {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 8px 12px; border-radius: 7px; font-size: 13px; border: 1px solid transparent;
-    }
-    .reason-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-    .reason-ok   { background: var(--green-dim);  border-color: #2ea04326; color: #b3f0c0; }
-    .reason-warn { background: var(--yellow-dim); border-color: #d2992226; color: #f0d080; }
-    .reason-info { background: var(--surface2);   border-color: var(--border); color: var(--muted); }
+    /* ── WHY NO TRADE ───────────────────────────────────────────────────── */
+    .why-section  { margin-bottom: 12px; }
+    .reason-list  { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+    .reason-item  { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; padding: 8px 10px; border-radius: 7px; }
+    .reason-icon  { font-size: 14px; flex-shrink: 0; }
+    .reason-ok      { background: var(--green-dim);  color: var(--green); }
+    .reason-warning { background: var(--yellow-dim); color: var(--yellow); }
+    .reason-block   { background: var(--red-dim);    color: var(--red); }
+    .reason-info    { background: var(--surface2);   color: var(--muted); }
 
-    /* ── LOG ───────────────────────────────────────────────────────────── */
-    .log-card { padding: 0; overflow: hidden; }
-    .log-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-    .log-header .card-title { margin: 0; padding: 0; border: none; }
-    .log-autoscroll-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
-    .log-autoscroll-toggle input { cursor: pointer; accent-color: var(--accent); }
-    .log-body {
-      background: #0a0e14; height: 420px; overflow-y: auto;
-      padding: 12px 14px;
-      font-family: 'Consolas', 'Fira Code', monospace;
-      font-size: 12px; line-height: 1.7;
-    }
-    .log-line { white-space: pre-wrap; word-break: break-all; }
-    .log-error   { color: var(--red); }
-    .log-warning { color: var(--yellow); }
-    .log-info    { color: #58a6ff; }
-    .log-status  { color: #bc8cff; }
-    .log-trade   { color: var(--green); }
-    .log-default { color: #8b949e; }
+    /* ── CLOSED TRADES ──────────────────────────────────────────────────── */
+    .closed-section { margin-bottom: 12px; }
+    .trade-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; flex-wrap: wrap; }
+    .trade-row:last-child { border-bottom: none; }
+    .pnl-pos { color: var(--green); font-weight: 700; }
+    .pnl-neg { color: var(--red);   font-weight: 700; }
 
     /* ── DATI & MODELLO ─────────────────────────────────────────────────── */
-    .dm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 750px) { .dm-grid { grid-template-columns: 1fr; } }
+    .dm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .dm-grid { grid-template-columns: 1fr; } }
 
-    .dm-btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
-      font-size: 13px; font-weight: 600;
-      transition: opacity 0.15s, transform 0.1s;
+    .dm-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .dm-years {
+      width: 60px; padding: 6px 8px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;
     }
-    .dm-btn:active { transform: scale(0.97); }
-    .dm-btn:hover  { opacity: 0.85; }
-    .dm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .dm-btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+    .dm-btn:hover    { opacity: 0.85; }
+    .dm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .dm-btn-blue  { background: var(--blue);  color: #fff; }
     .dm-btn-green { background: var(--green); color: #0d1117; }
 
-    .dm-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
-    .dm-years   { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; width: 80px; }
+    .dm-status-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .dm-status-idle    { background: var(--surface2);   color: var(--muted); }
+    .dm-status-running { background: var(--blue-dim);   color: var(--blue);  }
+    .dm-status-done    { background: var(--green-dim);  color: var(--green); }
+    .dm-status-error   { background: var(--red-dim);    color: var(--red);   }
+
+    .dm-progress-wrap  { margin-top: 10px; }
+    .dm-progress-item  { margin-bottom: 8px; }
+    .dm-progress-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .dm-progress-track { height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .dm-progress-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s; }
 
     .dm-file-list { display: flex; flex-direction: column; gap: 6px; }
     .dm-file-item {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 7px; font-size: 13px;
+      padding: 7px 10px; background: var(--surface2); border-radius: 7px; font-size: 12px;
     }
-    .dm-file-name  { font-weight: 700; font-family: monospace; }
-    .dm-file-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .dm-file-badge { font-size: 11px; color: var(--green); font-weight: 600; }
-    .dm-empty      { font-size: 13px; color: var(--muted); padding: 8px 0; }
-
-    .dm-progress-wrap { margin-top: 10px; }
-    .dm-sym-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px;
-    }
-    .dm-sym-row:last-child { border-bottom: none; }
-    .dm-sym-name { width: 80px; font-weight: 700; }
-    .dm-sym-bar  { flex: 1; height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
-    .dm-sym-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
-    .dm-sym-msg  { font-size: 11px; color: var(--muted); flex: 2; }
-
-    .dm-status-badge {
-      display: inline-block; padding: 4px 10px;
-      border-radius: 5px; font-size: 12px; font-weight: 600; margin-bottom: 10px;
-    }
-    .dm-status-idle    { background: var(--surface2); color: var(--muted); }
-    .dm-status-running { background: var(--blue-dim); color: var(--blue); }
-    .dm-status-done    { background: var(--green-dim); color: var(--green); }
-    .dm-status-error   { background: var(--red-dim);  color: var(--red); }
+    .dm-file-name { color: var(--text); font-weight: 500; }
+    .dm-file-size { color: var(--muted); }
+    .dm-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
 
     .train-output {
+      background: #0a0e14; border-radius: 7px; padding: 10px 12px; margin-top: 12px;
+      font-family: 'Consolas', 'Fira Code', monospace; font-size: 11px; line-height: 1.6;
+      color: #8b949e; max-height: 160px; overflow-y: auto; display: none;
+    }
+
+    /* ── BACKTEST ───────────────────────────────────────────────────────── */
+    .bt-controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px;
+    }
+    .bt-label  { font-size: 12px; color: var(--muted); }
+    .bt-select, .bt-date {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px;
+    }
+    .bt-select { width: 110px; }
+    .bt-date   { width: 140px; }
+    .bt-run-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; background: var(--accent); color: #0d1117;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .bt-run-btn:hover    { opacity: 0.85; }
+    .bt-run-btn:active   { transform: scale(0.97); }
+    .bt-run-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .bt-progress-wrap  { margin-bottom: 14px; display: none; }
+    .bt-progress-track { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .bt-progress-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s; }
+    .bt-progress-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .bt-kpi-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 10px; margin-bottom: 14px;
+    }
+    @media (max-width: 900px) { .bt-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .bt-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .bt-kpi       { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .bt-kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+    .bt-kpi-value { font-size: 20px; font-weight: 700; }
+
+    .bt-table-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; }
+    .bt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .bt-table th {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      text-align: left; padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--surface);
+    }
+    .bt-table td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--border); }
+    .bt-table tr:last-child td { border-bottom: none; }
+    .bt-results-hidden { display: none; }
+
+    .bt-log {
       background: #0a0e14; border-radius: 7px;
-      padding: 10px 12px; margin-top: 10px;
+      padding: 10px 12px; margin-top: 12px;
       font-family: 'Consolas', 'Fira Code', monospace;
       font-size: 11px; line-height: 1.6; color: #8b949e;
-      max-height: 200px; overflow-y: auto; display: none;
+      max-height: 160px; overflow-y: auto; display: none;
     }
-    .train-output.visible { display: block; }
+    .bt-log.visible { display: block; }
+
+    /* ── LOG ─────────────────────────────────────────────────────────────── */
+    .log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .log-autoscroll-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .log-body {
+      background: #0a0e14; border-radius: 7px; padding: 12px 14px;
+      font-family: 'Consolas', 'Fira Code', monospace; font-size: 12px;
+      line-height: 1.7; color: #8b949e; max-height: 500px; overflow-y: auto;
+    }
+    .log-default { color: var(--muted); font-style: italic; }
+    .log-line-ts  { color: #555; margin-right: 6px; }
+    .log-line-err { color: var(--red); }
+    .log-line-ok  { color: var(--green); }
+    .log-line-warn{ color: var(--yellow); }
 
     /* ── UTILS ──────────────────────────────────────────────────────────── */
     .text-green  { color: var(--green); }
@@ -309,9 +267,6 @@
     .badge-win  { background: var(--green-dim); color: var(--green); }
     .badge-loss { background: var(--red-dim);   color: var(--red); }
     .badge-open { background: var(--blue-dim);  color: var(--blue); }
-
-    .mb-12 { margin-bottom: 12px; }
-    .mb-16 { margin-bottom: 16px; }
 
     /* ── FOOTER ─────────────────────────────────────────────────────────── */
     .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px; padding: 10px 0; }
@@ -342,81 +297,72 @@
     </div>
   </div>
 
-  <!-- ── TAB NAV ─────────────────────────────────────────────────────────── -->
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('monitor')">
-      <span class="tab-icon">📊</span> Monitor
-    </button>
-    <button class="tab-btn" onclick="switchTab('posizioni')">
-      <span class="tab-icon">📈</span> Posizioni
-    </button>
-    <button class="tab-btn" onclick="switchTab('storico')">
-      <span class="tab-icon">📋</span> Storico
-    </button>
-    <button class="tab-btn" onclick="switchTab('dati')">
-      <span class="tab-icon">💾</span> Dati
-    </button>
-    <button class="tab-btn" onclick="switchTab('log')">
-      <span class="tab-icon">🖥️</span> Log
-    </button>
+  <!-- ── KPI STRIP ────────────────────────────────────────────────────────── -->
+  <div class="kpi-grid">
+    <div class="card">
+      <div class="card-label">Saldo</div>
+      <div class="card-value text-accent" id="balance">—</div>
+      <div class="card-sub" id="balanceSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Giornaliero</div>
+      <div class="card-value" id="dailyDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Totale</div>
+      <div class="card-value" id="totalDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Win Rate</div>
+      <div class="card-value" id="winRate">—</div>
+      <div class="card-sub" id="winRateSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Trade Oggi</div>
+      <div class="card-value" id="tradesToday">—</div>
+      <div class="card-sub" id="tradesSub">—</div>
+    </div>
   </div>
 
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 1: MONITOR                                                        -->
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <div id="tab-monitor" class="tab-panel active">
+  <!-- ── TAB NAV ──────────────────────────────────────────────────────────── -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="tab-btn"        onclick="switchTab('dati',      this)">Dati &amp; Modello</button>
+    <button class="tab-btn"        onclick="switchTab('backtest',  this)">Backtest</button>
+    <button class="tab-btn"        onclick="switchTab('log',       this)">Log Live</button>
+  </div>
 
-    <!-- KPI -->
-    <div class="kpi-grid mb-16">
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: DASHBOARD                                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-dashboard" class="tab-pane active">
 
+    <!-- Segnali + Posizioni -->
+    <div class="middle-grid" style="margin-bottom:12px;">
       <div class="card">
-        <div class="card-label">Saldo</div>
-        <div class="card-value text-accent" id="balance">—</div>
-        <div class="card-sub" id="balanceSub">—</div>
-      </div>
-
-      <div class="card">
-        <div class="card-label">DD Giornaliero</div>
-        <div class="card-value" id="dailyDD">—</div>
-        <div class="gauge-wrap">
-          <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
-          <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
+        <div class="card-title">Segnali Live</div>
+        <div id="signalsContainer">
+          <div class="text-muted">In attesa del bot...</div>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-label">DD Totale</div>
-        <div class="card-value" id="totalDD">—</div>
-        <div class="gauge-wrap">
-          <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
-          <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
+        <div class="card-title">Posizioni Aperte</div>
+        <div id="positionsContainer">
+          <div class="no-pos">Nessuna posizione aperta</div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-label">Win Rate</div>
-        <div class="card-value" id="winRate">—</div>
-        <div class="card-sub" id="winRateSub">—</div>
-      </div>
-
-      <div class="card">
-        <div class="card-label">Trade Oggi</div>
-        <div class="card-value" id="tradesToday">—</div>
-        <div class="card-sub" id="tradesSub">—</div>
-      </div>
-
-    </div>
-
-    <!-- Segnali Live -->
-    <div class="card mb-16">
-      <div class="card-title">Segnali Live</div>
-      <div id="signalsContainer">
-        <div class="text-muted">In attesa del bot...</div>
       </div>
     </div>
 
-    <!-- Perché non apro posizioni -->
-    <div class="card">
+    <!-- Perché non trade -->
+    <div class="card why-section">
       <div class="card-title">Perché non apro posizioni?</div>
       <ul class="reason-list" id="reasonList">
         <li class="reason-item reason-info">
@@ -426,47 +372,26 @@
       </ul>
     </div>
 
-  </div><!-- /tab-monitor -->
-
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 2: POSIZIONI                                                       -->
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <div id="tab-posizioni" class="tab-panel">
-
-    <div class="card">
-      <div class="card-title">Posizioni Aperte</div>
-      <div id="positionsContainer">
-        <div class="no-pos">Nessuna posizione aperta</div>
-      </div>
-    </div>
-
-  </div><!-- /tab-posizioni -->
-
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 3: STORICO                                                         -->
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <div id="tab-storico" class="tab-panel">
-
-    <div class="card">
+    <!-- Storico trade (oggi) -->
+    <div class="card closed-section">
       <div class="card-title">Storico Trade (oggi)</div>
       <div id="closedContainer">
         <div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>
       </div>
     </div>
 
-  </div><!-- /tab-storico -->
+  </div><!-- /tab-dashboard -->
 
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 4: DATI                                                            -->
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <div id="tab-dati" class="tab-panel">
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: DATI & MODELLO                                                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-dati" class="tab-pane">
 
     <div class="dm-grid">
 
-      <!-- Dati storici MT5 -->
+      <!-- Colonna sinistra: Dati storici -->
       <div class="card">
         <div class="card-title">Dati Storici MT5</div>
-
         <div class="dm-actions">
           <label style="font-size:12px; color:var(--muted);">Anni:</label>
           <input type="number" id="yearsInput" class="dm-years" value="4" min="1" max="10" />
@@ -474,58 +399,159 @@
             &#8681; Scarica da MT5
           </button>
         </div>
-
         <div id="downloadStatusBadge" class="dm-status-badge dm-status-idle">Nessun download in corso</div>
         <div id="downloadError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
         <div id="downloadProgress" class="dm-progress-wrap" style="display:none;"></div>
-
         <div style="margin-top:14px;">
-          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
-            File CSV presenti
-          </div>
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">File CSV presenti</div>
           <div id="dataFilesList" class="dm-file-list">
             <div class="dm-empty">Caricamento...</div>
           </div>
         </div>
       </div>
 
-      <!-- Training modello ML -->
+      <!-- Colonna destra: Training -->
       <div class="card">
         <div class="card-title">Training Modello ML</div>
-
         <div class="dm-actions">
           <button id="trainBtn" class="dm-btn dm-btn-green" onclick="startTraining()">
             &#9654; Addestra Modello
           </button>
         </div>
-
         <div id="trainStatusBadge" class="dm-status-badge dm-status-idle">Nessun training in corso</div>
         <div id="trainError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
-
         <div style="margin-top:8px;">
-          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
-            Modelli (.pkl) presenti
-          </div>
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">Modelli (.pkl) presenti</div>
           <div id="modelFilesList" class="dm-file-list">
             <div class="dm-empty">Caricamento...</div>
           </div>
         </div>
-
         <div id="trainOutput" class="train-output"></div>
       </div>
 
     </div>
-
   </div><!-- /tab-dati -->
 
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 5: LOG                                                             -->
-  <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <div id="tab-log" class="tab-panel">
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: BACKTEST                                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-backtest" class="tab-pane">
+    <div class="card">
+      <div class="card-title">Backtest</div>
 
-    <div class="card log-card">
+      <!-- Controlli -->
+      <div class="bt-controls">
+        <span class="bt-label">Simbolo</span>
+        <select id="btSymbol" class="bt-select">
+          <option value="XAUUSD">XAUUSD</option>
+          <option value="EURUSD">EURUSD</option>
+        </select>
+
+        <span class="bt-label">Da</span>
+        <input type="date" id="btStartDate" class="bt-date" value="2024-01-01" />
+
+        <span class="bt-label">A</span>
+        <input type="date" id="btEndDate" class="bt-date" value="2024-12-31" />
+
+        <button id="btRunBtn" class="bt-run-btn" onclick="startBacktest()">
+          &#9654; Esegui Backtest
+        </button>
+
+        <div id="btStatusBadge" class="dm-status-badge dm-status-idle">Pronto</div>
+      </div>
+
+      <!-- Barra progresso -->
+      <div id="btProgressWrap" class="bt-progress-wrap">
+        <div class="bt-progress-track">
+          <div id="btProgressFill" class="bt-progress-fill" style="width:0%"></div>
+        </div>
+        <div id="btProgressLabel" class="bt-progress-label">0%</div>
+      </div>
+
+      <!-- Errore -->
+      <div id="btError" style="font-size:12px; color:var(--red); margin-bottom:10px; display:none;"></div>
+
+      <!-- Risultati -->
+      <div id="btResults" class="bt-results-hidden">
+
+        <div class="bt-kpi-grid" style="margin-top:4px;">
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Trade Totali</div>
+            <div class="bt-kpi-value text-accent" id="btNTrades">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Win Rate</div>
+            <div class="bt-kpi-value" id="btWinRate">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Profit Factor</div>
+            <div class="bt-kpi-value" id="btPF">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Net R</div>
+            <div class="bt-kpi-value" id="btNetR">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Max Drawdown</div>
+            <div class="bt-kpi-value" id="btMaxDD">—</div>
+          </div>
+        </div>
+
+        <div class="bt-kpi-grid">
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Balance Finale</div>
+            <div class="bt-kpi-value text-accent" id="btBalance">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Net P&amp;L</div>
+            <div class="bt-kpi-value" id="btNetPnl">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Sharpe Ratio</div>
+            <div class="bt-kpi-value" id="btSharpe">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Avg Win R</div>
+            <div class="bt-kpi-value text-green" id="btAvgWin">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Avg Loss R</div>
+            <div class="bt-kpi-value text-red" id="btAvgLoss">—</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
+          Storico Trade <span id="btTradeCount" style="font-weight:600; color:var(--text);"></span>
+          <span id="btMlBadge" style="margin-left:8px; font-size:10px; color:#bc8cff;"></span>
+        </div>
+        <div class="bt-table-wrap">
+          <table class="bt-table">
+            <thead>
+              <tr>
+                <th>Apertura</th><th>Chiusura</th><th>Dir.</th>
+                <th>Entry</th><th>SL</th><th>TP</th><th>Exit</th>
+                <th>Esito</th>
+                <th style="text-align:right;">R</th>
+                <th style="text-align:right;">P&amp;L $</th>
+              </tr>
+            </thead>
+            <tbody id="btTradesTbody"></tbody>
+          </table>
+        </div>
+      </div><!-- /btResults -->
+
+      <!-- Log backtest -->
+      <div id="btLog" class="bt-log"></div>
+    </div>
+  </div><!-- /tab-backtest -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: LOG LIVE                                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-log" class="tab-pane">
+    <div class="card">
       <div class="log-header">
-        <div class="card-title">Log Live</div>
+        <div class="card-title" style="margin-bottom:0;">Log Live</div>
         <label class="log-autoscroll-toggle">
           <input type="checkbox" id="autoScrollCheck" checked />
           Auto-scroll
@@ -535,25 +561,32 @@
         <div class="log-default">In attesa del log...</div>
       </div>
     </div>
-
   </div><!-- /tab-log -->
 
   <div class="footer">SMC+ML Trading Bot · Dashboard locale · Aggiornamento ogni 5s</div>
-</div>
+</div><!-- /page -->
 
 <script>
-/* ── STATE ──────────────────────────────────────────────────────────────── */
-let currentAction = 'start';
-
-/* ── TAB SWITCH ─────────────────────────────────────────────────────────── */
-function switchTab(name) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB NAVIGATION
+══════════════════════════════════════════════════════════════════════════ */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  btn.classList.add('active');
 }
 
-/* ── FETCH STATE ────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════════════════════ */
+let currentAction = 'start';
+let _sessionStart = null;
+let _sessionTimer = null;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FETCH STATE
+══════════════════════════════════════════════════════════════════════════ */
 async function fetchState() {
   try {
     const res = await fetch('/api/state');
@@ -563,357 +596,235 @@ async function fetchState() {
   } catch (e) {}
 }
 
-/* ── FETCH LOG ──────────────────────────────────────────────────────────── */
 async function fetchLog() {
   try {
-    const res = await fetch('/api/log?lines=120');
+    const res = await fetch('/api/log?lines=80');
     if (!res.ok) return;
     const data = await res.json();
     renderLog(data.lines);
   } catch (e) {}
 }
 
-/* ── CONTROL ────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTROL (avvia / ferma bot)
+══════════════════════════════════════════════════════════════════════════ */
 async function sendControl() {
   const action = currentAction;
   try {
-    await fetch('/api/control', {
+    const res = await fetch('/api/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action })
     });
+    const data = await res.json();
+    if (data.ok) { setTimeout(fetchState, 800); }
   } catch (e) {}
 }
 
-/* ── UI UPDATE ──────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   UPDATE UI
+══════════════════════════════════════════════════════════════════════════ */
 function updateUI(s) {
-  document.getElementById('lastUpdate').textContent =
-    'Aggiornato ' + new Date().toLocaleTimeString('it-IT');
-
-  updateStatus(s.bot_status);
-  updateSession(s.session, s.minutes_to_next);
-
-  // Balance
-  const bal = s.balance || 0;
-  document.getElementById('balance').textContent =
-    bal > 0 ? '$' + bal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-  document.getElementById('balanceSub').textContent =
-    s.open_positions > 0 ? s.open_positions + ' posizione/i aperta/e' : 'Nessuna posizione aperta';
-
-  // Daily DD
-  const ddd = s.daily_dd_pct || 0;
-  const ddEl = document.getElementById('dailyDD');
-  ddEl.textContent = ddd.toFixed(2) + '%';
-  ddEl.className = 'card-value ' + ddColor(ddd, 3);
-  const dg = document.getElementById('dailyGauge');
-  dg.style.width = Math.min((ddd / 3) * 100, 100) + '%';
-  dg.style.background = gaugeColor(Math.min((ddd / 3) * 100, 100));
-
-  // Total DD
-  const tdd = s.total_dd_pct || 0;
-  const tdEl = document.getElementById('totalDD');
-  tdEl.textContent = tdd.toFixed(2) + '%';
-  tdEl.className = 'card-value ' + ddColor(tdd, 7);
-  const tg = document.getElementById('totalGauge');
-  tg.style.width = Math.min((tdd / 7) * 100, 100) + '%';
-  tg.style.background = gaugeColor(Math.min((tdd / 7) * 100, 100));
-
-  // Win rate
-  const wr = s.win_rate || 0;
-  const wrEl = document.getElementById('winRate');
-  wrEl.textContent = wr.toFixed(1) + '%';
-  wrEl.className = 'card-value ' + (wr >= 50 ? 'text-green' : 'text-red');
-  document.getElementById('winRateSub').textContent =
-    (s.total_wins || 0) + ' win · ' + (s.total_losses || 0) + ' loss';
-
-  // Trades today
-  const tt = s.trades_today || 0;
-  const ttEl = document.getElementById('tradesToday');
-  ttEl.textContent = tt + ' / 3';
-  ttEl.className = 'card-value ' + (tt >= 3 ? 'text-yellow' : 'text-text');
-  document.getElementById('tradesSub').textContent =
-    s.consecutive_losses > 0
-      ? s.consecutive_losses + ' loss consecutiv' + (s.consecutive_losses === 1 ? 'a' : 'e')
-      : 'Nessuna perdita consecutiva';
-
-  renderSignals(s.symbols || {});
-  renderPositions(s.open_trades || []);
-  renderClosed(s.closed_trades || []);
-  renderReasons(s.block_reasons || []);
-
-  const isRunning = s.bot_status === 'running';
-  currentAction = isRunning ? 'stop' : 'start';
-  const btn = document.getElementById('controlBtn');
-  btn.textContent = isRunning ? 'Stop Bot' : 'Avvia Bot';
-  btn.className = isRunning ? 'btn btn-stop' : 'btn btn-start';
-}
-
-function updateStatus(status) {
+  // Pill di stato
   const pill = document.getElementById('statusPill');
-  const text = document.getElementById('statusText');
-  pill.className = 'status-pill';
-  if (status === 'running') {
-    pill.classList.add('status-running');
-    text.textContent = 'RUNNING';
-  } else if (status === 'stopped') {
-    pill.classList.add('status-stopped');
-    text.textContent = 'STOPPED';
+  const txt  = document.getElementById('statusText');
+  const btn  = document.getElementById('controlBtn');
+
+  if (s.running) {
+    pill.className = 'status-pill status-online';
+    txt.textContent = 'ONLINE';
+    btn.textContent = 'Ferma Bot';
+    btn.className   = 'btn btn-stop';
+    currentAction   = 'stop';
+    startSessionTimer(s.started_at);
   } else {
-    pill.classList.add('status-offline');
-    text.textContent = 'OFFLINE';
+    pill.className = 'status-pill status-offline';
+    txt.textContent = 'OFFLINE';
+    btn.textContent = 'Avvia Bot';
+    btn.className   = 'btn btn-start';
+    currentAction   = 'start';
+    stopSessionTimer();
   }
+
+  // Sessione attiva
+  const sn = document.getElementById('sessionName');
+  sn.textContent = s.session || '—';
+
+  // Last update
+  document.getElementById('lastUpdate').textContent =
+    'Aggiornato: ' + new Date().toLocaleTimeString('it-IT');
+
+  // KPI
+  const bal = s.balance ?? null;
+  document.getElementById('balance').textContent =
+    bal !== null ? '$' + bal.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  document.getElementById('balanceSub').textContent =
+    s.account_name ? s.account_name : '—';
+
+  setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
+  setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
+
+  const wr = s.win_rate_pct ?? null;
+  document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
+  document.getElementById('winRateSub').textContent =
+    (s.total_wins ?? 0) + 'W / ' + (s.total_losses ?? 0) + 'L';
+
+  document.getElementById('tradesToday').textContent = s.trades_today ?? '—';
+  document.getElementById('tradesSub').textContent   = 'max ' + (s.max_trades_day ?? '—') + '/giorno';
+
+  renderSignals(s.signals || []);
+  renderPositions(s.open_positions || []);
+  renderReasons(s.block_reasons || []);
+  renderClosedTrades(s.closed_trades_today || []);
 }
 
-function updateSession(session, minsToNext) {
-  const nameEl  = document.getElementById('sessionName');
-  const timerEl = document.getElementById('sessionTimer');
-  const colorMap = { 'LONDON': 'session-london', 'NY': 'session-ny', 'CLOSED': 'session-closed', 'EOD': 'session-eod' };
-  nameEl.className = 'session-name ' + (colorMap[session] || 'session-closed');
-  nameEl.textContent = session || '—';
-  if (session === 'LONDON') {
-    timerEl.textContent = '08:00–11:00 CET';
-  } else if (session === 'NY') {
-    timerEl.textContent = '14:00–17:00 CET';
-  } else if (minsToNext != null) {
-    const h = Math.floor(minsToNext / 60), m = minsToNext % 60;
-    timerEl.textContent = h > 0 ? `prossima tra ${h}h ${m}m` : `prossima tra ${m}m`;
-  } else {
-    timerEl.textContent = '';
-  }
+function setDD(valId, gaugeId, pct, limit) {
+  const el    = document.getElementById(valId);
+  const gauge = document.getElementById(gaugeId);
+  if (pct === null || pct === undefined) { el.textContent = '—'; return; }
+  el.textContent = pct.toFixed(2) + '%';
+  el.className = 'card-value ' + (pct > limit * 0.8 ? 'text-red' : pct > limit * 0.5 ? 'text-yellow' : 'text-green');
+  gauge.style.width = Math.min(pct / limit * 100, 100) + '%';
+  gauge.style.background = pct > limit * 0.8 ? 'var(--red)' : pct > limit * 0.5 ? 'var(--yellow)' : 'var(--accent)';
 }
 
-/* ── SIGNALS ────────────────────────────────────────────────────────────── */
-function renderSignals(symbols) {
-  const container = document.getElementById('signalsContainer');
-  const keys = Object.keys(symbols);
-  if (keys.length === 0) {
-    container.innerHTML = '<div class="text-muted">In attesa del bot...</div>';
-    return;
-  }
-  container.innerHTML = keys.map(sym => {
-    const d = symbols[sym];
-    const dir = d.last_signal;
-    const conf = d.confidence || 0;
-    const confOk = conf >= 0.78;
-    const dirHtml = dir
-      ? `<span class="signal-dir dir-${dir.toLowerCase()}">${dir === 'BUY' ? '▲' : '▼'} ${dir}</span>`
-      : `<span class="signal-dir dir-none">— NESSUNO</span>`;
-    const confText = dir ? conf.toFixed(2) + (confOk ? ' ✓' : ' ✗') : '—';
-    const confPct  = dir ? Math.min(conf * 100, 100) + '%' : '0%';
-    return `
-      <div class="signal-row">
-        <div>
-          <div class="signal-symbol">${sym}</div>
-          ${d.reason ? `<div class="signal-reason">${d.reason}</div>` : ''}
-        </div>
-        <div style="text-align:right">
-          ${dirHtml}
-          <div class="signal-conf" style="justify-content:flex-end; margin-top:6px;">
-            <div class="conf-bar"><div class="conf-fill ${confOk ? 'conf-ok' : 'conf-low'}" style="width:${confPct}"></div></div>
-            <span class="${confOk ? 'text-green' : 'text-red'}" style="font-size:11px;">${confText}</span>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
+/* ── Signals ─────────────────────────────────────────────────────────────── */
+function renderSignals(signals) {
+  const c = document.getElementById('signalsContainer');
+  if (!signals.length) { c.innerHTML = '<div class="text-muted">Nessun segnale attivo</div>'; return; }
+  c.innerHTML = signals.map(sig => `
+    <div class="signal-row">
+      <span class="sig-dir ${sig.direction === 'long' ? 'sig-long' : 'sig-short'}">${sig.direction.toUpperCase()}</span>
+      <span style="font-weight:600;">${escHtml(sig.symbol)}</span>
+      <span class="text-muted" style="font-size:12px;">${escHtml(sig.reason || '')}</span>
+      <span class="text-muted" style="margin-left:auto; font-size:11px;">${escHtml(sig.time || '')}</span>
+    </div>`).join('');
 }
 
-/* ── POSITIONS ──────────────────────────────────────────────────────────── */
-function renderPositions(trades) {
-  const container = document.getElementById('positionsContainer');
-  if (!trades || trades.length === 0) {
-    container.innerHTML = '<div class="no-pos">Nessuna posizione aperta</div>';
-    return;
-  }
-  const rows = trades.map(t => {
-    const pnl = t.pnl != null ? t.pnl : null;
-    const pnlHtml = pnl != null
-      ? `<span class="${pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero'}">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`
-      : '<span class="text-muted">—</span>';
-    const dirColor = t.direction === 'buy' ? 'text-blue' : 'text-red';
-    return `
-      <tr>
-        <td><strong>${t.symbol}</strong></td>
-        <td class="${dirColor}">${t.direction.toUpperCase()}</td>
-        <td>lot ${t.lot_size}</td>
-        <td class="text-muted" style="font-size:11px;">${t.entry_price ? t.entry_price.toFixed(t.symbol.includes('XAU') ? 2 : 5) : '—'}</td>
-        <td>${pnlHtml}</td>
-      </tr>`;
-  }).join('');
-  container.innerHTML = `
+/* ── Positions ───────────────────────────────────────────────────────────── */
+function renderPositions(pos) {
+  const c = document.getElementById('positionsContainer');
+  if (!pos.length) { c.innerHTML = '<div class="no-pos">Nessuna posizione aperta</div>'; return; }
+  c.innerHTML = `
     <table class="pos-table">
-      <thead><tr><th>Simbolo</th><th>Dir.</th><th>Size</th><th>Entry</th><th>P&amp;L</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+      <thead><tr><th>Simbolo</th><th>Dir.</th><th>Entry</th><th>SL</th><th>TP</th><th>P&amp;L</th></tr></thead>
+      <tbody>` + pos.map(p => {
+    const pnlCls = (p.pnl ?? 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    return `<tr>
+      <td style="font-weight:600;">${escHtml(p.symbol)}</td>
+      <td class="${p.direction === 'long' ? 'text-blue' : 'text-red'}">${p.direction.toUpperCase()}</td>
+      <td>${p.entry}</td><td class="text-muted">${p.sl}</td><td class="text-muted">${p.tp}</td>
+      <td class="${pnlCls}">${(p.pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(p.pnl ?? 0).toFixed(2)}</td>
+    </tr>`;
+  }).join('') + '</tbody></table>';
 }
 
-/* ── CLOSED TRADES ──────────────────────────────────────────────────────── */
-function renderClosed(trades) {
-  const container = document.getElementById('closedContainer');
-  if (!trades || trades.length === 0) {
-    container.innerHTML = '<div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>';
-    return;
-  }
-  const rows = [...trades].reverse().slice(0, 20).map(t => {
-    const pnl = t.pnl != null ? t.pnl : 0;
-    const result = t.result || (pnl > 0 ? 'win' : 'loss');
-    const pnlCls = pnl > 0 ? 'pnl-pos' : 'pnl-neg';
-    const closeTime = t.close_time ? new Date(t.close_time).toLocaleTimeString('it-IT') : '—';
-    const dirColor = t.direction === 'buy' ? 'text-blue' : 'text-red';
-    return `
-      <tr>
-        <td><strong>${t.symbol}</strong></td>
-        <td class="${dirColor}">${t.direction.toUpperCase()}</td>
-        <td>lot ${t.lot_size}</td>
-        <td class="${pnlCls}">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
-        <td><span class="badge ${result === 'win' ? 'badge-win' : 'badge-loss'}">${result.toUpperCase()}</span></td>
-        <td class="text-muted" style="font-size:11px;">${closeTime}</td>
-      </tr>`;
-  }).join('');
-  container.innerHTML = `
-    <table class="pos-table">
-      <thead><tr><th>Simbolo</th><th>Dir.</th><th>Size</th><th>P&amp;L</th><th>Esito</th><th>Ora</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-}
-
-/* ── REASONS ────────────────────────────────────────────────────────────── */
+/* ── Reasons ─────────────────────────────────────────────────────────────── */
 function renderReasons(reasons) {
   const list = document.getElementById('reasonList');
-  if (!reasons || reasons.length === 0) {
-    list.innerHTML = '<li class="reason-item reason-info"><span class="reason-icon">⏳</span><span>In attesa del prossimo ciclo...</span></li>';
+  if (!reasons.length) {
+    list.innerHTML = '<li class="reason-item reason-info"><span class="reason-icon">⏳</span><span>In attesa del primo ciclo...</span></li>';
     return;
   }
-  const iconMap = { ok: '✅', warn: '🚫', info: '💤' };
-  list.innerHTML = reasons.map(r => `
-    <li class="reason-item reason-${r.level || 'info'}">
-      <span class="reason-icon">${iconMap[r.level] || '•'}</span>
-      <span>${escHtml(r.msg)}</span>
-    </li>`).join('');
+  list.innerHTML = reasons.map(r => {
+    const cls  = r.type === 'ok' ? 'reason-ok' : r.type === 'warning' ? 'reason-warning' : r.type === 'block' ? 'reason-block' : 'reason-info';
+    const icon = r.type === 'ok' ? '✓' : r.type === 'warning' ? '⚠' : r.type === 'block' ? '✗' : 'ℹ';
+    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.message)}</span></li>`;
+  }).join('');
 }
 
-/* ── LOG ────────────────────────────────────────────────────────────────── */
+/* ── Closed trades ───────────────────────────────────────────────────────── */
+function renderClosedTrades(trades) {
+  const c = document.getElementById('closedContainer');
+  if (!trades.length) { c.innerHTML = '<div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>'; return; }
+  c.innerHTML = trades.map(t => {
+    const pnlCls = (t.pnl ?? 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    return `<div class="trade-row">
+      <span class="text-muted" style="font-size:11px;">${escHtml(t.close_time || '')}</span>
+      <span style="font-weight:600;">${escHtml(t.symbol)}</span>
+      <span class="${t.direction === 'long' ? 'text-blue' : 'text-red'}">${t.direction.toUpperCase()}</span>
+      <span class="${pnlCls}">${(t.pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(t.pnl ?? 0).toFixed(2)}</span>
+      <span class="badge ${(t.pnl ?? 0) >= 0 ? 'badge-win' : 'badge-loss'}">${(t.pnl ?? 0) >= 0 ? 'WIN' : 'LOSS'}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── Log live ────────────────────────────────────────────────────────────── */
 function renderLog(lines) {
   const body = document.getElementById('logBody');
-  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 30;
-  body.innerHTML = lines.map(line => {
-    let cls = 'log-default';
-    if (line.includes('[ERROR]') || line.includes('Errore') || line.includes('CRITICO')) cls = 'log-error';
-    else if (line.includes('[WARNING]') || line.includes('LOSS') || line.includes('bloccato')) cls = 'log-warning';
-    else if (line.includes('[STATUS]') || line.includes('Balance=')) cls = 'log-status';
-    else if (line.includes('APERTURA') || line.includes('WIN') || line.includes('trade aperto')) cls = 'log-trade';
-    else if (line.includes('[SMC]') || line.includes('[ML]') || line.includes('[BOT]')) cls = 'log-info';
-    return `<div class="log-line ${cls}">${escHtml(line)}</div>`;
+  if (!lines || !lines.length) {
+    body.innerHTML = '<div class="log-default">In attesa del log...</div>';
+    return;
+  }
+  body.innerHTML = lines.map(l => {
+    let cls = '';
+    if (/error|errore|exception/i.test(l)) cls = 'log-line-err';
+    else if (/warn|warning/i.test(l))       cls = 'log-line-warn';
+    else if (/ok|success|avviato/i.test(l)) cls = 'log-line-ok';
+    return `<div class="${cls}">${escHtml(l)}</div>`;
   }).join('');
-  if (document.getElementById('autoScrollCheck').checked && atBottom) {
-    body.scrollTop = body.scrollHeight;
-  }
+  const chk = document.getElementById('autoScrollCheck');
+  if (chk && chk.checked) body.scrollTop = body.scrollHeight;
 }
 
-/* ── HELPERS ────────────────────────────────────────────────────────────── */
-function ddColor(val, limit) {
-  const pct = val / limit;
-  if (pct < 0.5) return 'text-green';
-  if (pct < 0.8) return 'text-yellow';
-  return 'text-red';
+/* ── Session timer ───────────────────────────────────────────────────────── */
+function startSessionTimer(startedAt) {
+  if (_sessionTimer) return;
+  _sessionStart = startedAt ? new Date(startedAt) : new Date();
+  _sessionTimer = setInterval(() => {
+    const diff = Math.floor((Date.now() - _sessionStart) / 1000);
+    const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+    const s = String(diff % 60).padStart(2, '0');
+    document.getElementById('sessionTimer').textContent = ` · ${h}:${m}:${s}`;
+  }, 1000);
 }
-function gaugeColor(pct) {
-  if (pct < 50)  return '#3fb950';
-  if (pct < 80)  return '#d29922';
-  return '#f85149';
-}
-function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-/* ── POLLING ────────────────────────────────────────────────────────────── */
-fetchState();
-fetchLog();
-setInterval(fetchState, 5000);
-setInterval(fetchLog,   5000);
-
-/* ── DATI & MODELLO ─────────────────────────────────────────────────────── */
-let _downloadPolling = null;
-let _trainPolling    = null;
-
-async function refreshDataFiles() {
-  try {
-    const res  = await fetch('/api/data/files');
-    const data = await res.json();
-    renderDataFiles(data.files || []);
-  } catch (e) {}
+function stopSessionTimer() {
+  clearInterval(_sessionTimer); _sessionTimer = null;
+  document.getElementById('sessionTimer').textContent = '';
 }
 
-function renderDataFiles(files) {
-  const el = document.getElementById('dataFilesList');
-  if (!files.length) {
-    el.innerHTML = '<div class="dm-empty">Nessun CSV trovato in data/ — scarica i dati prima di addestrare</div>';
-    return;
-  }
-  el.innerHTML = files.map(f => `
-    <div class="dm-file-item">
-      <div>
-        <div class="dm-file-name">${escHtml(f.name)}</div>
-        <div class="dm-file-meta">${f.rows ? f.rows.toLocaleString('it-IT') + ' candele' : ''} ${f.from ? '· ' + f.from + ' → ' + f.to : ''} ${f.size_mb ? '· ' + f.size_mb + ' MB' : ''}</div>
-      </div>
-      <span class="dm-file-badge">✓</span>
-    </div>`).join('');
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   DATI & MODELLO
+══════════════════════════════════════════════════════════════════════════ */
+let _dlPolling = null;
+let _trPolling = null;
 
-async function refreshModelFiles() {
-  try {
-    const res  = await fetch('/api/models/files');
-    const data = await res.json();
-    renderModelFiles(data.models || []);
-  } catch (e) {}
-}
-
-function renderModelFiles(models) {
-  const el = document.getElementById('modelFilesList');
-  if (!models.length) {
-    el.innerHTML = '<div class="dm-empty">Nessun modello trovato — addestra il modello</div>';
-    return;
-  }
-  el.innerHTML = models.map(m => `
-    <div class="dm-file-item">
-      <div>
-        <div class="dm-file-name">${escHtml(m.name)}</div>
-        <div class="dm-file-meta">${m.size_mb} MB · aggiornato ${escHtml(m.modified)}</div>
-      </div>
-      <span class="dm-file-badge">✓</span>
-    </div>`).join('');
-}
-
+/* ── Download ──────────────────────────────────────────────────────────── */
 async function startDownload() {
   const years = parseInt(document.getElementById('yearsInput').value) || 4;
   document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('downloadError').style.display = 'none';
   try {
-    const res  = await fetch('/api/data/download', {
+    const res  = await fetch('/api/download_data', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ years })
     });
     const data = await res.json();
     if (!data.ok) {
-      showDownloadError(data.error || 'Errore avvio download');
+      document.getElementById('downloadError').textContent = data.error || 'Errore';
+      document.getElementById('downloadError').style.display = '';
       document.getElementById('downloadBtn').disabled = false;
       return;
     }
   } catch (e) {
-    showDownloadError('Errore di rete');
+    document.getElementById('downloadError').textContent = 'Errore di rete';
+    document.getElementById('downloadError').style.display = '';
     document.getElementById('downloadBtn').disabled = false;
     return;
   }
-  clearInterval(_downloadPolling);
-  _downloadPolling = setInterval(pollDownload, 1500);
+  clearInterval(_dlPolling);
+  _dlPolling = setInterval(pollDownload, 1500);
   pollDownload();
 }
 
 async function pollDownload() {
   try {
-    const res  = await fetch('/api/data/status');
+    const res  = await fetch('/api/download_status');
     const data = await res.json();
     renderDownloadStatus(data);
-    if (data.done || (!data.running && !data.started_at)) {
-      clearInterval(_downloadPolling);
+    if (!data.running) {
+      clearInterval(_dlPolling);
       document.getElementById('downloadBtn').disabled = false;
       refreshDataFiles();
     }
@@ -923,78 +834,81 @@ async function pollDownload() {
 function renderDownloadStatus(s) {
   const badge = document.getElementById('downloadStatusBadge');
   const prog  = document.getElementById('downloadProgress');
-  const errEl = document.getElementById('downloadError');
-  if (s.error) {
-    badge.className = 'dm-status-badge dm-status-error';
-    badge.textContent = 'Errore';
-    errEl.textContent = s.error;
-    errEl.style.display = '';
-    prog.style.display = 'none';
-    return;
-  }
-  errEl.style.display = 'none';
+
   if (s.running) {
-    badge.className = 'dm-status-badge dm-status-running';
+    badge.className   = 'dm-status-badge dm-status-running';
     badge.textContent = 'Download in corso...';
-  } else if (s.done) {
-    badge.className = 'dm-status-badge dm-status-done';
-    badge.textContent = 'Download completato';
-  } else {
-    badge.className = 'dm-status-badge dm-status-idle';
-    badge.textContent = 'Pronto';
-    prog.style.display = 'none';
-    return;
-  }
-  const syms = s.symbols || {};
-  if (Object.keys(syms).length === 0) { prog.style.display = 'none'; return; }
-  prog.style.display = '';
-  prog.innerHTML = Object.entries(syms).map(([sym, info]) => {
-    const stateColor = info.state === 'done' ? '#3fb950' : info.state === 'error' ? '#f85149' : '#388bfd';
-    const fillPct    = info.state === 'done' ? 100 : info.state === 'error' ? 100 : 60;
-    return `
-      <div class="dm-sym-row">
-        <div class="dm-sym-name">${escHtml(sym)}</div>
-        <div class="dm-sym-bar"><div class="dm-sym-fill" style="width:${fillPct}%; background:${stateColor};"></div></div>
-        <div class="dm-sym-msg">${escHtml(info.msg || info.state)}</div>
+    prog.style.display = '';
+    const symbols = s.symbols || [];
+    const done    = s.completed || {};
+    prog.innerHTML = symbols.map(sym => {
+      const pct = done[sym] || 0;
+      return `<div class="dm-progress-item">
+        <div class="dm-progress-label">${escHtml(sym)} — ${pct}%</div>
+        <div class="dm-progress-track"><div class="dm-progress-fill" style="width:${pct}%"></div></div>
       </div>`;
-  }).join('');
+    }).join('');
+  } else if (s.error) {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore download';
+    prog.style.display = 'none';
+    document.getElementById('downloadError').textContent = s.error;
+    document.getElementById('downloadError').style.display = '';
+  } else {
+    badge.className   = 'dm-status-badge ' + (s.done ? 'dm-status-done' : 'dm-status-idle');
+    badge.textContent = s.done ? 'Download completato' : 'Nessun download in corso';
+    prog.style.display = 'none';
+  }
 }
 
-function showDownloadError(msg) {
-  document.getElementById('downloadError').textContent = msg;
-  document.getElementById('downloadError').style.display = '';
-  const badge = document.getElementById('downloadStatusBadge');
-  badge.className = 'dm-status-badge dm-status-error';
-  badge.textContent = 'Errore';
+async function refreshDataFiles() {
+  try {
+    const res  = await fetch('/api/data_files');
+    const data = await res.json();
+    const list = document.getElementById('dataFilesList');
+    const files = data.files || [];
+    if (!files.length) { list.innerHTML = '<div class="dm-empty">Nessun file CSV presente</div>'; return; }
+    list.innerHTML = files.map(f => `
+      <div class="dm-file-item">
+        <span class="dm-file-name">${escHtml(f.name)}</span>
+        <span class="dm-file-size">${escHtml(f.size)}</span>
+      </div>`).join('');
+  } catch (e) {}
 }
 
+/* ── Training ──────────────────────────────────────────────────────────── */
 async function startTraining() {
   document.getElementById('trainBtn').disabled = true;
+  document.getElementById('trainError').style.display = 'none';
+  document.getElementById('trainOutput').style.display = 'none';
+  document.getElementById('trainOutput').textContent = '';
   try {
     const res  = await fetch('/api/train', { method: 'POST' });
     const data = await res.json();
     if (!data.ok) {
-      showTrainError(data.error || 'Errore avvio training');
+      document.getElementById('trainError').textContent = data.error || 'Errore';
+      document.getElementById('trainError').style.display = '';
       document.getElementById('trainBtn').disabled = false;
       return;
     }
   } catch (e) {
-    showTrainError('Errore di rete');
+    document.getElementById('trainError').textContent = 'Errore di rete';
+    document.getElementById('trainError').style.display = '';
     document.getElementById('trainBtn').disabled = false;
     return;
   }
-  clearInterval(_trainPolling);
-  _trainPolling = setInterval(pollTraining, 1500);
+  clearInterval(_trPolling);
+  _trPolling = setInterval(pollTraining, 1500);
   pollTraining();
 }
 
 async function pollTraining() {
   try {
-    const res  = await fetch('/api/train/status');
+    const res  = await fetch('/api/train_status');
     const data = await res.json();
     renderTrainStatus(data);
-    if (data.done && !data.running) {
-      clearInterval(_trainPolling);
+    if (!data.running) {
+      clearInterval(_trPolling);
       document.getElementById('trainBtn').disabled = false;
       refreshModelFiles();
     }
@@ -1002,51 +916,232 @@ async function pollTraining() {
 }
 
 function renderTrainStatus(s) {
-  const badge = document.getElementById('trainStatusBadge');
-  const outEl = document.getElementById('trainOutput');
-  const errEl = document.getElementById('trainError');
-  if (s.error) {
-    badge.className = 'dm-status-badge dm-status-error';
-    badge.textContent = 'Errore';
-    errEl.textContent = s.error;
-    errEl.style.display = '';
-  } else if (s.running) {
-    badge.className = 'dm-status-badge dm-status-running';
+  const badge  = document.getElementById('trainStatusBadge');
+  const outEl  = document.getElementById('trainOutput');
+
+  if (s.running) {
+    badge.className   = 'dm-status-badge dm-status-running';
     badge.textContent = 'Training in corso...';
-    errEl.style.display = 'none';
+  } else if (s.error) {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore training';
+    document.getElementById('trainError').textContent = s.error;
+    document.getElementById('trainError').style.display = '';
   } else if (s.done) {
-    badge.className = 'dm-status-badge dm-status-done';
+    badge.className   = 'dm-status-badge dm-status-done';
     badge.textContent = 'Training completato';
-    errEl.style.display = 'none';
   } else {
-    badge.className = 'dm-status-badge dm-status-idle';
-    badge.textContent = 'Pronto';
-    errEl.style.display = 'none';
+    badge.className   = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Nessun training in corso';
   }
+
   const lines = s.output || [];
-  if (lines.length > 0) {
-    outEl.classList.add('visible');
-    outEl.innerHTML = lines.map(l => escHtml(l)).join('\n');
-    outEl.scrollTop = outEl.scrollHeight;
-  } else {
-    outEl.classList.remove('visible');
+  if (lines.length) {
+    outEl.style.display = '';
+    outEl.textContent   = lines.join('\n');
+    outEl.scrollTop     = outEl.scrollHeight;
   }
 }
 
-function showTrainError(msg) {
-  document.getElementById('trainError').textContent = msg;
-  document.getElementById('trainError').style.display = '';
-  const badge = document.getElementById('trainStatusBadge');
-  badge.className = 'dm-status-badge dm-status-error';
+async function refreshModelFiles() {
+  try {
+    const res  = await fetch('/api/model_files');
+    const data = await res.json();
+    const list = document.getElementById('modelFilesList');
+    const files = data.files || [];
+    if (!files.length) { list.innerHTML = '<div class="dm-empty">Nessun modello .pkl presente</div>'; return; }
+    list.innerHTML = files.map(f => `
+      <div class="dm-file-item">
+        <span class="dm-file-name">${escHtml(f.name)}</span>
+        <span class="dm-file-size">${escHtml(f.size)}</span>
+      </div>`).join('');
+  } catch (e) {}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BACKTEST
+══════════════════════════════════════════════════════════════════════════ */
+let _btPolling = null;
+
+async function startBacktest() {
+  const symbol    = document.getElementById('btSymbol').value;
+  const startDate = document.getElementById('btStartDate').value;
+  const endDate   = document.getElementById('btEndDate').value;
+
+  if (!startDate || !endDate) { showBtError('Seleziona un periodo valido'); return; }
+  if (startDate >= endDate)   { showBtError('La data di inizio deve essere precedente alla data di fine'); return; }
+
+  document.getElementById('btRunBtn').disabled = true;
+  document.getElementById('btError').style.display = 'none';
+  document.getElementById('btResults').className = 'bt-results-hidden';
+  document.getElementById('btLog').classList.remove('visible');
+  document.getElementById('btLog').textContent = '';
+
+  try {
+    const res  = await fetch('/api/backtest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, start_date: startDate, end_date: endDate })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showBtError(data.error || 'Errore avvio backtest');
+      document.getElementById('btRunBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    showBtError('Errore di rete');
+    document.getElementById('btRunBtn').disabled = false;
+    return;
+  }
+
+  clearInterval(_btPolling);
+  _btPolling = setInterval(pollBacktest, 1200);
+  pollBacktest();
+}
+
+async function pollBacktest() {
+  try {
+    const res  = await fetch('/api/backtest/status');
+    const data = await res.json();
+    renderBtStatus(data);
+    if (!data.running && data.status !== 'running') {
+      clearInterval(_btPolling);
+      document.getElementById('btRunBtn').disabled = false;
+      if (data.results) renderBtResults(data.results);
+    }
+  } catch (e) {}
+}
+
+function renderBtStatus(s) {
+  const badge    = document.getElementById('btStatusBadge');
+  const progWrap = document.getElementById('btProgressWrap');
+  const progFill = document.getElementById('btProgressFill');
+  const progLbl  = document.getElementById('btProgressLabel');
+  const errEl    = document.getElementById('btError');
+  const logEl    = document.getElementById('btLog');
+
+  if (s.status === 'running') {
+    badge.className   = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Backtest in corso...';
+    progWrap.style.display = '';
+  } else if (s.status === 'done') {
+    badge.className   = 'dm-status-badge dm-status-done';
+    badge.textContent = 'Completato';
+    progWrap.style.display = 'none';
+  } else if (s.status === 'error') {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore';
+    progWrap.style.display = 'none';
+  } else {
+    badge.className   = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Pronto';
+    progWrap.style.display = 'none';
+  }
+
+  const pct = s.progress || 0;
+  progFill.style.width = pct + '%';
+  progLbl.textContent  = pct + '%';
+
+  if (s.error) { errEl.textContent = s.error; errEl.style.display = ''; }
+  else         { errEl.style.display = 'none'; }
+
+  const lines = s.log || [];
+  if (lines.length) {
+    logEl.classList.add('visible');
+    logEl.textContent = lines.join('\n');
+    logEl.scrollTop   = logEl.scrollHeight;
+  }
+}
+
+function renderBtResults(r) {
+  const wr = r.win_rate || 0;
+  btSet('btNTrades', r.n_trades, '');
+  btSetCls('btWinRate',  r.win_rate + '%',     wr >= 50 ? 'text-green' : 'text-red');
+  const pf = r.profit_factor || 0;
+  btSetCls('btPF',    pf,                       pf >= 1.5 ? 'text-green' : pf >= 1 ? 'text-yellow' : 'text-red');
+  const nr = r.net_r || 0;
+  btSetCls('btNetR',  (nr > 0 ? '+' : '') + nr + 'R', nr > 0 ? 'text-green' : 'text-red');
+  const dd = r.max_dd_pct || 0;
+  btSetCls('btMaxDD', dd + '%',                dd < 5 ? 'text-green' : dd < 8 ? 'text-yellow' : 'text-red');
+
+  btSet('btBalance', '$' + (r.final_balance || 0).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}), '');
+  const npnl = r.net_pnl || 0; const npct = r.net_pnl_pct || 0;
+  btSetCls('btNetPnl', (npnl > 0 ? '+' : '') + '$' + Math.abs(npnl).toLocaleString('it-IT', {minimumFractionDigits:2}) + ' (' + (npct > 0 ? '+' : '') + npct.toFixed(1) + '%)', npnl > 0 ? 'text-green' : 'text-red');
+  const sh = r.sharpe || 0;
+  btSetCls('btSharpe', sh, sh >= 1.5 ? 'text-green' : sh >= 0.5 ? 'text-yellow' : 'text-muted');
+  btSet('btAvgWin',  '+' + (r.avg_win_r  || 0) + 'R', 'text-green');
+  btSet('btAvgLoss', (r.avg_loss_r || 0) + 'R',        'text-red');
+
+  const trades = r.trades || [];
+  document.getElementById('btTradeCount').textContent =
+    '(' + (r.n_wins || 0) + ' WIN / ' + (r.n_losses || 0) + ' LOSS' +
+    (trades.length < r.n_trades ? ' — ultimi ' + trades.length : '') + ')';
+  document.getElementById('btMlBadge').textContent =
+    r.ml_used ? '✓ con filtro ML' : '○ solo SMC (modello ML non trovato)';
+
+  document.getElementById('btTradesTbody').innerHTML = trades.map(t => {
+    const isWin  = t.outcome === 'WIN';
+    const rCls   = t.r > 0 ? 'text-green' : 'text-red';
+    const pnlCls = t.pnl > 0 ? 'pnl-pos' : 'pnl-neg';
+    const dirCls = t.direction === 'long' ? 'text-blue' : 'text-red';
+    const dec    = t.symbol === 'XAUUSD' ? 2 : 5;
+    return `<tr>
+      <td class="text-muted">${escHtml(t.time)}</td>
+      <td class="text-muted">${escHtml(t.exit_time)}</td>
+      <td class="${dirCls}">${t.direction.toUpperCase()}</td>
+      <td>${t.entry.toFixed(dec)}</td>
+      <td class="text-muted">${t.sl.toFixed(dec)}</td>
+      <td class="text-muted">${t.tp.toFixed(dec)}</td>
+      <td>${t.exit.toFixed(dec)}</td>
+      <td><span class="badge ${isWin ? 'badge-win' : 'badge-loss'}">${t.outcome}</span></td>
+      <td style="text-align:right;" class="${rCls}">${t.r > 0 ? '+' : ''}${t.r}R</td>
+      <td style="text-align:right;" class="${pnlCls}">${t.pnl > 0 ? '+' : ''}$${Math.abs(t.pnl).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('btResults').className = '';
+}
+
+function showBtError(msg) {
+  const errEl = document.getElementById('btError');
+  errEl.textContent = msg; errEl.style.display = '';
+  const badge = document.getElementById('btStatusBadge');
+  badge.className   = 'dm-status-badge dm-status-error';
   badge.textContent = 'Errore';
 }
 
-/* ── INIT ───────────────────────────────────────────────────────────────── */
+function btSet(id, val, cls) {
+  const el = document.getElementById(id); if (!el) return;
+  el.textContent = val;
+  if (cls) { el.className = 'bt-kpi-value'; el.classList.add(...cls.split(' ').filter(Boolean)); }
+}
+function btSetCls(id, val, cls) { btSet(id, val, cls); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════════════════════════ */
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   INIT & POLLING
+══════════════════════════════════════════════════════════════════════════ */
+fetchState();
+fetchLog();
 refreshDataFiles();
 refreshModelFiles();
+
+setInterval(fetchState, 5000);
+setInterval(fetchLog,   5000);
 setInterval(() => { refreshDataFiles(); refreshModelFiles(); }, 30000);
+
+// Controlla se c'è un download/training/backtest già in corso al load
 pollDownload();
 pollTraining();
+pollBacktest();
 </script>
 </body>
 </html>
