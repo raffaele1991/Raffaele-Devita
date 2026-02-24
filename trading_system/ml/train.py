@@ -43,11 +43,17 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
         df = pd.read_csv(filepath, sep="\t")
         df.columns = [c.strip("<>").lower() for c in df.columns]
 
+        # Se la lettura tab ha prodotto una sola colonna, il file è CSV a virgola
+        if len(df.columns) < 4:
+            raise ValueError("Formato tab non valido — provo CSV a virgola")
+
         # Colonne attese: date, time, open, high, low, close, tickvol, vol, spread
         if "date" in df.columns and "time" in df.columns:
             df["datetime"] = pd.to_datetime(df["date"] + " " + df["time"])
         elif "datetime" in df.columns:
             df["datetime"] = pd.to_datetime(df["datetime"])
+        else:
+            raise ValueError("Colonna datetime non trovata nel formato tab")
 
         df = df.rename(columns={
             "tickvol": "volume",
@@ -55,7 +61,7 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
         })
 
     except Exception:
-        # Prova formato CSV standard
+        # Prova formato CSV standard (virgola)
         df = pd.read_csv(filepath)
         df.columns = [c.strip().lower() for c in df.columns]
         if "date" in df.columns and "time" in df.columns:
@@ -107,19 +113,20 @@ def train_symbol(symbol: str):
     print("  Rilevamento struttura SMC...")
     df = detect_structure(df)
 
-    print("  Costruzione feature...")
-    df = build_features(df)
+    print("  Costruzione feature (incluse feature SMC specifiche)...")
+    df = build_features(df, symbol=symbol)
 
-    print("  Costruzione etichette (lookahead 10 candele)...")
-    labels = build_labels(df, lookahead=10)
+    print("  Costruzione etichette (lookahead 30 candele)...")
+    labels = build_labels(df, lookahead=30)
     df["label"] = labels
 
     # Rimuovi righe senza etichetta o feature incomplete
     df = df.dropna(subset=FEATURE_COLUMNS + ["label"])
-    df = df[df["trend_num"] != 0]  # trada solo quando c'è un trend
+    df = df[df["trend_num"] != 0]    # trada solo quando c'è un trend
+    df = df[df["ob_age_norm"] > 0]   # solo bar con OB attivo = segnali reali SMC
 
     win_rate = df["label"].mean() * 100
-    print(f"  Campioni validi: {len(df):,}  |  Win rate storico: {win_rate:.1f}%")
+    print(f"  Campioni OB-segnale: {len(df):,}  |  Win rate storico: {win_rate:.1f}%")
 
     if len(df) < 500:
         print(f"[WARN] Troppo pochi campioni ({len(df)}). Servono almeno 500.")

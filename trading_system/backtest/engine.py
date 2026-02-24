@@ -182,22 +182,25 @@ def run_backtest(
     _log(f"Da               : {df['time'].iloc[0]}")
     _log(f"A                : {df['time'].iloc[-1]}")
 
-    # 2. Carica modello ML (opzionale)
+    # 2. Carica modello ML (opzionale, controllato da config.USE_ML_FILTER)
     ml_model: Optional[SMCMLModel] = None
-    model_path = os.path.join(
-        os.path.dirname(__file__), '..', 'models',
-        f"model_{symbol.lower()}.pkl"
-    )
-    if os.path.exists(model_path):
-        try:
-            ml_model = SMCMLModel(symbol)
-            ml_model.load()
-            _log(f"Modello ML caricato ✓")
-        except Exception as e:
-            _log(f"Avviso ML: {e} → procedo solo con SMC")
-            ml_model = None
+    if not config.USE_ML_FILTER:
+        _log("Filtro ML disabilitato (USE_ML_FILTER=False) → backtest solo SMC")
     else:
-        _log("Modello ML non trovato → backtest solo SMC (senza filtro ML)")
+        model_path = os.path.join(
+            os.path.dirname(__file__), '..', 'models',
+            f"model_{symbol.lower()}.pkl"
+        )
+        if os.path.exists(model_path):
+            try:
+                ml_model = SMCMLModel(symbol)
+                ml_model.load()
+                _log(f"Modello ML caricato ✓  (soglia={config.ML_CONFIDENCE_THRESHOLD})")
+            except Exception as e:
+                _log(f"Avviso ML: {e} → procedo solo con SMC")
+                ml_model = None
+        else:
+            _log("Modello ML non trovato → backtest solo SMC (senza filtro ML)")
 
     # 3. Parametri
     detector = SMCDetector(symbol)
@@ -268,7 +271,7 @@ def run_backtest(
         # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
             try:
-                feat_df = build_features(ctx_struct)
+                feat_df = build_features(ctx_struct, symbol=symbol)
                 if len(feat_df) == 0:
                     _diag["ml_blocked"] += 1
                     i += 1
