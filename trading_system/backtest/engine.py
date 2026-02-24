@@ -311,17 +311,36 @@ def run_backtest(
         for j in range(i + 1, min(i + MAX_HOLD + 1, len(df))):
             fut = df.iloc[j]
             if dirn == 'long':
-                if fut['low'] <= sl:
+                sl_hit = fut['low']  <= sl
+                tp_hit = fut['high'] >= tp
+                if sl_hit and tp_hit:
+                    # Entrambi nella stessa candela M5: usa la direzione della candela
+                    # come proxy dell'ordine intra-bar (bullish → TP colpito prima)
+                    if fut['close'] >= fut['open']:
+                        outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
+                    else:
+                        outcome, exit_price, exit_time, exit_bar = 'SL', sl, fut['time'], j
+                    break
+                elif sl_hit:
                     outcome, exit_price, exit_time, exit_bar = 'SL', sl, fut['time'], j
                     break
-                if fut['high'] >= tp:
+                elif tp_hit:
                     outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
                     break
             else:
-                if fut['high'] >= sl:
+                sl_hit = fut['high'] >= sl
+                tp_hit = fut['low']  <= tp
+                if sl_hit and tp_hit:
+                    # Candela bearish → TP colpito prima nel setup short
+                    if fut['close'] <= fut['open']:
+                        outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
+                    else:
+                        outcome, exit_price, exit_time, exit_bar = 'SL', sl, fut['time'], j
+                    break
+                elif sl_hit:
                     outcome, exit_price, exit_time, exit_bar = 'SL', sl, fut['time'], j
                     break
-                if fut['low'] <= tp:
+                elif tp_hit:
                     outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
                     break
 
@@ -413,8 +432,13 @@ def run_backtest(
     _log(f"{'─' * 50}")
     _log(f"  RISULTATI FINALI")
     _log(f"{'─' * 50}")
+    avg_win_r  = float(np.mean([t['r'] for t in wins]))   if wins   else 0.0
+    avg_loss_r = float(np.mean([t['r'] for t in losses])) if losses else 0.0
+
     _log(f"  Trade totali  : {n}")
     _log(f"  Win Rate      : {len(wins)/n*100:.1f}%  ({len(wins)}W / {len(losses)}L)")
+    _log(f"  Avg Win R     : {avg_win_r:+.2f}R")
+    _log(f"  Avg Loss R    : {avg_loss_r:+.2f}R")
     _log(f"  Profit Factor : {gross_profit/gross_loss:.2f}")
     _log(f"  Net R         : {sum(r_series):+.2f}R")
     _log(f"  Max Drawdown  : {max_dd_pct:.2f}%")

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 from .structure import detect_structure
 from .zones import find_order_blocks, find_fvg, find_liquidity_levels
+from trading_system import config
 
 # OB rilevanti solo se formati entro questi bar dalla candela corrente
 OB_MAX_AGE_BARS = 80
@@ -36,8 +37,9 @@ class SMCDetector:
     Il segnale richiede:
       1. Trend confermato (BOS / CHoCH)
       2. Prezzo ritorna su un Order Block attivo
-      3. Presence di FVG nella stessa zona
-      4. (Bonus) Sweep di liquidità prima dell'inversione
+      3. SL/TP basati su ATR (allineati con le label del modello ML)
+      4. (Bonus) FVG nella zona impulso vicino all'OB
+      5. (Bonus) Sweep di liquidità prima dell'inversione
     """
 
     def __init__(self, symbol: str):
@@ -68,7 +70,7 @@ class SMCDetector:
         last_low  = last["low"]
         last_high = last["high"]
 
-        # ATR per tolleranza di prossimità all'OB (candele M5)
+        # ATR per sizing di SL/TP e tolleranze di prossimità
         tr = pd.concat([
             df["high"] - df["low"],
             (df["high"] - df["close"].shift(1)).abs(),
@@ -78,47 +80,55 @@ class SMCDetector:
         if pd.isna(atr) or atr <= 0:
             atr = (df["high"] - df["low"]).mean()
 
+        # SL/TP basati su ATR – identici alla logica di build_labels in features.py
+        # Questo garantisce che le previsioni del modello ML corrispondano
+        # esattamente agli esiti reali simulati dal backtest.
+        sl_dist = atr * config.ATR_SL_MULTIPLIER
+        tp_dist = sl_dist * config.MIN_RISK_REWARD
+
         # ── LONG SETUP ─────────────────────────────────────────────────────
         if trend == 1:
             # Bullish OB valido se:
             # - OB recente (max OB_MAX_AGE_BARS bar fa)
-            # - il LOW è entro 1 ATR dal top dell'OB (tocco o avvicinamento)
-            # - il CLOSE è sopra il fondo dell'OB (rimbalzo)
+            # - il LOW è entro 0.5 ATR dal top dell'OB (tocco o avvicinamento ravvicinato)
+            # - il CLOSE è sopra il fondo dell'OB (rimbalzo confermato)
             active_bull_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bullish"
                 and ob.active
                 and (last_idx - ob.index) <= OB_MAX_AGE_BARS
-                and last_low  <= ob.top + atr      # tocco o prossimità (1 ATR)
-                and current_price >= ob.bottom     # close sopra il fondo OB
+                and last_low  <= ob.top + atr * 0.5   # max 0.5 ATR sopra il top OB
+                and current_price >= ob.bottom         # close sopra il fondo OB
             ]
             # Più recente prima
             active_bull_obs.sort(key=lambda x: x.index, reverse=True)
 
             for ob in active_bull_obs:
-                # Cerca un FVG bullish nella stessa zona
+                # FVG bullish nella zona impulso: compresa tra (ob.bottom - 1 ATR)
+                # e (ob.top + 3 ATR) — il FVG è tipicamente nell'impulso sopra l'OB
                 fvg_in_zone = next(
                     (f for f in fvgs
                      if f.direction == "bullish"
                      and not f.filled
-                     and f.bottom >= ob.bottom
-                     and f.top <= ob.top),
+                     and f.index < last_idx
+                     and f.bottom >= ob.bottom - atr
+                     and f.top    <= ob.top + 3 * atr),
                     None
                 )
 
                 # Liquidity sweep: prezzo ha preso i lows prima di rimbalzare?
                 liq_swept = any(
                     lv.direction == "lows"
-                    and abs(lv.price - ob.bottom) / ob.bottom < 0.005
+                    and abs(lv.price - ob.bottom) <= atr
                     for lv in liq_levels
                 )
 
                 entry = current_price
-                sl    = ob.bottom * 0.9995   # leggermente sotto l'OB
-                risk  = entry - sl
-                if risk <= 0:
+                sl    = entry - sl_dist     # SL = ATR * ATR_SL_MULTIPLIER sotto entry
+                tp    = entry + tp_dist     # TP = SL_dist * MIN_RISK_REWARD sopra entry
+
+                if sl <= 0 or tp <= 0:
                     continue
-                tp = entry + risk * 2.0      # R:R 1:2 minimo
 
                 reason_parts = ["Bullish OB in uptrend"]
                 if fvg_in_zone:
@@ -145,15 +155,15 @@ class SMCDetector:
         if trend == -1:
             # Bearish OB valido se:
             # - OB recente (max OB_MAX_AGE_BARS bar fa)
-            # - l'HIGH è entro 1 ATR dal fondo dell'OB (tocco o avvicinamento)
+            # - l'HIGH è entro 0.5 ATR dal fondo dell'OB
             # - il CLOSE è sotto il top dell'OB (distribuzione)
             active_bear_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bearish"
                 and ob.active
                 and (last_idx - ob.index) <= OB_MAX_AGE_BARS
-                and last_high >= ob.bottom - atr   # tocco o prossimità (1 ATR)
-                and current_price <= ob.top        # close sotto il top OB
+                and last_high >= ob.bottom - atr * 0.5  # max 0.5 ATR sotto il fondo OB
+                and current_price <= ob.top              # close sotto il top OB
             ]
             active_bear_obs.sort(key=lambda x: x.index, reverse=True)
 
@@ -162,23 +172,24 @@ class SMCDetector:
                     (f for f in fvgs
                      if f.direction == "bearish"
                      and not f.filled
-                     and f.bottom >= ob.bottom
-                     and f.top <= ob.top),
+                     and f.index < last_idx
+                     and f.top    <= ob.top + atr
+                     and f.bottom >= ob.bottom - 3 * atr),
                     None
                 )
 
                 liq_swept = any(
                     lv.direction == "highs"
-                    and abs(lv.price - ob.top) / ob.top < 0.005
+                    and abs(lv.price - ob.top) <= atr
                     for lv in liq_levels
                 )
 
                 entry = current_price
-                sl    = ob.top * 1.0005
-                risk  = sl - entry
-                if risk <= 0:
+                sl    = entry + sl_dist     # SL = ATR * ATR_SL_MULTIPLIER sopra entry
+                tp    = entry - tp_dist     # TP = SL_dist * MIN_RISK_REWARD sotto entry
+
+                if sl <= 0 or tp <= 0:
                     continue
-                tp = entry - risk * 2.0
 
                 reason_parts = ["Bearish OB in downtrend"]
                 if fvg_in_zone:

@@ -316,8 +316,11 @@ FEATURE_COLUMNS = [
 def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.0) -> pd.Series:
     """
     Label binaria: 1 se il trade nella direzione del trend era vincente.
-    Un trade è vincente se il prezzo si muove di min_move_atr * ATR
-    nella direzione corretta entro `lookahead` candele senza toccare prima lo SL.
+    Un trade è vincente se il TP viene colpito PRIMA dello SL entro `lookahead` candele.
+
+    Usa controllo sequenziale bar-per-bar (lo stesso dell'engine di backtest) per
+    evitare falsi negativi dovuti a SL colpiti dopo il TP nella stessa finestra.
+    SL/TP sono calcolati con ATR identicamente al detector.py.
     """
     labels = pd.Series(0, index=df.index)
     atr   = df["atr"].values
@@ -331,27 +334,45 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
         if t == 0:
             continue
 
-        sl_dist = atr[i] * config.ATR_SL_MULTIPLIER
+        a = atr[i]
+        if np.isnan(a) or a <= 0:
+            continue
+
+        sl_dist = a * config.ATR_SL_MULTIPLIER
         entry   = close[i]
 
         if t == 1:  # long
             sl = entry - sl_dist
             tp = entry + sl_dist * config.MIN_RISK_REWARD
-            hit_sl = any(low[i+1:i+lookahead+1]  <= sl)
-            hit_tp = any(high[i+1:i+lookahead+1] >= tp)
-            if hit_tp and not hit_sl:
-                labels.iloc[i] = 1
-            elif hit_sl:
-                labels.iloc[i] = 0
+            # Controllo sequenziale: il primo livello colpito determina l'esito
+            for k in range(i + 1, i + lookahead + 1):
+                sl_hit = low[k]  <= sl
+                tp_hit = high[k] >= tp
+                if sl_hit and tp_hit:
+                    # Entrambi nella stessa candela: usa la direzione della candela
+                    labels.iloc[i] = 1 if close[k] >= close[k - 1] else 0
+                    break
+                elif sl_hit:
+                    labels.iloc[i] = 0
+                    break
+                elif tp_hit:
+                    labels.iloc[i] = 1
+                    break
 
         else:  # short
             sl = entry + sl_dist
             tp = entry - sl_dist * config.MIN_RISK_REWARD
-            hit_sl = any(high[i+1:i+lookahead+1] >= sl)
-            hit_tp = any(low[i+1:i+lookahead+1]  <= tp)
-            if hit_tp and not hit_sl:
-                labels.iloc[i] = 1
-            elif hit_sl:
-                labels.iloc[i] = 0
+            for k in range(i + 1, i + lookahead + 1):
+                sl_hit = high[k] >= sl
+                tp_hit = low[k]  <= tp
+                if sl_hit and tp_hit:
+                    labels.iloc[i] = 1 if close[k] <= close[k - 1] else 0
+                    break
+                elif sl_hit:
+                    labels.iloc[i] = 0
+                    break
+                elif tp_hit:
+                    labels.iloc[i] = 1
+                    break
 
     return labels
