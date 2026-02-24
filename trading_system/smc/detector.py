@@ -39,14 +39,14 @@ class SMCDetector:
     def __init__(self, symbol: str):
         self.symbol = symbol
 
-    def analyze(self, df: pd.DataFrame) -> Optional[SMCSignal]:
+    def analyze(self, df: pd.DataFrame, return_struct: bool = False):
         """
         df: DataFrame con colonne open, high, low, close, volume
             ordinato dal più vecchio al più recente.
         Ritorna SMCSignal se c'è un setup valido sull'ultima candela, None altrimenti.
         """
         if len(df) < 60:
-            return None
+            return (None, None) if return_struct else None
 
         df = detect_structure(df)
         order_blocks = find_order_blocks(df, self.symbol)
@@ -58,7 +58,7 @@ class SMCDetector:
         trend     = last["trend"]   # 1 bullish, -1 bearish, 0 undefined
 
         if trend == 0:
-            return None
+            return (None, df) if return_struct else None
 
         current_price = last["close"]
 
@@ -102,7 +102,7 @@ class SMCDetector:
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
 
-                return SMCSignal(
+                sig = SMCSignal(
                     direction="long",
                     entry_price=entry,
                     sl_price=sl,
@@ -115,6 +115,7 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                 )
+                return (sig, df) if return_struct else sig
 
         # ── SHORT SETUP ────────────────────────────────────────────────────
         if trend == -1:
@@ -154,7 +155,7 @@ class SMCDetector:
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
 
-                return SMCSignal(
+                sig = SMCSignal(
                     direction="short",
                     entry_price=entry,
                     sl_price=sl,
@@ -167,5 +168,6 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                 )
+                return (sig, df) if return_struct else sig
 
-        return None
+        return (None, df) if return_struct else None

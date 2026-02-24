@@ -232,9 +232,9 @@ def run_backtest(
             i += 1
             continue
 
-        # Segnale SMC
+        # Segnale SMC (return_struct=True per riusare la struttura già calcolata per ML)
         try:
-            signal = detector.analyze(ctx)
+            signal, ctx_struct = detector.analyze(ctx, return_struct=True)
         except Exception:
             i += 1
             continue
@@ -243,11 +243,10 @@ def run_backtest(
             i += 1
             continue
 
-        # Conferma ML
+        # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
             try:
-                ctx_struct = detect_structure(ctx.copy())
-                feat_df    = build_features(ctx_struct)
+                feat_df = build_features(ctx_struct)
                 if len(feat_df) == 0:
                     i += 1
                     continue
