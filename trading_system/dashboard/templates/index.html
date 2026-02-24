@@ -1016,16 +1016,21 @@ function renderDownloadStatus(s) {
   const badge = document.getElementById('downloadStatusBadge');
   const prog  = document.getElementById('downloadProgress');
 
+  // s.symbols è un dict { "XAUUSD": { state, rows, from, to, msg }, ... }
+  const symDict = (s.symbols && typeof s.symbols === 'object') ? s.symbols : {};
+  const symKeys = Object.keys(symDict);
+
   if (s.running) {
     badge.className   = 'dm-status-badge dm-status-running';
     badge.textContent = 'Download in corso...';
     prog.style.display = '';
-    const symbols = s.symbols || [];
-    const done    = s.completed || {};
-    prog.innerHTML = symbols.map(sym => {
-      const pct = done[sym] || 0;
+    prog.innerHTML = symKeys.map(sym => {
+      const info = symDict[sym];
+      const state = info.state || 'pending';
+      const stateColor = state === 'done' ? '#4ade80' : state === 'error' ? '#f87171' : '#facc15';
+      const pct = state === 'done' ? 100 : state === 'downloading' ? 50 : 0;
       return `<div class="dm-progress-item">
-        <div class="dm-progress-label">${escHtml(sym)} — ${pct}%</div>
+        <div class="dm-progress-label" style="color:${stateColor}">${escHtml(sym)} — ${escHtml(info.msg || state)}</div>
         <div class="dm-progress-track"><div class="dm-progress-fill" style="width:${pct}%"></div></div>
       </div>`;
     }).join('');
@@ -1035,9 +1040,30 @@ function renderDownloadStatus(s) {
     prog.style.display = 'none';
     document.getElementById('downloadError').textContent = s.error;
     document.getElementById('downloadError').style.display = '';
+  } else if (s.done) {
+    // controlla se ci sono errori per-simbolo
+    const anyError = symKeys.some(k => symDict[k].state === 'error');
+    badge.className   = 'dm-status-badge ' + (anyError ? 'dm-status-error' : 'dm-status-done');
+    badge.textContent = anyError ? 'Download completato con errori' : 'Download completato';
+    prog.style.display = '';
+    prog.innerHTML = symKeys.map(sym => {
+      const info = symDict[sym];
+      const ok = info.state === 'done';
+      const color = ok ? '#4ade80' : '#f87171';
+      const detail = ok ? `${(info.rows||0).toLocaleString()} candele  ${info.from||''} → ${info.to||''}` : (info.msg || info.state);
+      return `<div class="dm-progress-item">
+        <div class="dm-progress-label" style="color:${color}">${escHtml(sym)}: ${escHtml(detail)}</div>
+      </div>`;
+    }).join('');
+    // mostra errori per-simbolo
+    const errMsgs = symKeys.filter(k => symDict[k].state === 'error').map(k => `${k}: ${symDict[k].msg}`);
+    if (errMsgs.length) {
+      document.getElementById('downloadError').textContent = errMsgs.join(' | ');
+      document.getElementById('downloadError').style.display = '';
+    }
   } else {
-    badge.className   = 'dm-status-badge ' + (s.done ? 'dm-status-done' : 'dm-status-idle');
-    badge.textContent = s.done ? 'Download completato' : 'Nessun download in corso';
+    badge.className   = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Nessun download in corso';
     prog.style.display = 'none';
   }
 }
@@ -1052,7 +1078,7 @@ async function refreshDataFiles() {
     list.innerHTML = files.map(f => `
       <div class="dm-file-item">
         <span class="dm-file-name">${escHtml(f.name)}</span>
-        <span class="dm-file-size">${escHtml(f.size)}</span>
+        <span class="dm-file-size">${f.size_mb != null ? f.size_mb + ' MB' : ''}</span>
       </div>`).join('');
   } catch (e) {}
 }
@@ -1129,12 +1155,12 @@ async function refreshModelFiles() {
     const res  = await fetch('/api/model_files');
     const data = await res.json();
     const list = document.getElementById('modelFilesList');
-    const files = data.files || [];
+    const files = data.models || [];
     if (!files.length) { list.innerHTML = '<div class="dm-empty">Nessun modello .pkl presente</div>'; return; }
     list.innerHTML = files.map(f => `
       <div class="dm-file-item">
         <span class="dm-file-name">${escHtml(f.name)}</span>
-        <span class="dm-file-size">${escHtml(f.size)}</span>
+        <span class="dm-file-size">${f.size_mb != null ? f.size_mb + ' MB' : ''}</span>
       </div>`).join('');
   } catch (e) {}
 }

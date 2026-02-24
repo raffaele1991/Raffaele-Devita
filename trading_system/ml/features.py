@@ -95,7 +95,7 @@ def add_smc_features(df: pd.DataFrame) -> pd.DataFrame:
     df["choch_bear_n"] = df.get("choch_bear", pd.Series(False, index=df.index)).astype(int)
 
     # Quante candele fa è stato l'ultimo BOS
-    bos_events = df["bos_bull_n"] | df["bos_bear_n"] | df["choch_bull_n"] | df["choch_bear_n"]
+    bos_events = (df["bos_bull_n"] | df["bos_bear_n"] | df["choch_bull_n"] | df["choch_bear_n"]).astype(bool)
     df["bars_since_structure"] = bos_events[::-1].cumsum()[::-1].where(bos_events, 0)
 
     return df

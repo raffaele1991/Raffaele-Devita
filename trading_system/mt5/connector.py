@@ -50,11 +50,17 @@ class MT5Connector:
 
     def connect(self) -> bool:
         """Inizializza la connessione a MT5."""
-        if not mt5.initialize(
-            login=config.MT5_ACCOUNT,
-            password=config.MT5_PASSWORD,
-            server=config.MT5_SERVER,
-        ):
+        # Prova prima senza credenziali (terminale già aperto e loggato)
+        ok = mt5.initialize()
+        if not ok:
+            # Fallback con credenziali esplicite
+            mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
+            ok = mt5.initialize(
+                login=mt5_login,
+                password=config.MT5_PASSWORD,
+                server=config.MT5_SERVER,
+            )
+        if not ok:
             error = mt5.last_error()
             logger.error(f"[MT5] Connessione fallita: {error}")
             return False

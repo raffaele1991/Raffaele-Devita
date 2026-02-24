@@ -17,7 +17,7 @@ import os
 import sys
 import threading
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -80,17 +80,16 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    date_to   = datetime.now()
-    date_from = date_to - timedelta(days=365 * years)
-
     # Seleziona il simbolo
     if not mt5.symbol_select(symbol, True):
         _set_symbol(symbol, state="error", msg=f"Simbolo '{symbol}' non disponibile su MT5")
         return
 
-    _set_symbol(symbol, msg=f"Download {symbol} da {date_from.strftime('%Y-%m-%d')} a {date_to.strftime('%Y-%m-%d')}...")
+    # Numero barre M5 per gli anni richiesti (288 barre/giorno × 365 × years)
+    count = years * 365 * 288
+    _set_symbol(symbol, msg=f"Download {symbol} – ultime {count:,} barre M5 (~{years} anni)...")
 
-    rates = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M5, date_from, date_to)
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, count)
 
     if rates is None or len(rates) == 0:
         err = mt5.last_error()
@@ -141,23 +140,25 @@ def _run_download(years: int):
         _set("error", "MetaTrader5 non installato. Esegui: pip install MetaTrader5  (richiede Windows + MT5)")
         return
 
-    # Inizializza MT5 (login deve essere int)
-    try:
-        mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
-    except (ValueError, TypeError):
-        mt5_login = None
-
-    ok = mt5.initialize(
-        login=mt5_login,
-        password=config.MT5_PASSWORD if config.MT5_PASSWORD else None,
-        server=config.MT5_SERVER if config.MT5_SERVER else None,
-    )
+    # Connetti MT5: prima prova a connettersi al terminale già aperto (senza credenziali),
+    # poi fallback con credenziali esplicite se il terminale non è già in esecuzione.
+    ok = mt5.initialize()
+    if not ok:
+        try:
+            mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
+        except (ValueError, TypeError):
+            mt5_login = None
+        ok = mt5.initialize(
+            login=mt5_login,
+            password=config.MT5_PASSWORD if config.MT5_PASSWORD else None,
+            server=config.MT5_SERVER if config.MT5_SERVER else None,
+        )
 
     if not ok:
         err = mt5.last_error()
         _set("running", False)
         _set("done", True)
-        _set("error", f"MT5 non avviato o non connesso: {err}. Apri MetaTrader5 prima di scaricare.")
+        _set("error", f"MT5 non avviato o non connesso: {err}. Apri MetaTrader5 e abilita 'Algo Trading' nel toolbar.")
         return
 
     try:
