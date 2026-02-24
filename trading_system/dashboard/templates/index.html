@@ -247,6 +247,76 @@
     .log-trade   { color: var(--green); }
     .log-default { color: #8b949e; }
 
+    /* ── DATI & MODELLO ─────────────────────────────────────────────────── */
+    .dm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 750px) { .dm-grid { grid-template-columns: 1fr; } }
+
+    .dm-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px;
+      border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .dm-btn:active { transform: scale(0.97); }
+    .dm-btn:hover  { opacity: 0.85; }
+    .dm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .dm-btn-blue   { background: var(--blue);  color: #fff; }
+    .dm-btn-green  { background: var(--green); color: #0d1117; }
+
+    .dm-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    .dm-years   { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; width: 80px; }
+
+    .dm-file-list { display: flex; flex-direction: column; gap: 6px; }
+    .dm-file-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 7px; font-size: 13px;
+    }
+    .dm-file-name  { font-weight: 700; font-family: monospace; }
+    .dm-file-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .dm-file-badge { font-size: 11px; color: var(--green); font-weight: 600; }
+    .dm-empty      { font-size: 13px; color: var(--muted); padding: 8px 0; }
+
+    .dm-progress-wrap { margin-top: 10px; }
+    .dm-sym-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .dm-sym-row:last-child { border-bottom: none; }
+    .dm-sym-name  { width: 80px; font-weight: 700; }
+    .dm-sym-bar   { flex: 1; height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .dm-sym-fill  { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .dm-sym-msg   { font-size: 11px; color: var(--muted); flex: 2; }
+
+    .dm-status-badge {
+      display: inline-block; padding: 4px 10px;
+      border-radius: 5px; font-size: 12px; font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .dm-status-idle     { background: var(--surface2); color: var(--muted); }
+    .dm-status-running  { background: var(--blue-dim);  color: var(--blue); }
+    .dm-status-done     { background: var(--green-dim); color: var(--green); }
+    .dm-status-error    { background: var(--red-dim);   color: var(--red); }
+
+    .train-output {
+      background: #0a0e14; border-radius: 7px;
+      padding: 10px 12px; margin-top: 10px;
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 11px; line-height: 1.6; color: #8b949e;
+      max-height: 160px; overflow-y: auto;
+      display: none;
+    }
+    .train-output.visible { display: block; }
+
     /* ── FOOTER ─────────────────────────────────────────────────────────── */
     .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px; padding: 10px 0; }
 
@@ -369,6 +439,69 @@
     <div id="closedContainer">
       <div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>
     </div>
+  </div>
+
+  <!-- ── DATI & MODELLO ───────────────────────────────────────────────────── -->
+  <div class="dm-grid">
+
+    <!-- Colonna sinistra: Dati storici -->
+    <div class="card">
+      <div class="card-title">Dati Storici MT5</div>
+
+      <div class="dm-actions">
+        <label style="font-size:12px; color:var(--muted);">Anni:</label>
+        <input type="number" id="yearsInput" class="dm-years" value="4" min="1" max="10" />
+        <button id="downloadBtn" class="dm-btn dm-btn-blue" onclick="startDownload()">
+          &#8681; Scarica da MT5
+        </button>
+      </div>
+
+      <!-- Status download -->
+      <div id="downloadStatusBadge" class="dm-status-badge dm-status-idle">Nessun download in corso</div>
+      <div id="downloadError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
+
+      <!-- Progress per simbolo -->
+      <div id="downloadProgress" class="dm-progress-wrap" style="display:none;"></div>
+
+      <!-- File presenti -->
+      <div style="margin-top:14px;">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
+          File CSV presenti
+        </div>
+        <div id="dataFilesList" class="dm-file-list">
+          <div class="dm-empty">Caricamento...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colonna destra: Training modello -->
+    <div class="card">
+      <div class="card-title">Training Modello ML</div>
+
+      <div class="dm-actions">
+        <button id="trainBtn" class="dm-btn dm-btn-green" onclick="startTraining()">
+          &#9654; Addestra Modello
+        </button>
+      </div>
+
+      <!-- Status training -->
+      <div id="trainStatusBadge" class="dm-status-badge dm-status-idle">Nessun training in corso</div>
+      <div id="trainError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
+
+      <!-- Modelli presenti -->
+      <div style="margin-top:8px;">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
+          Modelli (.pkl) presenti
+        </div>
+        <div id="modelFilesList" class="dm-file-list">
+          <div class="dm-empty">Caricamento...</div>
+        </div>
+      </div>
+
+      <!-- Output training -->
+      <div id="trainOutput" class="train-output"></div>
+    </div>
+
   </div>
 
   <!-- ── LOG ──────────────────────────────────────────────────────────────── -->
@@ -731,6 +864,254 @@ fetchState();
 fetchLog();
 setInterval(fetchState, 5000);
 setInterval(fetchLog,   5000);
+
+/* ── DATI & MODELLO ─────────────────────────────────────────────────────── */
+
+// Polling download/training ogni 2s quando attivi, ogni 10s altrimenti
+let _downloadPolling = null;
+let _trainPolling    = null;
+
+/* --- DATA FILES --- */
+async function refreshDataFiles() {
+  try {
+    const res  = await fetch('/api/data/files');
+    const data = await res.json();
+    renderDataFiles(data.files || []);
+  } catch (e) {}
+}
+
+function renderDataFiles(files) {
+  const el = document.getElementById('dataFilesList');
+  if (!files.length) {
+    el.innerHTML = '<div class="dm-empty">Nessun CSV trovato in data/ — scarica i dati prima di addestrare</div>';
+    return;
+  }
+  el.innerHTML = files.map(f => `
+    <div class="dm-file-item">
+      <div>
+        <div class="dm-file-name">${escHtml(f.name)}</div>
+        <div class="dm-file-meta">${f.rows ? f.rows.toLocaleString('it-IT') + ' candele' : ''} ${f.from ? '· ' + f.from + ' → ' + f.to : ''} ${f.size_mb ? '· ' + f.size_mb + ' MB' : ''}</div>
+      </div>
+      <span class="dm-file-badge">✓</span>
+    </div>`).join('');
+}
+
+/* --- MODEL FILES --- */
+async function refreshModelFiles() {
+  try {
+    const res  = await fetch('/api/models/files');
+    const data = await res.json();
+    renderModelFiles(data.models || []);
+  } catch (e) {}
+}
+
+function renderModelFiles(models) {
+  const el = document.getElementById('modelFilesList');
+  if (!models.length) {
+    el.innerHTML = '<div class="dm-empty">Nessun modello trovato — addestra il modello</div>';
+    return;
+  }
+  el.innerHTML = models.map(m => `
+    <div class="dm-file-item">
+      <div>
+        <div class="dm-file-name">${escHtml(m.name)}</div>
+        <div class="dm-file-meta">${m.size_mb} MB · aggiornato ${escHtml(m.modified)}</div>
+      </div>
+      <span class="dm-file-badge">✓</span>
+    </div>`).join('');
+}
+
+/* --- DOWNLOAD --- */
+async function startDownload() {
+  const years = parseInt(document.getElementById('yearsInput').value) || 4;
+  document.getElementById('downloadBtn').disabled = true;
+
+  try {
+    const res  = await fetch('/api/data/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ years })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showDownloadError(data.error || 'Errore avvio download');
+      document.getElementById('downloadBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    showDownloadError('Errore di rete');
+    document.getElementById('downloadBtn').disabled = false;
+    return;
+  }
+
+  // Avvia polling
+  clearInterval(_downloadPolling);
+  _downloadPolling = setInterval(pollDownload, 1500);
+  pollDownload();
+}
+
+async function pollDownload() {
+  try {
+    const res  = await fetch('/api/data/status');
+    const data = await res.json();
+    renderDownloadStatus(data);
+
+    if (data.done || (!data.running && !data.started_at)) {
+      clearInterval(_downloadPolling);
+      document.getElementById('downloadBtn').disabled = false;
+      refreshDataFiles();
+    }
+  } catch (e) {}
+}
+
+function renderDownloadStatus(s) {
+  const badge = document.getElementById('downloadStatusBadge');
+  const prog  = document.getElementById('downloadProgress');
+  const errEl = document.getElementById('downloadError');
+
+  // Errore globale
+  if (s.error) {
+    badge.className = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore';
+    errEl.textContent = s.error;
+    errEl.style.display = '';
+    prog.style.display = 'none';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  if (s.running) {
+    badge.className = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Download in corso...';
+  } else if (s.done) {
+    badge.className = 'dm-status-badge dm-status-done';
+    badge.textContent = 'Download completato';
+  } else {
+    badge.className = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Pronto';
+    prog.style.display = 'none';
+    return;
+  }
+
+  // Progress simboli
+  const syms = s.symbols || {};
+  if (Object.keys(syms).length === 0) {
+    prog.style.display = 'none';
+    return;
+  }
+  prog.style.display = '';
+  prog.innerHTML = Object.entries(syms).map(([sym, info]) => {
+    const stateColor = info.state === 'done' ? '#3fb950' : info.state === 'error' ? '#f85149' : '#388bfd';
+    const fillPct    = info.state === 'done' ? 100 : info.state === 'error' ? 100 : 60;
+    return `
+      <div class="dm-sym-row">
+        <div class="dm-sym-name">${escHtml(sym)}</div>
+        <div class="dm-sym-bar">
+          <div class="dm-sym-fill" style="width:${fillPct}%; background:${stateColor};"></div>
+        </div>
+        <div class="dm-sym-msg">${escHtml(info.msg || info.state)}</div>
+      </div>`;
+  }).join('');
+}
+
+function showDownloadError(msg) {
+  const errEl = document.getElementById('downloadError');
+  errEl.textContent = msg;
+  errEl.style.display = '';
+  const badge = document.getElementById('downloadStatusBadge');
+  badge.className = 'dm-status-badge dm-status-error';
+  badge.textContent = 'Errore';
+}
+
+/* --- TRAINING --- */
+async function startTraining() {
+  document.getElementById('trainBtn').disabled = true;
+
+  try {
+    const res  = await fetch('/api/train', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) {
+      showTrainError(data.error || 'Errore avvio training');
+      document.getElementById('trainBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    showTrainError('Errore di rete');
+    document.getElementById('trainBtn').disabled = false;
+    return;
+  }
+
+  clearInterval(_trainPolling);
+  _trainPolling = setInterval(pollTraining, 1500);
+  pollTraining();
+}
+
+async function pollTraining() {
+  try {
+    const res  = await fetch('/api/train/status');
+    const data = await res.json();
+    renderTrainStatus(data);
+
+    if (data.done && !data.running) {
+      clearInterval(_trainPolling);
+      document.getElementById('trainBtn').disabled = false;
+      refreshModelFiles();
+    }
+  } catch (e) {}
+}
+
+function renderTrainStatus(s) {
+  const badge  = document.getElementById('trainStatusBadge');
+  const outEl  = document.getElementById('trainOutput');
+  const errEl  = document.getElementById('trainError');
+
+  if (s.error) {
+    badge.className = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore';
+    errEl.textContent = s.error;
+    errEl.style.display = '';
+  } else if (s.running) {
+    badge.className = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Training in corso...';
+    errEl.style.display = 'none';
+  } else if (s.done) {
+    badge.className = 'dm-status-badge dm-status-done';
+    badge.textContent = 'Training completato';
+    errEl.style.display = 'none';
+  } else {
+    badge.className = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Pronto';
+    errEl.style.display = 'none';
+  }
+
+  // Output log training
+  const lines = s.output || [];
+  if (lines.length > 0) {
+    outEl.classList.add('visible');
+    outEl.innerHTML = lines.map(l => escHtml(l)).join('\n');
+    outEl.scrollTop = outEl.scrollHeight;
+  } else {
+    outEl.classList.remove('visible');
+  }
+}
+
+function showTrainError(msg) {
+  const errEl = document.getElementById('trainError');
+  errEl.textContent = msg;
+  errEl.style.display = '';
+  const badge = document.getElementById('trainStatusBadge');
+  badge.className = 'dm-status-badge dm-status-error';
+  badge.textContent = 'Errore';
+}
+
+/* --- INIT DATI & MODELLO --- */
+refreshDataFiles();
+refreshModelFiles();
+// Polling leggero per aggiornare la lista file ogni 30s
+setInterval(() => { refreshDataFiles(); refreshModelFiles(); }, 30000);
+// Controlla se c'è un download o training già in corso al caricamento
+pollDownload();
+pollTraining();
 </script>
 </body>
 </html>
