@@ -5,10 +5,14 @@ Combina structure + zones e produce un segnale SMC per ogni candela.
 """
 
 import pandas as pd
+import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 from .structure import detect_structure
 from .zones import find_order_blocks, find_fvg, find_liquidity_levels
+
+# OB rilevanti solo se formati entro questi bar dalla candela corrente
+OB_MAX_AGE_BARS = 80
 
 
 @dataclass
@@ -64,17 +68,32 @@ class SMCDetector:
         last_low  = last["low"]
         last_high = last["high"]
 
+        # ATR per tolleranza di prossimità all'OB (candele M5)
+        tr = pd.concat([
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift(1)).abs(),
+            (df["low"]  - df["close"].shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean().iloc[-1]
+        if pd.isna(atr) or atr <= 0:
+            atr = (df["high"] - df["low"]).mean()
+
         # ── LONG SETUP ─────────────────────────────────────────────────────
         if trend == 1:
-            # Bullish OB touch: il LOW della candela ha toccato/penetrato la zona OB
-            # e il CLOSE è rimasto sopra il fondo (rimbalzo confermato)
+            # Bullish OB valido se:
+            # - OB recente (max OB_MAX_AGE_BARS bar fa)
+            # - il LOW è entro 1 ATR dal top dell'OB (tocco o avvicinamento)
+            # - il CLOSE è sopra il fondo dell'OB (rimbalzo)
             active_bull_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bullish"
                 and ob.active
-                and last_low <= ob.top        # il low ha toccato l'OB
-                and current_price >= ob.bottom  # il close è sopra il fondo OB
+                and (last_idx - ob.index) <= OB_MAX_AGE_BARS
+                and last_low  <= ob.top + atr      # tocco o prossimità (1 ATR)
+                and current_price >= ob.bottom     # close sopra il fondo OB
             ]
+            # Più recente prima
+            active_bull_obs.sort(key=lambda x: x.index, reverse=True)
 
             for ob in active_bull_obs:
                 # Cerca un FVG bullish nella stessa zona
@@ -124,15 +143,19 @@ class SMCDetector:
 
         # ── SHORT SETUP ────────────────────────────────────────────────────
         if trend == -1:
-            # Bearish OB touch: l'HIGH ha toccato/penetrato la zona OB
-            # e il CLOSE è rimasto sotto il top (distribuzione confermata)
+            # Bearish OB valido se:
+            # - OB recente (max OB_MAX_AGE_BARS bar fa)
+            # - l'HIGH è entro 1 ATR dal fondo dell'OB (tocco o avvicinamento)
+            # - il CLOSE è sotto il top dell'OB (distribuzione)
             active_bear_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bearish"
                 and ob.active
-                and last_high >= ob.bottom      # l'high ha toccato l'OB
-                and current_price <= ob.top     # il close è sotto il top OB
+                and (last_idx - ob.index) <= OB_MAX_AGE_BARS
+                and last_high >= ob.bottom - atr   # tocco o prossimità (1 ATR)
+                and current_price <= ob.top        # close sotto il top OB
             ]
+            active_bear_obs.sort(key=lambda x: x.index, reverse=True)
 
             for ob in active_bear_obs:
                 fvg_in_zone = next(
