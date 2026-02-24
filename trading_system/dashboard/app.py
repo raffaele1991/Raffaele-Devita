@@ -115,6 +115,7 @@ def _default_state() -> dict:
     """Stato vuoto mostrato quando il bot non ha ancora scritto state.json."""
     return {
         "bot_status":          "offline",
+        "running":             False,
         "timestamp":           None,
         "session":             "CLOSED",
         "minutes_to_next":     None,
@@ -146,6 +147,9 @@ def api_state():
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 state = json.load(f)
+            # normalizza: aggiunge 'running' basato su bot_status se non presente
+            if "running" not in state:
+                state["running"] = state.get("bot_status", "offline") in ("online", "running", "active")
             return jsonify(state)
         except (json.JSONDecodeError, OSError):
             pass
@@ -184,6 +188,28 @@ def api_control():
 
 
 # ─── DATA DOWNLOAD ─────────────────────────────────────────────────────────────
+
+# Alias flat (usati dal frontend)
+@app.route("/api/download_data", methods=["POST"])
+def api_download_data_alias():
+    return api_data_download()
+
+@app.route("/api/download_status")
+def api_download_status_alias():
+    return api_data_status()
+
+@app.route("/api/data_files")
+def api_data_files_alias():
+    return api_data_files()
+
+@app.route("/api/train_status")
+def api_train_status_alias():
+    return api_train_status()
+
+@app.route("/api/model_files")
+def api_model_files_alias():
+    return api_models_files()
+
 
 @app.route("/api/data/download", methods=["POST"])
 def api_data_download():
