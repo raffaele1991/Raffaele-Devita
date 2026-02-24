@@ -100,8 +100,8 @@ def _load_csv(symbol: str) -> pd.DataFrame:
     if df is None:
         raise ValueError(f"Impossibile leggere il CSV: {path}")
 
-    # Normalizza nomi colonne
-    df.columns = [c.strip().lower() for c in df.columns]
+    # Normalizza nomi colonne (strip whitespace + parentesi angolari MT5: <OPEN> → open)
+    df.columns = [c.strip().strip('<>').lower() for c in df.columns]
 
     # Trova colonna tempo
     time_col = None

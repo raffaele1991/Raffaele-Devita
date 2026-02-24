@@ -80,10 +80,13 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    # Seleziona il simbolo
+    # Seleziona il simbolo e attendi che MT5 carichi i dati
     if not mt5.symbol_select(symbol, True):
         _set_symbol(symbol, state="error", msg=f"Simbolo '{symbol}' non disponibile su MT5")
         return
+
+    import time as _time
+    _time.sleep(1)  # MT5 ha bisogno di un momento dopo symbol_select
 
     # Numero barre M5 per gli anni richiesti (288 barre/giorno × 365 × years)
     count = years * 365 * 288
@@ -91,9 +94,21 @@ def _download_symbol(symbol: str, years: int):
 
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, count)
 
+    # Se fallisce, riprova con un count ridotto (alcuni broker limitano la risposta)
     if rates is None or len(rates) == 0:
         err = mt5.last_error()
-        _set_symbol(symbol, state="error", msg=f"Nessun dato ricevuto da MT5: {err}")
+        fallback_count = min(count, 50_000)
+        _set_symbol(symbol, msg=f"Primo tentativo fallito ({err}), riprovo con {fallback_count:,} barre...")
+        _time.sleep(2)
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, fallback_count)
+
+    if rates is None or len(rates) == 0:
+        err = mt5.last_error()
+        _set_symbol(symbol, state="error",
+                    msg=f"Nessun dato ricevuto da MT5: {err}. "
+                        f"Verifica: 1) MT5 aperto e connesso al broker "
+                        f"2) 'Algo Trading' abilitato nel toolbar "
+                        f"3) Simbolo {symbol} visibile in MarketWatch")
         return
 
     # Costruisci DataFrame
