@@ -23,6 +23,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, ROOT)
 
 from trading_system import config
+
+# Percorsi assoluti (indipendenti dalla working directory)
+DATA_DIR_ABS   = os.path.join(ROOT, config.DATA_DIR)
+MODELS_DIR_ABS = os.path.join(ROOT, config.MODELS_DIR)
 from trading_system.smc.structure import detect_structure
 from trading_system.ml.features import build_features, build_labels, FEATURE_COLUMNS
 from trading_system.ml.model import SMCMLModel
@@ -73,8 +77,8 @@ def train_symbol(symbol: str):
     print(f"{'='*60}")
 
     # Trova CSV per questo simbolo
-    pattern  = os.path.join(config.DATA_DIR, f"{symbol}*.csv")
-    pattern2 = os.path.join(config.DATA_DIR, f"{symbol.lower()}*.csv")
+    pattern  = os.path.join(DATA_DIR_ABS, f"{symbol}*.csv")
+    pattern2 = os.path.join(DATA_DIR_ABS, f"{symbol.lower()}*.csv")
     files = glob.glob(pattern) + glob.glob(pattern2)
 
     if not files:
@@ -150,23 +154,22 @@ if __name__ == "__main__":
     print(f"Data directory: {config.DATA_DIR}")
     print(f"Models directory: {config.MODELS_DIR}")
 
+    print(f"Data directory (assoluto): {DATA_DIR_ABS}")
+    print(f"Models directory (assoluto): {MODELS_DIR_ABS}")
+
     # Controlla che la cartella data esista e contenga file
-    if not os.path.exists(config.DATA_DIR):
-        print(f"\n[ERRORE] Cartella dati non trovata: {config.DATA_DIR}")
+    if not os.path.exists(DATA_DIR_ABS):
+        print(f"\n[ERRORE] Cartella dati non trovata: {DATA_DIR_ABS}")
         sys.exit(1)
 
-    csv_files = glob.glob(os.path.join(config.DATA_DIR, "*.csv"))
+    csv_files = glob.glob(os.path.join(DATA_DIR_ABS, "*.csv"))
     if not csv_files:
-        print(f"\n[ERRORE] Nessun CSV nella cartella {config.DATA_DIR}/")
-        print("\nCosa fare:")
-        print("  1. Apri MT5 sul PC")
-        print("  2. Menu: Strumenti → History Center")
-        print("  3. Seleziona XAUUSD → M5 → Export → Salva come XAUUSD_M5.csv")
-        print("  4. Ripeti per EURUSD_M5.csv")
-        print(f"  5. Copia i file in: {config.DATA_DIR}/")
+        print(f"\n[ERRORE] Nessun CSV nella cartella {DATA_DIR_ABS}/")
+        print(f"  File presenti: {os.listdir(DATA_DIR_ABS)}")
         sys.exit(1)
 
-    os.makedirs(config.MODELS_DIR, exist_ok=True)
+    print(f"CSV trovati: {[os.path.basename(f) for f in csv_files]}")
+    os.makedirs(MODELS_DIR_ABS, exist_ok=True)
 
     for symbol in config.SYMBOLS:
         train_symbol(symbol)

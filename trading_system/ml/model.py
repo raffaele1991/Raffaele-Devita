@@ -8,11 +8,16 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score
 from trading_system import config
 from .features import FEATURE_COLUMNS
+
+# Percorso assoluto alla cartella modelli
+_ROOT       = Path(__file__).parent.parent.parent
+_MODELS_DIR = str(_ROOT / config.MODELS_DIR)
 
 
 class SMCMLModel:
@@ -33,7 +38,7 @@ class SMCMLModel:
         )
         self.is_fitted = False
         self._model_path = os.path.join(
-            config.MODELS_DIR, f"model_{symbol.lower()}.pkl"
+            _MODELS_DIR, f"model_{symbol.lower()}.pkl"
         )
 
     # ── TRAINING ──────────────────────────────────────────────────────────────
@@ -85,7 +90,7 @@ class SMCMLModel:
     # ── PERSIST ───────────────────────────────────────────────────────────────
 
     def save(self):
-        os.makedirs(config.MODELS_DIR, exist_ok=True)
+        os.makedirs(_MODELS_DIR, exist_ok=True)
         with open(self._model_path, "wb") as f:
             pickle.dump({"scaler": self.scaler, "model": self.model}, f)
         print(f"[ML] Modello salvato: {self._model_path}")
