@@ -13,22 +13,15 @@ def find_swing_points(df: pd.DataFrame) -> pd.DataFrame:
     """
     Identifica swing high e swing low sulla serie di candele.
     Aggiunge colonne: swing_high, swing_low (bool).
+    Implementazione vettorizzata con pandas rolling (no loop Python).
     """
     n = config.SMC_SWING_LOOKBACK
     df = df.copy()
-    df["swing_high"] = False
-    df["swing_low"]  = False
-
-    for i in range(n, len(df) - n):
-        window_high = df["high"].iloc[i - n: i + n + 1]
-        window_low  = df["low"].iloc[i - n: i + n + 1]
-
-        if df["high"].iloc[i] == window_high.max():
-            df.at[df.index[i], "swing_high"] = True
-
-        if df["low"].iloc[i] == window_low.min():
-            df.at[df.index[i], "swing_low"] = True
-
+    window = 2 * n + 1
+    rolling_max = df["high"].rolling(window, center=True, min_periods=window).max()
+    rolling_min = df["low"].rolling(window, center=True, min_periods=window).min()
+    df["swing_high"] = df["high"] == rolling_max
+    df["swing_low"]  = df["low"]  == rolling_min
     return df
 
 

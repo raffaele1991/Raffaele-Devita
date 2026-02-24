@@ -48,7 +48,7 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equ
 
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
-ML_CONFIDENCE_THRESHOLD = 0.78   # il modello deve essere almeno 78% sicuro
+ML_CONFIDENCE_THRESHOLD = 0.55   # soglia confidence ML (abbassata da 0.78 — riaddestra il modello per alzarla)
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42

@@ -5,10 +5,14 @@ Combina structure + zones e produce un segnale SMC per ogni candela.
 """
 
 import pandas as pd
+import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 from .structure import detect_structure
 from .zones import find_order_blocks, find_fvg, find_liquidity_levels
+
+# OB rilevanti solo se formati entro questi bar dalla candela corrente
+OB_MAX_AGE_BARS = 80
 
 
 @dataclass
@@ -39,14 +43,14 @@ class SMCDetector:
     def __init__(self, symbol: str):
         self.symbol = symbol
 
-    def analyze(self, df: pd.DataFrame) -> Optional[SMCSignal]:
+    def analyze(self, df: pd.DataFrame, return_struct: bool = False):
         """
         df: DataFrame con colonne open, high, low, close, volume
             ordinato dal più vecchio al più recente.
         Ritorna SMCSignal se c'è un setup valido sull'ultima candela, None altrimenti.
         """
         if len(df) < 60:
-            return None
+            return (None, None) if return_struct else None
 
         df = detect_structure(df)
         order_blocks = find_order_blocks(df, self.symbol)
@@ -58,18 +62,38 @@ class SMCDetector:
         trend     = last["trend"]   # 1 bullish, -1 bearish, 0 undefined
 
         if trend == 0:
-            return None
+            return (None, df) if return_struct else None
 
         current_price = last["close"]
+        last_low  = last["low"]
+        last_high = last["high"]
+
+        # ATR per tolleranza di prossimità all'OB (candele M5)
+        tr = pd.concat([
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift(1)).abs(),
+            (df["low"]  - df["close"].shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean().iloc[-1]
+        if pd.isna(atr) or atr <= 0:
+            atr = (df["high"] - df["low"]).mean()
 
         # ── LONG SETUP ─────────────────────────────────────────────────────
         if trend == 1:
+            # Bullish OB valido se:
+            # - OB recente (max OB_MAX_AGE_BARS bar fa)
+            # - il LOW è entro 1 ATR dal top dell'OB (tocco o avvicinamento)
+            # - il CLOSE è sopra il fondo dell'OB (rimbalzo)
             active_bull_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bullish"
                 and ob.active
-                and ob.bottom <= current_price <= ob.top
+                and (last_idx - ob.index) <= OB_MAX_AGE_BARS
+                and last_low  <= ob.top + atr      # tocco o prossimità (1 ATR)
+                and current_price >= ob.bottom     # close sopra il fondo OB
             ]
+            # Più recente prima
+            active_bull_obs.sort(key=lambda x: x.index, reverse=True)
 
             for ob in active_bull_obs:
                 # Cerca un FVG bullish nella stessa zona
@@ -102,7 +126,7 @@ class SMCDetector:
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
 
-                return SMCSignal(
+                sig = SMCSignal(
                     direction="long",
                     entry_price=entry,
                     sl_price=sl,
@@ -115,15 +139,23 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                 )
+                return (sig, df) if return_struct else sig
 
         # ── SHORT SETUP ────────────────────────────────────────────────────
         if trend == -1:
+            # Bearish OB valido se:
+            # - OB recente (max OB_MAX_AGE_BARS bar fa)
+            # - l'HIGH è entro 1 ATR dal fondo dell'OB (tocco o avvicinamento)
+            # - il CLOSE è sotto il top dell'OB (distribuzione)
             active_bear_obs = [
                 ob for ob in order_blocks
                 if ob.direction == "bearish"
                 and ob.active
-                and ob.bottom <= current_price <= ob.top
+                and (last_idx - ob.index) <= OB_MAX_AGE_BARS
+                and last_high >= ob.bottom - atr   # tocco o prossimità (1 ATR)
+                and current_price <= ob.top        # close sotto il top OB
             ]
+            active_bear_obs.sort(key=lambda x: x.index, reverse=True)
 
             for ob in active_bear_obs:
                 fvg_in_zone = next(
@@ -154,7 +186,7 @@ class SMCDetector:
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
 
-                return SMCSignal(
+                sig = SMCSignal(
                     direction="short",
                     entry_price=entry,
                     sl_price=sl,
@@ -167,5 +199,6 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                 )
+                return (sig, df) if return_struct else sig
 
-        return None
+        return (None, df) if return_struct else None

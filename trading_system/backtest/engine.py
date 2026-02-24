@@ -100,8 +100,8 @@ def _load_csv(symbol: str) -> pd.DataFrame:
     if df is None:
         raise ValueError(f"Impossibile leggere il CSV: {path}")
 
-    # Normalizza nomi colonne
-    df.columns = [c.strip().lower() for c in df.columns]
+    # Normalizza nomi colonne (strip whitespace + parentesi angolari MT5: <OPEN> → open)
+    df.columns = [c.strip().strip('<>').lower() for c in df.columns]
 
     # Trova colonna tempo
     time_col = None
@@ -211,6 +211,16 @@ def run_backtest(
     max_dd_pct = 0.0
     i          = MIN_LB
 
+    # Contatori diagnostici
+    _diag = {
+        "session_bars": 0,
+        "no_trend":     0,
+        "no_ob":        0,
+        "ml_blocked":   0,
+        "rr_rejected":  0,
+        "signals":      0,
+    }
+
     _log(f"Avvio simulazione...")
 
     while i < len(df):
@@ -226,33 +236,47 @@ def run_backtest(
             i += 1
             continue
 
+        _diag["session_bars"] += 1
+
         # Finestra di contesto
         ctx = df.iloc[max(0, i - CONTEXT): i + 1].copy().reset_index(drop=True)
         if len(ctx) < 60:
             i += 1
             continue
 
-        # Segnale SMC
+        # Segnale SMC (return_struct=True per riusare la struttura già calcolata per ML)
         try:
-            signal = detector.analyze(ctx)
-        except Exception:
+            signal, ctx_struct = detector.analyze(ctx, return_struct=True)
+        except Exception as e:
+            _log(f"  [DIAG] Eccezione detector: {e}")
             i += 1
             continue
 
         if signal is None:
+            # Capisce il motivo: trend o OB
+            if ctx_struct is not None:
+                trend_val = ctx_struct.iloc[-1].get("trend", 0) if hasattr(ctx_struct.iloc[-1], "get") else ctx_struct["trend"].iloc[-1]
+                if trend_val == 0:
+                    _diag["no_trend"] += 1
+                else:
+                    _diag["no_ob"] += 1
             i += 1
             continue
 
-        # Conferma ML
+        _diag["signals"] += 1
+
+        # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
             try:
-                ctx_struct = detect_structure(ctx.copy())
-                feat_df    = build_features(ctx_struct)
+                feat_df = build_features(ctx_struct)
                 if len(feat_df) == 0:
+                    _diag["ml_blocked"] += 1
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
+                _log(f"  [ML] conf={conf:.3f} soglia={config.ML_CONFIDENCE_THRESHOLD} dir={signal.direction}")
                 if conf < config.ML_CONFIDENCE_THRESHOLD:
+                    _diag["ml_blocked"] += 1
                     i += 1
                     continue
             except Exception:
@@ -267,9 +291,11 @@ def run_backtest(
         tp_dist = abs(tp - entry)
 
         if sl_dist <= 0 or tp_dist <= 0:
+            _diag["rr_rejected"] += 1
             i += 1
             continue
         if tp_dist / sl_dist < 1.5:   # R:R minimo 1.5
+            _diag["rr_rejected"] += 1
             i += 1
             continue
 
@@ -312,8 +338,8 @@ def run_backtest(
         else:
             raw_r = (entry - exit_price) / sl_dist
 
-        # P&L in dollari (rischio fisso = RISK_PER_TRADE % del balance corrente)
-        risk_amt = balance * config.RISK_PER_TRADE
+        # P&L in dollari (rischio fisso = RISK_PER_TRADE_PCT % del balance corrente)
+        risk_amt = balance * config.RISK_PER_TRADE_PCT
         pnl      = raw_r * risk_amt
         balance += pnl
 
@@ -344,6 +370,19 @@ def run_backtest(
 
         # Salta alla candela dopo la chiusura del trade
         i = exit_bar + 1
+
+    # ── DIAGNOSTICA ───────────────────────────────────────────────────────────
+
+    _log(f"{'─' * 50}")
+    _log(f"  DIAGNOSTICA FILTRI")
+    _log(f"  Candele in sessione  : {_diag['session_bars']}")
+    _log(f"  Scartate (no trend)  : {_diag['no_trend']}")
+    _log(f"  Scartate (no OB hit) : {_diag['no_ob']}")
+    _log(f"  Segnali SMC trovati  : {_diag['signals']}")
+    _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
+    _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
+    _log(f"  Trade aperti         : {len(trades)}")
+    _log(f"{'─' * 50}")
 
     # ── METRICHE ──────────────────────────────────────────────────────────────
 

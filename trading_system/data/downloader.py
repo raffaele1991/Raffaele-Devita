@@ -80,21 +80,43 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    # Seleziona il simbolo
+    # Seleziona il simbolo e attendi che MT5 carichi i dati
     if not mt5.symbol_select(symbol, True):
         _set_symbol(symbol, state="error", msg=f"Simbolo '{symbol}' non disponibile su MT5")
         return
 
+    import time as _time
+    _time.sleep(1)  # MT5 ha bisogno di un momento dopo symbol_select
+
     # Numero barre M5 per gli anni richiesti (288 barre/giorno × 365 × years)
-    count = years * 365 * 288
-    _set_symbol(symbol, msg=f"Download {symbol} – ultime {count:,} barre M5 (~{years} anni)...")
+    total_count = years * 365 * 288
+    CHUNK = 50_000   # limite broker per singola richiesta
 
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, count)
+    # Scarica a chunks partendo dalla barra più recente e andando indietro
+    all_rates = []
+    pos = 0
+    while pos < total_count:
+        chunk_size = min(CHUNK, total_count - pos)
+        _set_symbol(symbol, msg=f"Download {symbol} – barre {pos:,}–{pos+chunk_size:,} / {total_count:,}...")
+        chunk = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, pos, chunk_size)
+        if chunk is None or len(chunk) == 0:
+            if pos == 0:
+                err = mt5.last_error()
+                _set_symbol(symbol, state="error",
+                            msg=f"Nessun dato ricevuto da MT5: {err}. "
+                                f"Verifica: 1) MT5 aperto e connesso al broker "
+                                f"2) 'Algo Trading' abilitato nel toolbar "
+                                f"3) Simbolo {symbol} visibile in MarketWatch")
+                return
+            break   # fine dello storico disponibile sul broker
+        all_rates.append(chunk)
+        if len(chunk) < chunk_size:
+            break   # broker non ha più dati oltre questo punto
+        pos += chunk_size
+        _time.sleep(0.3)   # piccola pausa per non sovraccaricare MT5
 
-    if rates is None or len(rates) == 0:
-        err = mt5.last_error()
-        _set_symbol(symbol, state="error", msg=f"Nessun dato ricevuto da MT5: {err}")
-        return
+    import numpy as np
+    rates = np.concatenate(all_rates)
 
     # Costruisci DataFrame
     df = pd.DataFrame(rates)
