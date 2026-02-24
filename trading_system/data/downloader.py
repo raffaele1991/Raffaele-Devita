@@ -17,7 +17,7 @@ import os
 import sys
 import threading
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -80,7 +80,7 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    date_to   = datetime.now()
+    date_to   = datetime.now(timezone.utc)
     date_from = date_to - timedelta(days=365 * years)
 
     # Seleziona il simbolo
