@@ -185,10 +185,12 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
             # L'OB è "attivo" al bar i se non è ancora stato invalidato
             if ob.invalidated_at != -1 and ob.invalidated_at <= i:
                 continue
-            if t == 1 and l <= ob.top + a and c >= ob.bottom:
+            # Stessa soglia di prossimità del detector (0.5 ATR) per allineare
+            # training e inference sulla stessa popolazione di segnali
+            if t == 1 and l <= ob.top + 0.5 * a and c >= ob.bottom:
                 best_ob = ob
                 break
-            elif t == -1 and h >= ob.bottom - a and c <= ob.top:
+            elif t == -1 and h >= ob.bottom - 0.5 * a and c <= ob.top:
                 best_ob = ob
                 break
 
@@ -206,12 +208,16 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
         else:
             ob_penetration[i] = max(0.0, min(1.0, (c - best_ob.bottom) / ob_sz))
 
-        # ── FVG confluente nella zona dell'impulso (OB ± 3 ATR) ─────────────
-        # In SMC il FVG è creato dall'impulso che ha generato l'OB, quindi
-        # si trova sopra/sotto l'OB ma nella stessa area di prezzo (±3 ATR)
+        # ── FVG confluente nella zona dell'impulso ────────────────────────────
+        # Zone identiche al detector: long → sotto OB max 1 ATR, sopra max 3 ATR
+        #                              short → sotto OB max 3 ATR, sopra max 1 ATR
         fvgs_dir = bull_fvgs if t == 1 else bear_fvgs
-        zone_lo = best_ob.bottom - 3 * a
-        zone_hi = best_ob.top    + 3 * a
+        if t == 1:
+            zone_lo = best_ob.bottom - a
+            zone_hi = best_ob.top    + 3 * a
+        else:
+            zone_lo = best_ob.bottom - 3 * a
+            zone_hi = best_ob.top    + a
         for fvg in reversed(fvgs_dir):
             if fvg.index >= i:
                 continue
