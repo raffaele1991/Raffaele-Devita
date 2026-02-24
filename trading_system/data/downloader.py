@@ -141,23 +141,25 @@ def _run_download(years: int):
         _set("error", "MetaTrader5 non installato. Esegui: pip install MetaTrader5  (richiede Windows + MT5)")
         return
 
-    # Inizializza MT5 (login deve essere int)
-    try:
-        mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
-    except (ValueError, TypeError):
-        mt5_login = None
-
-    ok = mt5.initialize(
-        login=mt5_login,
-        password=config.MT5_PASSWORD if config.MT5_PASSWORD else None,
-        server=config.MT5_SERVER if config.MT5_SERVER else None,
-    )
+    # Connetti MT5: prima prova a connettersi al terminale già aperto (senza credenziali),
+    # poi fallback con credenziali esplicite se il terminale non è già in esecuzione.
+    ok = mt5.initialize()
+    if not ok:
+        try:
+            mt5_login = int(config.MT5_ACCOUNT) if config.MT5_ACCOUNT else None
+        except (ValueError, TypeError):
+            mt5_login = None
+        ok = mt5.initialize(
+            login=mt5_login,
+            password=config.MT5_PASSWORD if config.MT5_PASSWORD else None,
+            server=config.MT5_SERVER if config.MT5_SERVER else None,
+        )
 
     if not ok:
         err = mt5.last_error()
         _set("running", False)
         _set("done", True)
-        _set("error", f"MT5 non avviato o non connesso: {err}. Apri MetaTrader5 prima di scaricare.")
+        _set("error", f"MT5 non avviato o non connesso: {err}. Apri MetaTrader5 e abilita 'Algo Trading' nel toolbar.")
         return
 
     try:
