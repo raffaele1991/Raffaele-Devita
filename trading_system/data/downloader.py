@@ -80,7 +80,7 @@ def _download_symbol(symbol: str, years: int):
                     msg="MetaTrader5 non installato. Installa con: pip install MetaTrader5 (solo Windows)")
         return
 
-    date_to   = datetime.now(timezone.utc)
+    date_to   = datetime.utcnow()          # MT5 vuole datetime naive in UTC
     date_from = date_to - timedelta(days=365 * years)
 
     # Seleziona il simbolo
