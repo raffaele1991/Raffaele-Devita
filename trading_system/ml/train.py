@@ -116,8 +116,8 @@ def train_symbol(symbol: str):
     print("  Costruzione feature (incluse feature SMC specifiche)...")
     df = build_features(df, symbol=symbol)
 
-    print("  Costruzione etichette (lookahead 30 candele)...")
-    labels = build_labels(df, lookahead=30)
+    print("  Costruzione etichette (lookahead 40 candele)...")
+    labels = build_labels(df, lookahead=40)
     df["label"] = labels
 
     # Rimuovi righe senza etichetta o feature incomplete

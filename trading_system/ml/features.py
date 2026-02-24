@@ -185,10 +185,12 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
             # L'OB è "attivo" al bar i se non è ancora stato invalidato
             if ob.invalidated_at != -1 and ob.invalidated_at <= i:
                 continue
-            if t == 1 and l <= ob.top + a and c >= ob.bottom:
+            # Stessa soglia di prossimità del detector (0.5 ATR) per allineare
+            # training e inference sulla stessa popolazione di segnali
+            if t == 1 and l <= ob.top + 0.5 * a and c >= ob.bottom:
                 best_ob = ob
                 break
-            elif t == -1 and h >= ob.bottom - a and c <= ob.top:
+            elif t == -1 and h >= ob.bottom - 0.5 * a and c <= ob.top:
                 best_ob = ob
                 break
 
@@ -206,12 +208,16 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
         else:
             ob_penetration[i] = max(0.0, min(1.0, (c - best_ob.bottom) / ob_sz))
 
-        # ── FVG confluente nella zona dell'impulso (OB ± 3 ATR) ─────────────
-        # In SMC il FVG è creato dall'impulso che ha generato l'OB, quindi
-        # si trova sopra/sotto l'OB ma nella stessa area di prezzo (±3 ATR)
+        # ── FVG confluente nella zona dell'impulso ────────────────────────────
+        # Zone identiche al detector: long → sotto OB max 1 ATR, sopra max 3 ATR
+        #                              short → sotto OB max 3 ATR, sopra max 1 ATR
         fvgs_dir = bull_fvgs if t == 1 else bear_fvgs
-        zone_lo = best_ob.bottom - 3 * a
-        zone_hi = best_ob.top    + 3 * a
+        if t == 1:
+            zone_lo = best_ob.bottom - a
+            zone_hi = best_ob.top    + 3 * a
+        else:
+            zone_lo = best_ob.bottom - 3 * a
+            zone_hi = best_ob.top    + a
         for fvg in reversed(fvgs_dir):
             if fvg.index >= i:
                 continue
@@ -316,8 +322,11 @@ FEATURE_COLUMNS = [
 def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.0) -> pd.Series:
     """
     Label binaria: 1 se il trade nella direzione del trend era vincente.
-    Un trade è vincente se il prezzo si muove di min_move_atr * ATR
-    nella direzione corretta entro `lookahead` candele senza toccare prima lo SL.
+    Un trade è vincente se il TP viene colpito PRIMA dello SL entro `lookahead` candele.
+
+    Usa controllo sequenziale bar-per-bar (lo stesso dell'engine di backtest) per
+    evitare falsi negativi dovuti a SL colpiti dopo il TP nella stessa finestra.
+    SL/TP sono calcolati con ATR identicamente al detector.py.
     """
     labels = pd.Series(0, index=df.index)
     atr   = df["atr"].values
@@ -331,27 +340,45 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
         if t == 0:
             continue
 
-        sl_dist = atr[i] * config.ATR_SL_MULTIPLIER
+        a = atr[i]
+        if np.isnan(a) or a <= 0:
+            continue
+
+        sl_dist = a * config.ATR_SL_MULTIPLIER
         entry   = close[i]
 
         if t == 1:  # long
             sl = entry - sl_dist
             tp = entry + sl_dist * config.MIN_RISK_REWARD
-            hit_sl = any(low[i+1:i+lookahead+1]  <= sl)
-            hit_tp = any(high[i+1:i+lookahead+1] >= tp)
-            if hit_tp and not hit_sl:
-                labels.iloc[i] = 1
-            elif hit_sl:
-                labels.iloc[i] = 0
+            # Controllo sequenziale: il primo livello colpito determina l'esito
+            for k in range(i + 1, i + lookahead + 1):
+                sl_hit = low[k]  <= sl
+                tp_hit = high[k] >= tp
+                if sl_hit and tp_hit:
+                    # Entrambi nella stessa candela: usa la direzione della candela
+                    labels.iloc[i] = 1 if close[k] >= close[k - 1] else 0
+                    break
+                elif sl_hit:
+                    labels.iloc[i] = 0
+                    break
+                elif tp_hit:
+                    labels.iloc[i] = 1
+                    break
 
         else:  # short
             sl = entry + sl_dist
             tp = entry - sl_dist * config.MIN_RISK_REWARD
-            hit_sl = any(high[i+1:i+lookahead+1] >= sl)
-            hit_tp = any(low[i+1:i+lookahead+1]  <= tp)
-            if hit_tp and not hit_sl:
-                labels.iloc[i] = 1
-            elif hit_sl:
-                labels.iloc[i] = 0
+            for k in range(i + 1, i + lookahead + 1):
+                sl_hit = high[k] >= sl
+                tp_hit = low[k]  <= tp
+                if sl_hit and tp_hit:
+                    labels.iloc[i] = 1 if close[k] <= close[k - 1] else 0
+                    break
+                elif sl_hit:
+                    labels.iloc[i] = 0
+                    break
+                elif tp_hit:
+                    labels.iloc[i] = 1
+                    break
 
     return labels
