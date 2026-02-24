@@ -1,0 +1,95 @@
+"""
+Trading System Configuration
+=============================
+Sistema ibrido SMC + ML per XAUUSD e EURUSD su M5.
+Ottimizzato per prop firm (FTMO, MyFundedFX, The5ers).
+"""
+
+# ─── SIMBOLI ──────────────────────────────────────────────────────────────────
+
+SYMBOLS = ["XAUUSD", "EURUSD"]
+TIMEFRAME = "M5"
+
+# ─── CARTELLE ─────────────────────────────────────────────────────────────────
+
+DATA_DIR   = "trading_system/data"     # metti qui i CSV esportati da MT5
+MODELS_DIR = "trading_system/models"  # qui vengono salvati i modelli addestrati
+
+# ─── SESSIONI (Kill Zone) ──────────────────────────────────────────────────────
+# Orari in CET (Central European Time, UTC+1 / UTC+2 in estate)
+# Il bot opera SOLO in queste finestre
+
+SESSION_LONDON_START = "08:00"
+SESSION_LONDON_END   = "11:00"
+
+SESSION_NY_START     = "14:00"
+SESSION_NY_END       = "17:00"
+
+# ─── FILTRO NEWS ──────────────────────────────────────────────────────────────
+
+NEWS_BUFFER_MINUTES = 30   # stop trading X minuti prima/dopo news ad alto impatto
+
+# ─── SMC – SMART MONEY CONCEPTS ───────────────────────────────────────────────
+
+# Structure
+SMC_SWING_LOOKBACK    = 10   # candele per identificare swing high/low
+SMC_BOS_CONFIRMATION  = 2    # candele di chiusura oltre il livello per confermare BOS
+
+# Order Block
+OB_LOOKBACK           = 20   # quante candele cercare per l'OB
+OB_MIN_CANDLE_BODY_PCT = 0.4  # corpo della candela OB deve essere almeno 40% del range
+
+# Fair Value Gap
+FVG_MIN_SIZE_PIPS     = {"XAUUSD": 1.0, "EURUSD": 0.0005}  # dimensione minima FVG
+
+# Liquidity
+LIQ_LOOKBACK          = 50   # candele per trovare livelli di liquidità (equal highs/lows)
+LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equal"
+
+# ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
+
+ML_CONFIDENCE_THRESHOLD = 0.78   # il modello deve essere almeno 78% sicuro
+ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
+ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
+ML_RANDOM_SEED          = 42
+
+# Parametri modello (GradientBoosting)
+ML_N_ESTIMATORS     = 300
+ML_MAX_DEPTH        = 5
+ML_LEARNING_RATE    = 0.05
+ML_SUBSAMPLE        = 0.8
+
+# ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
+
+# Regole prop firm standard (compatibile FTMO / MyFundedFX / The5ers)
+PROP_MAX_DAILY_LOSS_PCT  = 0.03   # bot si ferma al 3% (prop limit è 4-5%)
+PROP_MAX_TOTAL_LOSS_PCT  = 0.07   # bot si ferma al 7% (prop limit è 8-10%)
+PROP_MAX_TRADES_PER_DAY  = 3      # massimo 3 trade al giorno
+PROP_CLOSE_EOD_HOUR      = 21     # chiude tutto alle 21:00 CET (no overnight)
+
+# Sizing
+RISK_PER_TRADE_PCT       = 0.005  # rischia 0.5% del capitale per trade
+MIN_RISK_REWARD          = 2.0    # minimo R:R 1:2 per entrare
+
+# Stop Loss via ATR
+ATR_PERIOD               = 14
+ATR_SL_MULTIPLIER        = 1.5    # SL = ATR * 1.5
+
+# Consecutive losses protection
+MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
+
+# ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
+
+MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo
+MT5_PASSWORD = ""       # password conto
+MT5_SERVER   = ""       # server FTMO (es. "FTMO-Demo")
+
+# ─── NOTIFICHE TELEGRAM ───────────────────────────────────────────────────────
+
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID   = ""
+
+# ─── LOGGING ──────────────────────────────────────────────────────────────────
+
+LOG_LEVEL = "INFO"
+LOG_FILE  = "trading_system/trading.log"

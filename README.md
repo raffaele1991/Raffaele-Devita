@@ -1,328 +1,317 @@
-# Bug Bounty Vulnerability Scanner Agent v2.0
+# SMC + ML Automated Trading Bot
 
-Agent automatico per la scansione di vulnerabilita web, progettato per attivita di bug bounty e penetration testing autorizzato.
+Sistema di trading automatico basato su **Smart Money Concepts (SMC)** + **Machine Learning**, progettato per operare su **XAUUSD** e **EURUSD** su timeframe M5.
+Ottimizzato per superare le challenge delle principali **prop firm** (FTMO, MyFundedFX, The5ers).
 
-## Due modalita
+> **Requisiti di sistema:** Windows con MetaTrader 5 installato · Python 3.10+
 
-### Modalita LITE (solo Python, zero dipendenze esterne)
-Scanner interno con payload propri. Perfetto per iniziare.
+---
 
-```bash
-python -m bugbounty_scanner.cli -t example.com
-```
+## Guida rapida – passo per passo
 
-### Modalita PRO v2.0 (orchestratore tool professionali)
-Coordina automaticamente **13 fasi di scansione** con tool professionali + moduli interni.
+### Passo 1 — Installa le dipendenze Python
 
 ```bash
-python -m bugbounty_scanner.cli_pro -t example.com
+pip install -r requirements.txt
 ```
 
 ---
 
-## Funzionalita Principali
-
-### Scope Automatico da Programma Bug Bounty
-Estrae automaticamente scope e out-of-scope dalla pagina del programma su **HackerOne, Intigriti, Bugcrowd**:
+### Passo 2 — Avvia la dashboard
 
 ```bash
-python -m bugbounty_scanner.cli_pro -t example.com \
-  --program "https://hackerone.com/example"
+python run_dashboard.py
 ```
 
-Oppure da un file di testo (un dominio per riga):
+La dashboard si apre automaticamente nel browser su **http://localhost:5050**
+
+Da qui puoi fare **tutto senza toccare il codice**.
+
+---
+
+### Passo 3 — Configura le impostazioni (tab "Impostazioni")
+
+Nella dashboard, clicca il tab **Impostazioni** e compila:
+
+| Sezione | Cosa inserire |
+|---|---|
+| **Connessione MT5** | Server (es. `FTMO-Demo`), numero conto, password |
+| **Strumenti & Sessioni** | Simboli attivi, sessioni London/NY, timeframe |
+| **Risk Management** | Rischio per trade, max trade/giorno, limiti drawdown |
+| **Modello ML** | Abilita/disabilita ML, soglia confidence minima |
+| **Notifiche Telegram** | Token bot, Chat ID, quali notifiche ricevere |
+
+Clicca **"Salva Impostazioni"** — il sistema aggiorna automaticamente `config.py` e `settings.json`.
+
+> **Alternativa manuale:** puoi modificare direttamente `trading_system/config.py`
+
+---
+
+### Passo 4 — Scarica i dati storici (tab "Dati & Modello")
+
+1. Assicurati che **MetaTrader 5 sia aperto** e connesso al conto
+2. Scegli quanti anni di storico vuoi (default: **4 anni**)
+3. Clicca **"Scarica da MT5"**
+4. Aspetta il completamento — vedi la barra di avanzamento per ogni simbolo
+
+I file vengono salvati in `trading_system/data/XAUUSD_M5.csv` e `EURUSD_M5.csv`.
+
+> **Alternativa manuale:** esporta da MT5 → `Strumenti → History Center → XAUUSD → M5 → Export`
+> e copia i file in `trading_system/data/`
+
+---
+
+### Passo 5 — Addestra il modello ML (tab "Dati & Modello")
+
+1. Clicca **"Addestra Modello"**
+2. Segui l'output in tempo reale nella dashboard
+3. Al termine vedrai i file `.pkl` elencati con data e dimensione
+
+Oppure da terminale:
 
 ```bash
-python -m bugbounty_scanner.cli_pro -t example.com --scope scope.txt
+python trading_system/ml/train.py
 ```
 
-Il tool estrae:
-- Domini in scope e out-of-scope
-- Regole del programma
-- Vulnerabilita escluse (self-xss, ecc.)
-- Blocca automaticamente le richieste verso domini fuori scope
+Output atteso:
 
-### Identificazione Bug Bounty
-```bash
-python -m bugbounty_scanner.cli_pro -t example.com \
-  -H "X-Bug-Bounty: kobraraf91" \
-  --email kobraraf91@intigriti.me \
-  --rate-limit 5
 ```
+============================================================
+  Addestramento modello: XAUUSD
+============================================================
+  Candele totali caricate: 210,000
+  Periodo: 2021-01-04 → 2024-12-31
 
-### Notifiche Telegram e Discord
-Ricevi avvisi sul telefono quando trova vulnerabilita:
-
-```bash
-# Telegram
-python -m bugbounty_scanner.cli_pro -t example.com \
-  --telegram-token "TOKEN_BOT" \
-  --telegram-chat "CHAT_ID"
-
-# Discord
-python -m bugbounty_scanner.cli_pro -t example.com \
-  --discord-webhook "URL_WEBHOOK"
+  ── RISULTATI TEST ──────────────────────────────
+  Accuracy : 0.71
+  Precision: 0.74
+  Recall   : 0.68
+  F1       : 0.71
+  AUC-ROC  : 0.78
+  Modello salvato in: trading_system/models/model_xauusd.pkl
 ```
 
 ---
 
-## Pipeline di Scansione PRO (13 fasi)
+### Passo 6 — Avvia il bot (tab "Dashboard")
 
-| # | Tool/Modulo | Cosa fa | Fase |
-|---|-------------|---------|------|
-| 1 | **Subfinder** | Enumerazione sottodomini passiva (OSINT) | Ricognizione |
-| 2 | **httpx** | Probing HTTP, tech detection, status check | Ricognizione |
-| 3 | **Nmap** | Scansione porte e fingerprint servizi | Ricognizione |
-| 4 | **Crawler** | Scopre pagine, form, parametri, email | Discovery |
-| 5 | **Wayback** | Cerca endpoint storici dalla Wayback Machine | Discovery |
-| 6 | **ffuf** | Fuzzing directory/file (brute-force veloce) | Discovery |
-| 7 | **JS Scanner** | Estrae API key, secret, endpoint dai file .js | Analisi |
-| 8 | **Nuclei** | Migliaia di template per CVE, misconfig, exposure | Scansione |
-| 9 | **Nikto** | Scanner web server (CGI, versioni obsolete) | Scansione |
-| 10 | **Dalfox** | XSS avanzato con bypass WAF e DOM analysis | Exploit |
-| 11 | **SQLMap** | SQL injection con database takeover | Exploit |
-| 12 | **Headers** | Analisi header sicurezza, CORS, cookie | Check |
-| 13 | **Sensitive Files** | File e endpoint sensibili esposti | Check |
+Clicca **"Avvia Bot"** nella dashboard oppure da terminale:
 
-## Installazione
-
-### 1. Scarica i file
-Dopo l'acquisto riceverai un archivio con i file eseguibili. Estraili e rendili eseguibili:
 ```bash
-chmod +x bbscanner bbscanner_pro bbscanner_activate
+python trading_system/bot.py
 ```
 
-### 2. Attiva la licenza
-```bash
-./bbscanner_activate BBSC-LA-TUA-CHIAVE
-```
+Il bot inizia a operare nelle sessioni configurate (London / NY).
 
-### 3. (Solo PRO) Installa i tool esterni
-La modalita PRO richiede tool professionali (Nuclei, Nmap, etc.):
-```bash
-chmod +x install_tools.sh
-./install_tools.sh
-```
+---
 
-### 4. Verifica che tutto funzioni
-```bash
-./bbscanner_pro -t example.com --check
-```
+### Passo 7 — Esegui un backtest (tab "Backtest")
 
-## Esempi di Utilizzo
+1. Scegli il simbolo (XAUUSD / EURUSD)
+2. Imposta il periodo (data inizio / data fine)
+3. Clicca **"Esegui Backtest"**
+4. Visualizza i risultati: Win Rate, Profit Factor, Net R, Max Drawdown, Sharpe Ratio, storico trade completo
 
-### Comando completo per bug bounty
-```bash
-python -m bugbounty_scanner.cli_pro \
-  -t example.com \
-  --program "https://app.intigriti.com/researcher/programs/company/program" \
-  -H "X-Bug-Bounty: kobraraf91" \
-  --email kobraraf91@intigriti.me \
-  --rate-limit 5 \
-  --telegram-token "TOKEN" \
-  --telegram-chat "CHAT_ID"
-```
+---
 
-### Modalita LITE
-```bash
-# Scansione completa
-python -m bugbounty_scanner.cli -t example.com
+## Dashboard — 5 Tab
 
-# Solo XSS e SQLi con header custom
-python -m bugbounty_scanner.cli -t "https://example.com/search?q=test&id=1" \
-  -m xss sqli -H "X-Bug-Bounty: kobraraf91" --rate-limit 5
+### Tab 1 · Dashboard
+- **Stato bot** — ONLINE / OFFLINE con timer sessione attiva
+- **KPI in tempo reale** — Saldo, DD giornaliero, DD totale, Win Rate, Trade oggi
+- **Segnali SMC live** — direzione, confluenze rilevate, confidence ML
+- **Posizioni aperte** — simbolo, direzione, entry, SL, TP, P&L corrente
+- **Perché non apro posizioni?** — motivo preciso ad ogni ciclo (sessione chiusa, news, DD superato, ecc.)
+- **Storico trade di oggi** — con P&L e esito WIN/LOSS
 
-# Salta ricognizione
-python -m bugbounty_scanner.cli -t example.com --no-recon
-```
+### Tab 2 · Dati & Modello
+- **Scarica dati da MT5** — download automatico 1–10 anni di storico M5
+- **Barre di avanzamento** per simbolo con stato e numero candele
+- **Lista CSV presenti** con righe, date e dimensione
+- **Addestra modello ML** — avvia il training con output live in tempo reale
+- **Lista modelli .pkl** con data di aggiornamento e dimensione
 
-### Modalita PRO
-```bash
-# Scansione completa con tutti i tool
-python -m bugbounty_scanner.cli_pro -t example.com
+### Tab 3 · Backtest
+- Seleziona simbolo, periodo e avvia il backtest
+- **Metriche**: Trade totali, Win Rate, Profit Factor, Net R, Max Drawdown, Balance finale, Net P&L, Sharpe Ratio, Avg Win R, Avg Loss R
+- **Storico completo** di tutti i trade con entry, SL, TP, exit, R e P&L
 
-# Solo alcuni tool
-python -m bugbounty_scanner.cli_pro -t example.com --pipeline subfinder httpx nuclei
+### Tab 4 · Log Live
+- Log colorato in tempo reale con auto-scroll
+- **Verde** = trade / successi, **Rosso** = errori, **Giallo** = warning, **Grigio** = info
 
-# Solo vulnerabilita critiche con Nuclei
-python -m bugbounty_scanner.cli_pro -t example.com --nuclei-severity critical,high
+### Tab 5 · Impostazioni
+- **Connessione MT5** — server, conto, password (salvati in `settings.json`)
+- **Strumenti & Sessioni** — simboli attivi, sessioni London/NY, timeframe
+- **Risk Management** — rischio per trade, max trade/giorno, limiti DD, R:R minimo
+- **Modello ML** — abilita/disabilita, soglia confidence
+- **Notifiche Telegram** — token bot, chat ID, tipologie di notifica
+- Il pulsante **"Salva Impostazioni"** aggiorna automaticamente anche `config.py`
 
-# Nuclei con tag specifici
-python -m bugbounty_scanner.cli_pro -t example.com --nuclei-tags cve,misconfig
+---
 
-# Scansione porte completa
-python -m bugbounty_scanner.cli_pro -t example.com --nmap-scan full
-
-# SQLMap aggressivo
-python -m bugbounty_scanner.cli_pro -t "https://example.com/page?id=1" \
-  --sqlmap-level 3 --sqlmap-risk 2
-
-# Crawler profondo
-python -m bugbounty_scanner.cli_pro -t example.com --crawl-depth 5 --crawl-pages 200
-```
-
-## Tutte le Opzioni CLI PRO
-
-| Flag | Descrizione |
-|------|-------------|
-| **Target** | |
-| `-t, --target` | URL o dominio target (obbligatorio) |
-| `--pipeline` | Tool da eseguire (default: tutti) |
-| `--check` | Verifica tool installati ed esci |
-| **Programma BB** | |
-| `--program` | URL programma HackerOne/Intigriti/Bugcrowd (estrae scope) |
-| `--scope` | File scope (un dominio per riga) |
-| **Identificazione** | |
-| `-H, --header` | Header custom (ripetibile) |
-| `--email` | Email identificativa |
-| `--rate-limit` | Max richieste al secondo (default: 5) |
-| **Notifiche** | |
-| `--telegram-token` | Token bot Telegram |
-| `--telegram-chat` | Chat ID Telegram |
-| `--discord-webhook` | URL webhook Discord |
-| `--notify-severity` | Gravita minima notifiche: CRITICAL, HIGH, MEDIUM, LOW, INFO |
-| **Crawler** | |
-| `--crawl-depth` | Profondita crawling (default: 3) |
-| `--crawl-pages` | Max pagine da crawlare (default: 100) |
-| **Nuclei** | |
-| `--nuclei-severity` | Filtro gravita (es: critical,high) |
-| `--nuclei-tags` | Filtro tag (es: cve,misconfig) |
-| `--nuclei-templates` | Path template custom |
-| `--nuclei-rate` | Rate limit Nuclei (default: 100) |
-| **Nmap** | |
-| `--nmap-scan` | quick, default, full |
-| **SQLMap** | |
-| `--sqlmap-level` | Livello test 1-5 |
-| `--sqlmap-risk` | Rischio 1-3 |
-| **ffuf** | |
-| `--ffuf-wordlist` | Wordlist custom |
-| `--ffuf-threads` | Thread ffuf (default: 40) |
-| **Output** | |
-| `-o, --output-dir` | Cartella report (default: reports) |
-| `-f, --format` | json, html, markdown, all |
-| `-v, --verbose` | Output dettagliato |
-| `-q, --quiet` | Output minimo |
-
-## Struttura del Progetto
+## Architettura del sistema
 
 ```
-bugbounty_scanner/
-  __init__.py             # Package principale
-  config.py               # Configurazione, payload, costanti
-  scanner.py              # Motore scansione LITE
-  orchestrator.py         # Motore scansione PRO (orchestratore)
-  reporter.py             # Report: JSON, HTML (dark-mode), Markdown
-  http_session.py         # Sessione HTTP con rate limiting e header custom
-  program_parser.py       # Parser programmi BB (HackerOne, Intigriti, Bugcrowd)
-  scope_checker.py        # Verificatore scope in/out
-  notifier.py             # Notifiche Telegram e Discord
-  cli.py                  # CLI modalita LITE
-  cli_pro.py              # CLI modalita PRO v2.0
-  modules/                # Moduli interni
-    recon.py              #   Ricognizione (subdomain, porte, tech)
-    crawler.py            #   Deep crawler (pagine, form, parametri)
-    wayback.py            #   Wayback Machine (endpoint storici)
-    js_scanner.py         #   JavaScript scanner (secret, API key, endpoint)
-    headers.py            #   Security headers e CORS
-    xss.py                #   Cross-Site Scripting
-    sqli.py               #   SQL Injection
-    ssrf.py               #   SSRF
-    open_redirect.py      #   Open Redirect
-    sensitive_files.py    #   File sensibili esposti
-  tools/                  # Wrapper tool professionali
-    base.py               #   Classe base wrapper
-    subfinder.py          #   Subfinder
-    httpx_tool.py         #   httpx
-    nmap_tool.py          #   Nmap
-    nuclei_tool.py        #   Nuclei
-    ffuf_tool.py          #   ffuf
-    sqlmap_tool.py        #   SQLMap
-    dalfox_tool.py        #   Dalfox
-    nikto_tool.py         #   Nikto
-install_tools.sh          # Installer automatico tool
+Dati MT5 (OHLCV M5)
+        │
+        ▼
+┌─────────────────┐
+│  SMC Detector   │  BOS / CHoCH / Order Block / FVG / Liquidity
+└────────┬────────┘
+         │ segnale SMC
+         ▼
+┌─────────────────┐
+│   ML Classifier │  Gradient Boosting – 29 feature – soglia configurabile
+└────────┬────────┘
+         │ conferma
+         ▼
+┌─────────────────┐
+│  Session Filter │  Kill zone London 08-11 / NY 14-17 (CET)
+│  News Filter    │  Blocco automatico eventi high-impact
+└────────┬────────┘
+         │ via libera
+         ▼
+┌─────────────────┐
+│  Risk Manager   │  Sizing configurabile · DD giornaliero · DD totale
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  MT5 Executor   │  Ordini a mercato con SL/TP · chiusura EOD automatica
+└─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Telegram Bot   │  Notifiche trade / warning / segnali
+└─────────────────┘
 ```
 
-## Codici di Uscita
+---
 
-| Codice | Significato |
-|--------|-------------|
-| 0 | Nessuna vulnerabilita critica/alta/media |
-| 1 | Vulnerabilita MEDIE trovate |
-| 2 | Vulnerabilita CRITICHE o ALTE trovate |
+## Feature del modello ML (29 feature)
 
-## Software a Pagamento - Licenza Richiesta
+| Categoria | Feature |
+|-----------|---------|
+| **Candela** | body %, ombre superiore/inferiore, direzione |
+| **Rendimenti** | ret 1 / 3 / 5 / 10 / 20 candele |
+| **EMA** | distanza dal prezzo vs EMA 9 / 21 / 50 / 100 / 200 |
+| **Volatilità** | ATR %, volatilità storica 5 / 20 candele |
+| **Momentum** | RSI, MACD, istogramma MACD, Stochastic K/D |
+| **SMC** | trend, BOS bull/bear, CHoCH bull/bear, barre dall'ultimo segnale |
 
-Questo software e **a pagamento** e protetto da un **sistema di chiavi di licenza**.
-Senza una chiave valida il programma **non si avvia**.
+**Label:** il trade nella direzione del trend tocca il TP prima dello SL entro 10 candele?
 
-### Piani disponibili - Abbonamento mensile
+---
 
-| Piano | Prezzo | Per chi | Cosa include | Supporto |
-|-------|--------|---------|-------------|----------|
-| **LITE** | **19€/mese** | Singolo utente | Modalita LITE (7 moduli) | - |
-| **PRO** | **49€/mese** | Professionista o team (max 5) | LITE + PRO (tutti i 13 moduli) | Email (48h) |
-| **ENTERPRISE** | **149€/mese** | Azienda (utenti illimitati) | Tutto PRO + personalizzazioni + formazione | Prioritario (24h) |
+## SMC – Logica del segnale
 
-Risparmia con l'annuale: **2 mesi gratis** (LITE 190€/anno, PRO 490€/anno, ENTERPRISE 1.490€/anno)
+Un trade viene aperto solo se si verificano **tutti** questi elementi:
 
-### Come funziona l'acquisto
+1. **Trend confermato** — BOS o CHoCH rilevato sulla struttura M5
+2. **Order Block attivo** — prezzo ritorna su un OB non invalidato nella direzione del trend
+3. **Confluenza FVG** — Fair Value Gap presente nella stessa zona (bonus)
+4. **Sweep di liquidità** — equal highs/lows spazzati prima dell'inversione (bonus)
+5. **ML confidence ≥ soglia** — il modello conferma il setup (configurabile da dashboard)
+6. **Kill zone attiva** — siamo in London (08–11) o NY (14–17) CET
+7. **No news** — nessun evento macro nelle prossime 30 minuti
 
-1. **Contattami** via email a **devita.raffaele@gmail.com** specificando:
-   - Quale piano vuoi (LITE, PRO o ENTERPRISE)
-   - Per quante persone/quale azienda
-2. **Ricevi il preventivo** con il prezzo e le modalita di pagamento:
-   - PayPal
-   - Bonifico bancario
-   - Carta di credito/debito
-3. **Dopo il pagamento** ricevi via email:
-   - I **file eseguibili** del software (gia compilati, pronti all'uso)
-   - La tua **chiave di licenza personale** (formato: `BBSC-...`)
-   - Le istruzioni di installazione
-4. **Attiva la chiave** sul tuo computer:
-   ```bash
-   ./bbscanner_activate BBSC-LA-TUA-CHIAVE
-   ```
-5. **Fatto!** Ora puoi usare lo scanner:
-   ```bash
-   ./bbscanner -t example.com          # Modalita LITE
-   ./bbscanner_pro -t example.com      # Modalita PRO
-   ```
+---
 
-### Protezione anti-pirateria
+## Regole prop firm integrate
 
-Il software viene distribuito come **eseguibile compilato** (non come codice sorgente):
+| Regola | Default | Limite prop firm |
+|--------|---------|-----------------|
+| Max daily drawdown | 3% | 4–5% |
+| Max total drawdown | 7% | 8–10% |
+| Rischio per trade | 0.5% | — |
+| Max trade al giorno | 3 | — |
+| Chiusura EOD | 21:00 CET | no overnight |
+| R:R minimo | 1:2 | — |
 
-- Il codice sorgente **non e incluso**: ricevi solo i file eseguibili
-- Ogni chiave e **unica e personale**, legata alla tua email e al tuo piano
-- Ogni chiave ha una **data di scadenza** (mensile o annuale in base all'abbonamento)
-- Le chiavi sono **firmate crittograficamente**: non possono essere generate, modificate o falsificate
-- Chi ha una licenza **LITE** non puo usare la modalita **PRO**
-- **Senza chiave valida il software non si avvia**
+Tutti i valori sono modificabili dal tab **Impostazioni** senza toccare il codice.
 
-### Verifica stato licenza
+---
 
-Per vedere se la tua licenza e attiva e quando scade:
-```bash
-./bbscanner_activate
+## API della dashboard
+
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/` | Dashboard HTML |
+| GET | `/api/state` | Stato bot corrente (JSON) |
+| GET | `/api/log` | Ultime N righe di log |
+| POST | `/api/control` | `{"action": "start"\|"stop"}` |
+| POST | `/api/data/download` | Avvia download dati MT5 `{"years": 4}` |
+| GET | `/api/data/status` | Stato e progresso del download |
+| GET | `/api/data/files` | Elenco CSV con statistiche |
+| POST | `/api/train` | Avvia training modello ML |
+| GET | `/api/train/status` | Stato training + output live |
+| GET | `/api/models/files` | Elenco modelli `.pkl` |
+| POST | `/api/backtest` | Avvia backtest `{"symbol", "start_date", "end_date"}` |
+| GET | `/api/backtest/status` | Stato e risultati del backtest |
+| GET | `/api/settings` | Legge le impostazioni correnti |
+| POST | `/api/settings` | Salva impostazioni e aggiorna config.py |
+
+---
+
+## Struttura del progetto
+
+```
+trading_system/
+├── config.py              ← parametri configurabili (aggiornato automaticamente dalla dashboard)
+├── settings.json          ← impostazioni salvate dalla dashboard (generato automaticamente)
+├── bot.py                 ← avvio del bot live
+├── data/
+│   ├── downloader.py      ← download automatico storico da MT5
+│   ├── XAUUSD_M5.csv      ← (generato dopo download)
+│   └── EURUSD_M5.csv      ← (generato dopo download)
+├── models/
+│   ├── model_xauusd.pkl   ← (generato dopo training)
+│   └── model_eurusd.pkl   ← (generato dopo training)
+├── dashboard/
+│   ├── app.py             ← server Flask con tutte le API
+│   └── templates/
+│       └── index.html     ← UI web dark theme (5 tab)
+├── smc/
+│   ├── structure.py       ← rilevamento BOS, CHoCH, trend
+│   ├── zones.py           ← Order Block, FVG, Liquidity levels
+│   └── detector.py        ← segnale SMC finale
+├── ml/
+│   ├── features.py        ← feature engineering (29 feature)
+│   ├── model.py           ← Gradient Boosting Classifier
+│   └── train.py           ← script di training
+├── filters/
+│   ├── session.py         ← kill zone (London / NY)
+│   └── news.py            ← blocco eventi macro (ForexFactory)
+├── risk/
+│   └── manager.py         ← sizing, drawdown, prop firm rules
+├── backtest/
+│   └── engine.py          ← motore di backtest su dati storici
+└── mt5/
+    ├── connector.py       ← connessione, fetch dati e download storico
+    └── executor.py        ← apertura / chiusura ordini
+
+run_dashboard.py           ← avvio dashboard (apre browser automaticamente)
+requirements.txt           ← dipendenze Python
 ```
 
-### Rinnovo
+---
 
-Alla scadenza della licenza il software smette di funzionare. Per rinnovare scrivi a **devita.raffaele@gmail.com** e riceverai una nuova chiave.
+## Simboli supportati
 
-### Garanzia
-
-Rimborso completo entro **30 giorni** dall'acquisto se il software non funziona come descritto in questa documentazione.
-
-### Termini completi
-
-Consulta il file [LICENSE](LICENSE) per tutti i termini e condizioni del contratto di licenza.
+| Simbolo | Tipo | Note |
+|---------|------|------|
+| XAUUSD | Oro / USD | 1 pip = $0.01 |
+| EURUSD | Forex | 1 pip = $0.0001 |
+| GBPUSD | Forex | abilitabile dalle impostazioni |
 
 ---
 
 ## Disclaimer
 
-Questo strumento deve essere utilizzato **esclusivamente** per attivita di sicurezza autorizzate (bug bounty, penetration testing con permesso scritto). L'utilizzo non autorizzato contro sistemi di terze parti e illegale.
+Questo sistema è sviluppato a scopo educativo e di ricerca personale.
+Il trading comporta rischi significativi di perdita del capitale.
+Testa sempre su **conto demo** prima di usare capitali reali.
 
 ---
 

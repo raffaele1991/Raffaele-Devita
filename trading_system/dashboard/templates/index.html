@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMC+ML Trading Bot</title>
+  <style>
+    /* ── RESET & BASE ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2130;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --green:     #3fb950;
+      --green-dim: #1a4429;
+      --red:       #f85149;
+      --red-dim:   #4a1b1b;
+      --yellow:    #d29922;
+      --yellow-dim:#3d2e00;
+      --blue:      #388bfd;
+      --blue-dim:  #0d2358;
+      --accent:    #58a6ff;
+      --radius:    10px;
+      --shadow:    0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
+
+    .page { max-width: 1200px; margin: 0 auto; padding: 0 16px 32px; }
+
+    /* ── HEADER ─────────────────────────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+    }
+    .header-left  { display: flex; align-items: center; gap: 14px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .logo { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: -0.4px; }
+    .logo span { color: var(--text); }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase;
+    }
+    .status-online  { background: var(--green-dim); color: var(--green); }
+    .status-offline { background: var(--red-dim);   color: var(--red);   }
+    .status-paused  { background: var(--yellow-dim);color: var(--yellow);}
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    .session-badge { font-size: 12px; color: var(--muted); }
+
+    .last-update { font-size: 11px; color: var(--muted); }
+
+    .btn { padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-start { background: var(--green);  color: #0d1117; }
+    .btn-stop  { background: var(--red);    color: #fff; }
+
+    /* ── KPI STRIP ──────────────────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 10px; margin-bottom: 16px;
+    }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+    }
+    .card-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .card-value { font-size: 22px; font-weight: 700; }
+    .card-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+
+    .gauge-wrap  { margin-top: 8px; }
+    .gauge-track { height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .gauge-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.5s; }
+    .gauge-labels{ display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* ── TAB NAV ─────────────────────────────────────────────────────────── */
+    .tab-nav {
+      display: flex; gap: 4px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border); padding-bottom: 0;
+    }
+    .tab-btn {
+      padding: 8px 18px; border: none; background: transparent;
+      color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── SIGNALS & POSITIONS ────────────────────────────────────────────── */
+    .middle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .middle-grid { grid-template-columns: 1fr; } }
+
+    .signal-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .signal-row:last-child { border-bottom: none; }
+    .sig-dir { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .sig-long  { background: var(--blue-dim);  color: var(--blue);  }
+    .sig-short { background: var(--red-dim);   color: var(--red);   }
+
+    .no-pos { font-size: 12px; color: var(--muted); padding: 8px 0; }
+
+    /* Positions table */
+    .pos-table { width: 100%; border-collapse: collapse; }
+    .pos-table th {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      text-align: left; padding: 0 8px 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .pos-table td { padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+    .pos-table tr:last-child td { border-bottom: none; }
+
+    /* ── WHY NO TRADE ───────────────────────────────────────────────────── */
+    .why-section  { margin-bottom: 12px; }
+    .reason-list  { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+    .reason-item  { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; padding: 8px 10px; border-radius: 7px; }
+    .reason-icon  { font-size: 14px; flex-shrink: 0; }
+    .reason-ok      { background: var(--green-dim);  color: var(--green); }
+    .reason-warning { background: var(--yellow-dim); color: var(--yellow); }
+    .reason-block   { background: var(--red-dim);    color: var(--red); }
+    .reason-info    { background: var(--surface2);   color: var(--muted); }
+
+    /* ── CLOSED TRADES ──────────────────────────────────────────────────── */
+    .closed-section { margin-bottom: 12px; }
+    .trade-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; flex-wrap: wrap; }
+    .trade-row:last-child { border-bottom: none; }
+    .pnl-pos { color: var(--green); font-weight: 700; }
+    .pnl-neg { color: var(--red);   font-weight: 700; }
+
+    /* ── DATI & MODELLO ─────────────────────────────────────────────────── */
+    .dm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .dm-grid { grid-template-columns: 1fr; } }
+
+    .dm-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .dm-years {
+      width: 60px; padding: 6px 8px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;
+    }
+    .dm-btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+    .dm-btn:hover    { opacity: 0.85; }
+    .dm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .dm-btn-blue  { background: var(--blue);  color: #fff; }
+    .dm-btn-green { background: var(--green); color: #0d1117; }
+
+    .dm-status-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .dm-status-idle    { background: var(--surface2);   color: var(--muted); }
+    .dm-status-running { background: var(--blue-dim);   color: var(--blue);  }
+    .dm-status-done    { background: var(--green-dim);  color: var(--green); }
+    .dm-status-error   { background: var(--red-dim);    color: var(--red);   }
+
+    .dm-progress-wrap  { margin-top: 10px; }
+    .dm-progress-item  { margin-bottom: 8px; }
+    .dm-progress-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .dm-progress-track { height: 5px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .dm-progress-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s; }
+
+    .dm-file-list { display: flex; flex-direction: column; gap: 6px; }
+    .dm-file-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 10px; background: var(--surface2); border-radius: 7px; font-size: 12px;
+    }
+    .dm-file-name { color: var(--text); font-weight: 500; }
+    .dm-file-size { color: var(--muted); }
+    .dm-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+
+    .train-output {
+      background: #0a0e14; border-radius: 7px; padding: 10px 12px; margin-top: 12px;
+      font-family: 'Consolas', 'Fira Code', monospace; font-size: 11px; line-height: 1.6;
+      color: #8b949e; max-height: 160px; overflow-y: auto; display: none;
+    }
+
+    /* ── BACKTEST ───────────────────────────────────────────────────────── */
+    .bt-controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px;
+    }
+    .bt-label  { font-size: 12px; color: var(--muted); }
+    .bt-select, .bt-date {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px;
+    }
+    .bt-select { width: 110px; }
+    .bt-date   { width: 140px; }
+    .bt-run-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; background: var(--accent); color: #0d1117;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .bt-run-btn:hover    { opacity: 0.85; }
+    .bt-run-btn:active   { transform: scale(0.97); }
+    .bt-run-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .bt-progress-wrap  { margin-bottom: 14px; display: none; }
+    .bt-progress-track { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+    .bt-progress-fill  { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s; }
+    .bt-progress-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .bt-kpi-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 10px; margin-bottom: 14px;
+    }
+    @media (max-width: 900px) { .bt-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .bt-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .bt-kpi       { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .bt-kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+    .bt-kpi-value { font-size: 20px; font-weight: 700; }
+
+    .bt-table-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; }
+    .bt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .bt-table th {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      text-align: left; padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--surface);
+    }
+    .bt-table td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--border); }
+    .bt-table tr:last-child td { border-bottom: none; }
+    .bt-results-hidden { display: none; }
+
+    .bt-log {
+      background: #0a0e14; border-radius: 7px;
+      padding: 10px 12px; margin-top: 12px;
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 11px; line-height: 1.6; color: #8b949e;
+      max-height: 160px; overflow-y: auto; display: none;
+    }
+    .bt-log.visible { display: block; }
+
+    /* ── LOG ─────────────────────────────────────────────────────────────── */
+    .log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .log-autoscroll-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .log-body {
+      background: #0a0e14; border-radius: 7px; padding: 12px 14px;
+      font-family: 'Consolas', 'Fira Code', monospace; font-size: 12px;
+      line-height: 1.7; color: #8b949e; max-height: 500px; overflow-y: auto;
+    }
+    .log-default { color: var(--muted); font-style: italic; }
+    .log-line-ts  { color: #555; margin-right: 6px; }
+    .log-line-err { color: var(--red); }
+    .log-line-ok  { color: var(--green); }
+    .log-line-warn{ color: var(--yellow); }
+
+    /* ── UTILS ──────────────────────────────────────────────────────────── */
+    .text-green  { color: var(--green); }
+    .text-red    { color: var(--red); }
+    .text-yellow { color: var(--yellow); }
+    .text-blue   { color: var(--blue); }
+    .text-muted  { color: var(--muted); }
+    .text-accent { color: var(--accent); }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-win  { background: var(--green-dim); color: var(--green); }
+    .badge-loss { background: var(--red-dim);   color: var(--red); }
+    .badge-open { background: var(--blue-dim);  color: var(--blue); }
+
+    /* ── IMPOSTAZIONI ───────────────────────────────────────────────────── */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    @media (max-width: 700px) { .settings-grid { grid-template-columns: 1fr; } }
+
+    .settings-section { margin-bottom: 18px; }
+    .settings-section-title {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.6px; margin-bottom: 10px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 10px;
+    }
+    .settings-label { font-size: 13px; color: var(--text); flex-shrink: 0; min-width: 160px; }
+    .settings-input {
+      flex: 1; padding: 7px 10px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 13px; max-width: 220px;
+    }
+    .settings-input:focus { outline: none; border-color: var(--accent); }
+    .settings-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    .settings-tag-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .settings-tag {
+      padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .settings-tag.active { background: var(--blue-dim); color: var(--blue); border-color: var(--blue); }
+
+    .settings-save-row {
+      display: flex; align-items: center; gap: 12px; margin-top: 4px; padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-save-settings {
+      padding: 10px 28px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 700; background: var(--accent); color: #0d1117;
+      transition: opacity 0.15s;
+    }
+    .btn-save-settings:hover    { opacity: 0.85; }
+    .btn-save-settings:disabled { opacity: 0.4; cursor: not-allowed; }
+    .settings-save-msg { font-size: 12px; }
+    .settings-save-ok  { color: var(--green); }
+    .settings-save-err { color: var(--red); }
+
+    /* ── FOOTER ─────────────────────────────────────────────────────────── */
+    .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px; padding: 10px 0; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── HEADER ──────────────────────────────────────────────────────────── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">SMC<span>+ML</span> Bot</div>
+
+      <div id="statusPill" class="status-pill status-offline">
+        <div class="dot"></div>
+        <span id="statusText">OFFLINE</span>
+      </div>
+
+      <div class="session-badge">
+        <span class="session-name" id="sessionName">—</span>
+        <span id="sessionTimer" style="font-size:11px;"></span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="last-update" id="lastUpdate">Mai aggiornato</span>
+      <button id="controlBtn" class="btn btn-start" onclick="sendControl()">Avvia Bot</button>
+    </div>
+  </div>
+
+  <!-- ── KPI STRIP ────────────────────────────────────────────────────────── -->
+  <div class="kpi-grid">
+    <div class="card">
+      <div class="card-label">Saldo</div>
+      <div class="card-value text-accent" id="balance">—</div>
+      <div class="card-sub" id="balanceSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Giornaliero</div>
+      <div class="card-value" id="dailyDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Totale</div>
+      <div class="card-value" id="totalDD">—</div>
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
+        <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Win Rate</div>
+      <div class="card-value" id="winRate">—</div>
+      <div class="card-sub" id="winRateSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Trade Oggi</div>
+      <div class="card-value" id="tradesToday">—</div>
+      <div class="card-sub" id="tradesSub">—</div>
+    </div>
+  </div>
+
+  <!-- ── TAB NAV ──────────────────────────────────────────────────────────── -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('dashboard',    this)">Dashboard</button>
+    <button class="tab-btn"        onclick="switchTab('dati',         this)">Dati &amp; Modello</button>
+    <button class="tab-btn"        onclick="switchTab('backtest',     this)">Backtest</button>
+    <button class="tab-btn"        onclick="switchTab('log',          this)">Log Live</button>
+    <button class="tab-btn"        onclick="switchTab('impostazioni', this)">Impostazioni</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: DASHBOARD                                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-dashboard" class="tab-pane active">
+
+    <!-- Segnali + Posizioni -->
+    <div class="middle-grid" style="margin-bottom:12px;">
+      <div class="card">
+        <div class="card-title">Segnali Live</div>
+        <div id="signalsContainer">
+          <div class="text-muted">In attesa del bot...</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Posizioni Aperte</div>
+        <div id="positionsContainer">
+          <div class="no-pos">Nessuna posizione aperta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Perché non trade -->
+    <div class="card why-section">
+      <div class="card-title">Perché non apro posizioni?</div>
+      <ul class="reason-list" id="reasonList">
+        <li class="reason-item reason-info">
+          <span class="reason-icon">⏳</span>
+          <span>In attesa del primo ciclo del bot...</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Storico trade (oggi) -->
+    <div class="card closed-section">
+      <div class="card-title">Storico Trade (oggi)</div>
+      <div id="closedContainer">
+        <div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>
+      </div>
+    </div>
+
+  </div><!-- /tab-dashboard -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: DATI & MODELLO                                                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-dati" class="tab-pane">
+
+    <div class="dm-grid">
+
+      <!-- Colonna sinistra: Dati storici -->
+      <div class="card">
+        <div class="card-title">Dati Storici MT5</div>
+        <div class="dm-actions">
+          <label style="font-size:12px; color:var(--muted);">Anni:</label>
+          <input type="number" id="yearsInput" class="dm-years" value="4" min="1" max="10" />
+          <button id="downloadBtn" class="dm-btn dm-btn-blue" onclick="startDownload()">
+            &#8681; Scarica da MT5
+          </button>
+        </div>
+        <div id="downloadStatusBadge" class="dm-status-badge dm-status-idle">Nessun download in corso</div>
+        <div id="downloadError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
+        <div id="downloadProgress" class="dm-progress-wrap" style="display:none;"></div>
+        <div style="margin-top:14px;">
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">File CSV presenti</div>
+          <div id="dataFilesList" class="dm-file-list">
+            <div class="dm-empty">Caricamento...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Colonna destra: Training -->
+      <div class="card">
+        <div class="card-title">Training Modello ML</div>
+        <div class="dm-actions">
+          <button id="trainBtn" class="dm-btn dm-btn-green" onclick="startTraining()">
+            &#9654; Addestra Modello
+          </button>
+        </div>
+        <div id="trainStatusBadge" class="dm-status-badge dm-status-idle">Nessun training in corso</div>
+        <div id="trainError" style="font-size:12px; color:var(--red); margin-bottom:8px; display:none;"></div>
+        <div style="margin-top:8px;">
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">Modelli (.pkl) presenti</div>
+          <div id="modelFilesList" class="dm-file-list">
+            <div class="dm-empty">Caricamento...</div>
+          </div>
+        </div>
+        <div id="trainOutput" class="train-output"></div>
+      </div>
+
+    </div>
+  </div><!-- /tab-dati -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: BACKTEST                                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-backtest" class="tab-pane">
+    <div class="card">
+      <div class="card-title">Backtest</div>
+
+      <!-- Controlli -->
+      <div class="bt-controls">
+        <span class="bt-label">Simbolo</span>
+        <select id="btSymbol" class="bt-select">
+          <option value="XAUUSD">XAUUSD</option>
+          <option value="EURUSD">EURUSD</option>
+        </select>
+
+        <span class="bt-label">Da</span>
+        <input type="date" id="btStartDate" class="bt-date" value="2024-01-01" />
+
+        <span class="bt-label">A</span>
+        <input type="date" id="btEndDate" class="bt-date" value="2024-12-31" />
+
+        <button id="btRunBtn" class="bt-run-btn" onclick="startBacktest()">
+          &#9654; Esegui Backtest
+        </button>
+
+        <div id="btStatusBadge" class="dm-status-badge dm-status-idle">Pronto</div>
+      </div>
+
+      <!-- Barra progresso -->
+      <div id="btProgressWrap" class="bt-progress-wrap">
+        <div class="bt-progress-track">
+          <div id="btProgressFill" class="bt-progress-fill" style="width:0%"></div>
+        </div>
+        <div id="btProgressLabel" class="bt-progress-label">0%</div>
+      </div>
+
+      <!-- Errore -->
+      <div id="btError" style="font-size:12px; color:var(--red); margin-bottom:10px; display:none;"></div>
+
+      <!-- Risultati -->
+      <div id="btResults" class="bt-results-hidden">
+
+        <div class="bt-kpi-grid" style="margin-top:4px;">
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Trade Totali</div>
+            <div class="bt-kpi-value text-accent" id="btNTrades">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Win Rate</div>
+            <div class="bt-kpi-value" id="btWinRate">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Profit Factor</div>
+            <div class="bt-kpi-value" id="btPF">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Net R</div>
+            <div class="bt-kpi-value" id="btNetR">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Max Drawdown</div>
+            <div class="bt-kpi-value" id="btMaxDD">—</div>
+          </div>
+        </div>
+
+        <div class="bt-kpi-grid">
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Balance Finale</div>
+            <div class="bt-kpi-value text-accent" id="btBalance">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Net P&amp;L</div>
+            <div class="bt-kpi-value" id="btNetPnl">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Sharpe Ratio</div>
+            <div class="bt-kpi-value" id="btSharpe">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Avg Win R</div>
+            <div class="bt-kpi-value text-green" id="btAvgWin">—</div>
+          </div>
+          <div class="bt-kpi">
+            <div class="bt-kpi-label">Avg Loss R</div>
+            <div class="bt-kpi-value text-red" id="btAvgLoss">—</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">
+          Storico Trade <span id="btTradeCount" style="font-weight:600; color:var(--text);"></span>
+          <span id="btMlBadge" style="margin-left:8px; font-size:10px; color:#bc8cff;"></span>
+        </div>
+        <div class="bt-table-wrap">
+          <table class="bt-table">
+            <thead>
+              <tr>
+                <th>Apertura</th><th>Chiusura</th><th>Dir.</th>
+                <th>Entry</th><th>SL</th><th>TP</th><th>Exit</th>
+                <th>Esito</th>
+                <th style="text-align:right;">R</th>
+                <th style="text-align:right;">P&amp;L $</th>
+              </tr>
+            </thead>
+            <tbody id="btTradesTbody"></tbody>
+          </table>
+        </div>
+      </div><!-- /btResults -->
+
+      <!-- Log backtest -->
+      <div id="btLog" class="bt-log"></div>
+    </div>
+  </div><!-- /tab-backtest -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: LOG LIVE                                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-log" class="tab-pane">
+    <div class="card">
+      <div class="log-header">
+        <div class="card-title" style="margin-bottom:0;">Log Live</div>
+        <label class="log-autoscroll-toggle">
+          <input type="checkbox" id="autoScrollCheck" checked />
+          Auto-scroll
+        </label>
+      </div>
+      <div class="log-body" id="logBody">
+        <div class="log-default">In attesa del log...</div>
+      </div>
+    </div>
+  </div><!-- /tab-log -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TAB: IMPOSTAZIONI                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-impostazioni" class="tab-pane">
+
+    <div class="settings-grid">
+
+      <!-- ── Colonna sinistra ── -->
+      <div>
+
+        <!-- MT5 -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Connessione MT5</div>
+          <div class="settings-row">
+            <span class="settings-label">Server</span>
+            <input id="cfg_mt5_server" class="settings-input" type="text" placeholder="es. FTMO-Demo" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Login (numero conto)</span>
+            <input id="cfg_mt5_account" class="settings-input" type="text" placeholder="123456" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Password</span>
+            <input id="cfg_mt5_password" class="settings-input" type="password" placeholder="••••••••" />
+          </div>
+        </div>
+
+        <!-- Simboli & Sessioni -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Strumenti &amp; Sessioni</div>
+          <div class="settings-row">
+            <span class="settings-label">Simboli attivi</span>
+            <div class="settings-tag-group">
+              <span id="tag_XAUUSD" class="settings-tag active" onclick="toggleTag('XAUUSD')">XAUUSD</span>
+              <span id="tag_EURUSD" class="settings-tag active" onclick="toggleTag('EURUSD')">EURUSD</span>
+              <span id="tag_GBPUSD" class="settings-tag"       onclick="toggleTag('GBPUSD')">GBPUSD</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Sessione London (08–11)</span>
+            <input id="cfg_session_london" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Sessione New York (14–17)</span>
+            <input id="cfg_session_ny" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Timeframe SMC</span>
+            <select id="cfg_timeframe" class="settings-input" style="max-width:100px;">
+              <option value="M5">M5</option>
+              <option value="M15">M15</option>
+              <option value="H1">H1</option>
+            </select>
+          </div>
+        </div>
+
+      </div><!-- /col-left -->
+
+      <!-- ── Colonna destra ── -->
+      <div>
+
+        <!-- Risk -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Risk Management</div>
+          <div class="settings-row">
+            <span class="settings-label">Rischio per trade (%)</span>
+            <input id="cfg_risk_per_trade_pct" class="settings-input" type="number" min="0.1" max="5" step="0.1" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Max trade al giorno</span>
+            <input id="cfg_max_trades_per_day" class="settings-input" type="number" min="1" max="20" step="1" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">DD giornaliero max (%)</span>
+            <input id="cfg_max_daily_dd_pct" class="settings-input" type="number" min="1" max="10" step="0.5" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">DD totale max (%)</span>
+            <input id="cfg_max_total_dd_pct" class="settings-input" type="number" min="1" max="20" step="0.5" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">R:R minimo</span>
+            <input id="cfg_min_rr" class="settings-input" type="number" min="1" max="5" step="0.5" style="max-width:90px;" />
+          </div>
+        </div>
+
+        <!-- ML -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Modello ML</div>
+          <div class="settings-row">
+            <span class="settings-label">Usa ML</span>
+            <input id="cfg_ml_enabled" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence minima</span>
+            <input id="cfg_ml_confidence_threshold" class="settings-input" type="number" min="0.5" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+        </div>
+
+        <!-- Telegram -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Notifiche Telegram</div>
+          <div class="settings-row">
+            <span class="settings-label">Bot Token</span>
+            <input id="cfg_telegram_token" class="settings-input" type="password" placeholder="••••••••••••••••••••••" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Chat ID</span>
+            <input id="cfg_telegram_chat_id" class="settings-input" type="text" placeholder="123456789" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica trade aperti/chiusi</span>
+            <input id="cfg_notify_trades" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica warning DD</span>
+            <input id="cfg_notify_warnings" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Notifica ogni segnale</span>
+            <input id="cfg_notify_signals" class="settings-checkbox" type="checkbox" />
+          </div>
+        </div>
+
+      </div><!-- /col-right -->
+    </div><!-- /settings-grid -->
+
+    <!-- Salva -->
+    <div class="settings-save-row">
+      <button class="btn-save-settings" id="saveSettingsBtn" onclick="saveSettings()">Salva Impostazioni</button>
+      <span id="saveSettingsMsg" class="settings-save-msg"></span>
+    </div>
+
+  </div><!-- /tab-impostazioni -->
+
+  <div class="footer">SMC+ML Trading Bot · Dashboard locale · Aggiornamento ogni 5s</div>
+</div><!-- /page -->
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB NAVIGATION
+══════════════════════════════════════════════════════════════════════════ */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════════════════════ */
+let currentAction = 'start';
+let _sessionStart = null;
+let _sessionTimer = null;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FETCH STATE
+══════════════════════════════════════════════════════════════════════════ */
+async function fetchState() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) return;
+    const s = await res.json();
+    updateUI(s);
+  } catch (e) {}
+}
+
+async function fetchLog() {
+  try {
+    const res = await fetch('/api/log?lines=80');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderLog(data.lines);
+  } catch (e) {}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTROL (avvia / ferma bot)
+══════════════════════════════════════════════════════════════════════════ */
+async function sendControl() {
+  const action = currentAction;
+  try {
+    const res = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    const data = await res.json();
+    if (data.ok) { setTimeout(fetchState, 800); }
+  } catch (e) {}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UPDATE UI
+══════════════════════════════════════════════════════════════════════════ */
+function updateUI(s) {
+  // Pill di stato
+  const pill = document.getElementById('statusPill');
+  const txt  = document.getElementById('statusText');
+  const btn  = document.getElementById('controlBtn');
+
+  if (s.running) {
+    pill.className = 'status-pill status-online';
+    txt.textContent = 'ONLINE';
+    btn.textContent = 'Ferma Bot';
+    btn.className   = 'btn btn-stop';
+    currentAction   = 'stop';
+    startSessionTimer(s.started_at);
+  } else {
+    pill.className = 'status-pill status-offline';
+    txt.textContent = 'OFFLINE';
+    btn.textContent = 'Avvia Bot';
+    btn.className   = 'btn btn-start';
+    currentAction   = 'start';
+    stopSessionTimer();
+  }
+
+  // Sessione attiva
+  const sn = document.getElementById('sessionName');
+  sn.textContent = s.session || '—';
+
+  // Last update
+  document.getElementById('lastUpdate').textContent =
+    'Aggiornato: ' + new Date().toLocaleTimeString('it-IT');
+
+  // KPI
+  const bal = s.balance ?? null;
+  document.getElementById('balance').textContent =
+    bal !== null ? '$' + bal.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  document.getElementById('balanceSub').textContent =
+    s.account_name ? s.account_name : '—';
+
+  setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
+  setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
+
+  const wr = s.win_rate_pct ?? null;
+  document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
+  document.getElementById('winRateSub').textContent =
+    (s.total_wins ?? 0) + 'W / ' + (s.total_losses ?? 0) + 'L';
+
+  document.getElementById('tradesToday').textContent = s.trades_today ?? '—';
+  document.getElementById('tradesSub').textContent   = 'max ' + (s.max_trades_day ?? '—') + '/giorno';
+
+  renderSignals(s.signals || []);
+  renderPositions(s.open_positions || []);
+  renderReasons(s.block_reasons || []);
+  renderClosedTrades(s.closed_trades_today || []);
+}
+
+function setDD(valId, gaugeId, pct, limit) {
+  const el    = document.getElementById(valId);
+  const gauge = document.getElementById(gaugeId);
+  if (pct === null || pct === undefined) { el.textContent = '—'; return; }
+  el.textContent = pct.toFixed(2) + '%';
+  el.className = 'card-value ' + (pct > limit * 0.8 ? 'text-red' : pct > limit * 0.5 ? 'text-yellow' : 'text-green');
+  gauge.style.width = Math.min(pct / limit * 100, 100) + '%';
+  gauge.style.background = pct > limit * 0.8 ? 'var(--red)' : pct > limit * 0.5 ? 'var(--yellow)' : 'var(--accent)';
+}
+
+/* ── Signals ─────────────────────────────────────────────────────────────── */
+function renderSignals(signals) {
+  const c = document.getElementById('signalsContainer');
+  if (!signals.length) { c.innerHTML = '<div class="text-muted">Nessun segnale attivo</div>'; return; }
+  c.innerHTML = signals.map(sig => `
+    <div class="signal-row">
+      <span class="sig-dir ${sig.direction === 'long' ? 'sig-long' : 'sig-short'}">${sig.direction.toUpperCase()}</span>
+      <span style="font-weight:600;">${escHtml(sig.symbol)}</span>
+      <span class="text-muted" style="font-size:12px;">${escHtml(sig.reason || '')}</span>
+      <span class="text-muted" style="margin-left:auto; font-size:11px;">${escHtml(sig.time || '')}</span>
+    </div>`).join('');
+}
+
+/* ── Positions ───────────────────────────────────────────────────────────── */
+function renderPositions(pos) {
+  const c = document.getElementById('positionsContainer');
+  if (!pos.length) { c.innerHTML = '<div class="no-pos">Nessuna posizione aperta</div>'; return; }
+  c.innerHTML = `
+    <table class="pos-table">
+      <thead><tr><th>Simbolo</th><th>Dir.</th><th>Entry</th><th>SL</th><th>TP</th><th>P&amp;L</th></tr></thead>
+      <tbody>` + pos.map(p => {
+    const pnlCls = (p.pnl ?? 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    return `<tr>
+      <td style="font-weight:600;">${escHtml(p.symbol)}</td>
+      <td class="${p.direction === 'long' ? 'text-blue' : 'text-red'}">${p.direction.toUpperCase()}</td>
+      <td>${p.entry}</td><td class="text-muted">${p.sl}</td><td class="text-muted">${p.tp}</td>
+      <td class="${pnlCls}">${(p.pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(p.pnl ?? 0).toFixed(2)}</td>
+    </tr>`;
+  }).join('') + '</tbody></table>';
+}
+
+/* ── Reasons ─────────────────────────────────────────────────────────────── */
+function renderReasons(reasons) {
+  const list = document.getElementById('reasonList');
+  if (!reasons.length) {
+    list.innerHTML = '<li class="reason-item reason-info"><span class="reason-icon">⏳</span><span>In attesa del primo ciclo...</span></li>';
+    return;
+  }
+  list.innerHTML = reasons.map(r => {
+    const cls  = r.type === 'ok' ? 'reason-ok' : r.type === 'warning' ? 'reason-warning' : r.type === 'block' ? 'reason-block' : 'reason-info';
+    const icon = r.type === 'ok' ? '✓' : r.type === 'warning' ? '⚠' : r.type === 'block' ? '✗' : 'ℹ';
+    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.message)}</span></li>`;
+  }).join('');
+}
+
+/* ── Closed trades ───────────────────────────────────────────────────────── */
+function renderClosedTrades(trades) {
+  const c = document.getElementById('closedContainer');
+  if (!trades.length) { c.innerHTML = '<div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>'; return; }
+  c.innerHTML = trades.map(t => {
+    const pnlCls = (t.pnl ?? 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    return `<div class="trade-row">
+      <span class="text-muted" style="font-size:11px;">${escHtml(t.close_time || '')}</span>
+      <span style="font-weight:600;">${escHtml(t.symbol)}</span>
+      <span class="${t.direction === 'long' ? 'text-blue' : 'text-red'}">${t.direction.toUpperCase()}</span>
+      <span class="${pnlCls}">${(t.pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(t.pnl ?? 0).toFixed(2)}</span>
+      <span class="badge ${(t.pnl ?? 0) >= 0 ? 'badge-win' : 'badge-loss'}">${(t.pnl ?? 0) >= 0 ? 'WIN' : 'LOSS'}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── Log live ────────────────────────────────────────────────────────────── */
+function renderLog(lines) {
+  const body = document.getElementById('logBody');
+  if (!lines || !lines.length) {
+    body.innerHTML = '<div class="log-default">In attesa del log...</div>';
+    return;
+  }
+  body.innerHTML = lines.map(l => {
+    let cls = '';
+    if (/error|errore|exception/i.test(l)) cls = 'log-line-err';
+    else if (/warn|warning/i.test(l))       cls = 'log-line-warn';
+    else if (/ok|success|avviato/i.test(l)) cls = 'log-line-ok';
+    return `<div class="${cls}">${escHtml(l)}</div>`;
+  }).join('');
+  const chk = document.getElementById('autoScrollCheck');
+  if (chk && chk.checked) body.scrollTop = body.scrollHeight;
+}
+
+/* ── Session timer ───────────────────────────────────────────────────────── */
+function startSessionTimer(startedAt) {
+  if (_sessionTimer) return;
+  _sessionStart = startedAt ? new Date(startedAt) : new Date();
+  _sessionTimer = setInterval(() => {
+    const diff = Math.floor((Date.now() - _sessionStart) / 1000);
+    const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+    const s = String(diff % 60).padStart(2, '0');
+    document.getElementById('sessionTimer').textContent = ` · ${h}:${m}:${s}`;
+  }, 1000);
+}
+function stopSessionTimer() {
+  clearInterval(_sessionTimer); _sessionTimer = null;
+  document.getElementById('sessionTimer').textContent = '';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DATI & MODELLO
+══════════════════════════════════════════════════════════════════════════ */
+let _dlPolling = null;
+let _trPolling = null;
+
+/* ── Download ──────────────────────────────────────────────────────────── */
+async function startDownload() {
+  const years = parseInt(document.getElementById('yearsInput').value) || 4;
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('downloadError').style.display = 'none';
+  try {
+    const res  = await fetch('/api/download_data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ years })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      document.getElementById('downloadError').textContent = data.error || 'Errore';
+      document.getElementById('downloadError').style.display = '';
+      document.getElementById('downloadBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    document.getElementById('downloadError').textContent = 'Errore di rete';
+    document.getElementById('downloadError').style.display = '';
+    document.getElementById('downloadBtn').disabled = false;
+    return;
+  }
+  clearInterval(_dlPolling);
+  _dlPolling = setInterval(pollDownload, 1500);
+  pollDownload();
+}
+
+async function pollDownload() {
+  try {
+    const res  = await fetch('/api/download_status');
+    const data = await res.json();
+    renderDownloadStatus(data);
+    if (!data.running) {
+      clearInterval(_dlPolling);
+      document.getElementById('downloadBtn').disabled = false;
+      refreshDataFiles();
+    }
+  } catch (e) {}
+}
+
+function renderDownloadStatus(s) {
+  const badge = document.getElementById('downloadStatusBadge');
+  const prog  = document.getElementById('downloadProgress');
+
+  if (s.running) {
+    badge.className   = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Download in corso...';
+    prog.style.display = '';
+    const symbols = s.symbols || [];
+    const done    = s.completed || {};
+    prog.innerHTML = symbols.map(sym => {
+      const pct = done[sym] || 0;
+      return `<div class="dm-progress-item">
+        <div class="dm-progress-label">${escHtml(sym)} — ${pct}%</div>
+        <div class="dm-progress-track"><div class="dm-progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  } else if (s.error) {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore download';
+    prog.style.display = 'none';
+    document.getElementById('downloadError').textContent = s.error;
+    document.getElementById('downloadError').style.display = '';
+  } else {
+    badge.className   = 'dm-status-badge ' + (s.done ? 'dm-status-done' : 'dm-status-idle');
+    badge.textContent = s.done ? 'Download completato' : 'Nessun download in corso';
+    prog.style.display = 'none';
+  }
+}
+
+async function refreshDataFiles() {
+  try {
+    const res  = await fetch('/api/data_files');
+    const data = await res.json();
+    const list = document.getElementById('dataFilesList');
+    const files = data.files || [];
+    if (!files.length) { list.innerHTML = '<div class="dm-empty">Nessun file CSV presente</div>'; return; }
+    list.innerHTML = files.map(f => `
+      <div class="dm-file-item">
+        <span class="dm-file-name">${escHtml(f.name)}</span>
+        <span class="dm-file-size">${escHtml(f.size)}</span>
+      </div>`).join('');
+  } catch (e) {}
+}
+
+/* ── Training ──────────────────────────────────────────────────────────── */
+async function startTraining() {
+  document.getElementById('trainBtn').disabled = true;
+  document.getElementById('trainError').style.display = 'none';
+  document.getElementById('trainOutput').style.display = 'none';
+  document.getElementById('trainOutput').textContent = '';
+  try {
+    const res  = await fetch('/api/train', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) {
+      document.getElementById('trainError').textContent = data.error || 'Errore';
+      document.getElementById('trainError').style.display = '';
+      document.getElementById('trainBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    document.getElementById('trainError').textContent = 'Errore di rete';
+    document.getElementById('trainError').style.display = '';
+    document.getElementById('trainBtn').disabled = false;
+    return;
+  }
+  clearInterval(_trPolling);
+  _trPolling = setInterval(pollTraining, 1500);
+  pollTraining();
+}
+
+async function pollTraining() {
+  try {
+    const res  = await fetch('/api/train_status');
+    const data = await res.json();
+    renderTrainStatus(data);
+    if (!data.running) {
+      clearInterval(_trPolling);
+      document.getElementById('trainBtn').disabled = false;
+      refreshModelFiles();
+    }
+  } catch (e) {}
+}
+
+function renderTrainStatus(s) {
+  const badge  = document.getElementById('trainStatusBadge');
+  const outEl  = document.getElementById('trainOutput');
+
+  if (s.running) {
+    badge.className   = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Training in corso...';
+  } else if (s.error) {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore training';
+    document.getElementById('trainError').textContent = s.error;
+    document.getElementById('trainError').style.display = '';
+  } else if (s.done) {
+    badge.className   = 'dm-status-badge dm-status-done';
+    badge.textContent = 'Training completato';
+  } else {
+    badge.className   = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Nessun training in corso';
+  }
+
+  const lines = s.output || [];
+  if (lines.length) {
+    outEl.style.display = '';
+    outEl.textContent   = lines.join('\n');
+    outEl.scrollTop     = outEl.scrollHeight;
+  }
+}
+
+async function refreshModelFiles() {
+  try {
+    const res  = await fetch('/api/model_files');
+    const data = await res.json();
+    const list = document.getElementById('modelFilesList');
+    const files = data.files || [];
+    if (!files.length) { list.innerHTML = '<div class="dm-empty">Nessun modello .pkl presente</div>'; return; }
+    list.innerHTML = files.map(f => `
+      <div class="dm-file-item">
+        <span class="dm-file-name">${escHtml(f.name)}</span>
+        <span class="dm-file-size">${escHtml(f.size)}</span>
+      </div>`).join('');
+  } catch (e) {}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BACKTEST
+══════════════════════════════════════════════════════════════════════════ */
+let _btPolling = null;
+
+async function startBacktest() {
+  const symbol    = document.getElementById('btSymbol').value;
+  const startDate = document.getElementById('btStartDate').value;
+  const endDate   = document.getElementById('btEndDate').value;
+
+  if (!startDate || !endDate) { showBtError('Seleziona un periodo valido'); return; }
+  if (startDate >= endDate)   { showBtError('La data di inizio deve essere precedente alla data di fine'); return; }
+
+  document.getElementById('btRunBtn').disabled = true;
+  document.getElementById('btError').style.display = 'none';
+  document.getElementById('btResults').className = 'bt-results-hidden';
+  document.getElementById('btLog').classList.remove('visible');
+  document.getElementById('btLog').textContent = '';
+
+  try {
+    const res  = await fetch('/api/backtest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, start_date: startDate, end_date: endDate })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showBtError(data.error || 'Errore avvio backtest');
+      document.getElementById('btRunBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    showBtError('Errore di rete');
+    document.getElementById('btRunBtn').disabled = false;
+    return;
+  }
+
+  clearInterval(_btPolling);
+  _btPolling = setInterval(pollBacktest, 1200);
+  pollBacktest();
+}
+
+async function pollBacktest() {
+  try {
+    const res  = await fetch('/api/backtest/status');
+    const data = await res.json();
+    renderBtStatus(data);
+    if (!data.running && data.status !== 'running') {
+      clearInterval(_btPolling);
+      document.getElementById('btRunBtn').disabled = false;
+      if (data.results) renderBtResults(data.results);
+    }
+  } catch (e) {}
+}
+
+function renderBtStatus(s) {
+  const badge    = document.getElementById('btStatusBadge');
+  const progWrap = document.getElementById('btProgressWrap');
+  const progFill = document.getElementById('btProgressFill');
+  const progLbl  = document.getElementById('btProgressLabel');
+  const errEl    = document.getElementById('btError');
+  const logEl    = document.getElementById('btLog');
+
+  if (s.status === 'running') {
+    badge.className   = 'dm-status-badge dm-status-running';
+    badge.textContent = 'Backtest in corso...';
+    progWrap.style.display = '';
+  } else if (s.status === 'done') {
+    badge.className   = 'dm-status-badge dm-status-done';
+    badge.textContent = 'Completato';
+    progWrap.style.display = 'none';
+  } else if (s.status === 'error') {
+    badge.className   = 'dm-status-badge dm-status-error';
+    badge.textContent = 'Errore';
+    progWrap.style.display = 'none';
+  } else {
+    badge.className   = 'dm-status-badge dm-status-idle';
+    badge.textContent = 'Pronto';
+    progWrap.style.display = 'none';
+  }
+
+  const pct = s.progress || 0;
+  progFill.style.width = pct + '%';
+  progLbl.textContent  = pct + '%';
+
+  if (s.error) { errEl.textContent = s.error; errEl.style.display = ''; }
+  else         { errEl.style.display = 'none'; }
+
+  const lines = s.log || [];
+  if (lines.length) {
+    logEl.classList.add('visible');
+    logEl.textContent = lines.join('\n');
+    logEl.scrollTop   = logEl.scrollHeight;
+  }
+}
+
+function renderBtResults(r) {
+  const wr = r.win_rate || 0;
+  btSet('btNTrades', r.n_trades, '');
+  btSetCls('btWinRate',  r.win_rate + '%',     wr >= 50 ? 'text-green' : 'text-red');
+  const pf = r.profit_factor || 0;
+  btSetCls('btPF',    pf,                       pf >= 1.5 ? 'text-green' : pf >= 1 ? 'text-yellow' : 'text-red');
+  const nr = r.net_r || 0;
+  btSetCls('btNetR',  (nr > 0 ? '+' : '') + nr + 'R', nr > 0 ? 'text-green' : 'text-red');
+  const dd = r.max_dd_pct || 0;
+  btSetCls('btMaxDD', dd + '%',                dd < 5 ? 'text-green' : dd < 8 ? 'text-yellow' : 'text-red');
+
+  btSet('btBalance', '$' + (r.final_balance || 0).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}), '');
+  const npnl = r.net_pnl || 0; const npct = r.net_pnl_pct || 0;
+  btSetCls('btNetPnl', (npnl > 0 ? '+' : '') + '$' + Math.abs(npnl).toLocaleString('it-IT', {minimumFractionDigits:2}) + ' (' + (npct > 0 ? '+' : '') + npct.toFixed(1) + '%)', npnl > 0 ? 'text-green' : 'text-red');
+  const sh = r.sharpe || 0;
+  btSetCls('btSharpe', sh, sh >= 1.5 ? 'text-green' : sh >= 0.5 ? 'text-yellow' : 'text-muted');
+  btSet('btAvgWin',  '+' + (r.avg_win_r  || 0) + 'R', 'text-green');
+  btSet('btAvgLoss', (r.avg_loss_r || 0) + 'R',        'text-red');
+
+  const trades = r.trades || [];
+  document.getElementById('btTradeCount').textContent =
+    '(' + (r.n_wins || 0) + ' WIN / ' + (r.n_losses || 0) + ' LOSS' +
+    (trades.length < r.n_trades ? ' — ultimi ' + trades.length : '') + ')';
+  document.getElementById('btMlBadge').textContent =
+    r.ml_used ? '✓ con filtro ML' : '○ solo SMC (modello ML non trovato)';
+
+  document.getElementById('btTradesTbody').innerHTML = trades.map(t => {
+    const isWin  = t.outcome === 'WIN';
+    const rCls   = t.r > 0 ? 'text-green' : 'text-red';
+    const pnlCls = t.pnl > 0 ? 'pnl-pos' : 'pnl-neg';
+    const dirCls = t.direction === 'long' ? 'text-blue' : 'text-red';
+    const dec    = t.symbol === 'XAUUSD' ? 2 : 5;
+    return `<tr>
+      <td class="text-muted">${escHtml(t.time)}</td>
+      <td class="text-muted">${escHtml(t.exit_time)}</td>
+      <td class="${dirCls}">${t.direction.toUpperCase()}</td>
+      <td>${t.entry.toFixed(dec)}</td>
+      <td class="text-muted">${t.sl.toFixed(dec)}</td>
+      <td class="text-muted">${t.tp.toFixed(dec)}</td>
+      <td>${t.exit.toFixed(dec)}</td>
+      <td><span class="badge ${isWin ? 'badge-win' : 'badge-loss'}">${t.outcome}</span></td>
+      <td style="text-align:right;" class="${rCls}">${t.r > 0 ? '+' : ''}${t.r}R</td>
+      <td style="text-align:right;" class="${pnlCls}">${t.pnl > 0 ? '+' : ''}$${Math.abs(t.pnl).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('btResults').className = '';
+}
+
+function showBtError(msg) {
+  const errEl = document.getElementById('btError');
+  errEl.textContent = msg; errEl.style.display = '';
+  const badge = document.getElementById('btStatusBadge');
+  badge.className   = 'dm-status-badge dm-status-error';
+  badge.textContent = 'Errore';
+}
+
+function btSet(id, val, cls) {
+  const el = document.getElementById(id); if (!el) return;
+  el.textContent = val;
+  if (cls) { el.className = 'bt-kpi-value'; el.classList.add(...cls.split(' ').filter(Boolean)); }
+}
+function btSetCls(id, val, cls) { btSet(id, val, cls); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IMPOSTAZIONI
+══════════════════════════════════════════════════════════════════════════ */
+const ALL_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD'];
+let _activeSymbols = ['XAUUSD', 'EURUSD'];
+
+function toggleTag(sym) {
+  const tag = document.getElementById('tag_' + sym);
+  if (_activeSymbols.includes(sym)) {
+    if (_activeSymbols.length <= 1) return; // almeno 1 simbolo
+    _activeSymbols = _activeSymbols.filter(s => s !== sym);
+    tag.classList.remove('active');
+  } else {
+    _activeSymbols.push(sym);
+    tag.classList.add('active');
+  }
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+
+    // MT5
+    document.getElementById('cfg_mt5_server').value   = s.mt5_server   || '';
+    document.getElementById('cfg_mt5_account').value  = s.mt5_account  || '';
+    document.getElementById('cfg_mt5_password').value = s.mt5_password  || '';
+
+    // Simboli
+    _activeSymbols = s.symbols || ['XAUUSD', 'EURUSD'];
+    ALL_SYMBOLS.forEach(sym => {
+      const tag = document.getElementById('tag_' + sym);
+      if (tag) tag.classList.toggle('active', _activeSymbols.includes(sym));
+    });
+
+    // Sessioni
+    document.getElementById('cfg_session_london').checked = !!s.session_london;
+    document.getElementById('cfg_session_ny').checked     = !!s.session_ny;
+    document.getElementById('cfg_timeframe').value         = s.timeframe || 'M5';
+
+    // Risk
+    document.getElementById('cfg_risk_per_trade_pct').value       = s.risk_per_trade_pct ?? 0.5;
+    document.getElementById('cfg_max_trades_per_day').value        = s.max_trades_per_day ?? 3;
+    document.getElementById('cfg_max_daily_dd_pct').value          = s.max_daily_dd_pct ?? 3.0;
+    document.getElementById('cfg_max_total_dd_pct').value          = s.max_total_dd_pct ?? 7.0;
+    document.getElementById('cfg_min_rr').value                    = s.min_rr ?? 2.0;
+
+    // ML
+    document.getElementById('cfg_ml_enabled').checked                = !!s.ml_enabled;
+    document.getElementById('cfg_ml_confidence_threshold').value     = s.ml_confidence_threshold ?? 0.65;
+
+    // Telegram
+    document.getElementById('cfg_telegram_token').value    = s.telegram_token   || '';
+    document.getElementById('cfg_telegram_chat_id').value  = s.telegram_chat_id || '';
+    document.getElementById('cfg_notify_trades').checked   = !!s.notify_trades;
+    document.getElementById('cfg_notify_warnings').checked = !!s.notify_warnings;
+    document.getElementById('cfg_notify_signals').checked  = !!s.notify_signals;
+  } catch (e) {}
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('saveSettingsBtn');
+  const msg = document.getElementById('saveSettingsMsg');
+  btn.disabled = true;
+  msg.textContent = '';
+
+  const payload = {
+    mt5_server:                document.getElementById('cfg_mt5_server').value.trim(),
+    mt5_account:               document.getElementById('cfg_mt5_account').value.trim(),
+    mt5_password:              document.getElementById('cfg_mt5_password').value,
+    symbols:                   [..._activeSymbols],
+    session_london:            document.getElementById('cfg_session_london').checked,
+    session_ny:                document.getElementById('cfg_session_ny').checked,
+    timeframe:                 document.getElementById('cfg_timeframe').value,
+    risk_per_trade_pct:        parseFloat(document.getElementById('cfg_risk_per_trade_pct').value) || 0.5,
+    max_trades_per_day:        parseInt(document.getElementById('cfg_max_trades_per_day').value)   || 3,
+    max_daily_dd_pct:          parseFloat(document.getElementById('cfg_max_daily_dd_pct').value)  || 3.0,
+    max_total_dd_pct:          parseFloat(document.getElementById('cfg_max_total_dd_pct').value)  || 7.0,
+    min_rr:                    parseFloat(document.getElementById('cfg_min_rr').value)             || 2.0,
+    ml_enabled:                document.getElementById('cfg_ml_enabled').checked,
+    ml_confidence_threshold:   parseFloat(document.getElementById('cfg_ml_confidence_threshold').value) || 0.65,
+    telegram_token:            document.getElementById('cfg_telegram_token').value,
+    telegram_chat_id:          document.getElementById('cfg_telegram_chat_id').value.trim(),
+    notify_trades:             document.getElementById('cfg_notify_trades').checked,
+    notify_warnings:           document.getElementById('cfg_notify_warnings').checked,
+    notify_signals:            document.getElementById('cfg_notify_signals').checked,
+  };
+
+  try {
+    const res  = await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = 'Impostazioni salvate con successo';
+      msg.className   = 'settings-save-msg settings-save-ok';
+    } else {
+      msg.textContent = 'Errore: ' + (data.error || 'sconosciuto');
+      msg.className   = 'settings-save-msg settings-save-err';
+    }
+  } catch (e) {
+    msg.textContent = 'Errore di rete';
+    msg.className   = 'settings-save-msg settings-save-err';
+  }
+  btn.disabled = false;
+  setTimeout(() => { msg.textContent = ''; }, 4000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════════════════════════ */
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   INIT & POLLING
+══════════════════════════════════════════════════════════════════════════ */
+fetchState();
+fetchLog();
+refreshDataFiles();
+refreshModelFiles();
+loadSettings();
+
+setInterval(fetchState, 5000);
+setInterval(fetchLog,   5000);
+setInterval(() => { refreshDataFiles(); refreshModelFiles(); }, 30000);
+
+// Controlla se c'è un download/training/backtest già in corso al load
+pollDownload();
+pollTraining();
+pollBacktest();
+</script>
+</body>
+</html>
