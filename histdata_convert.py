@@ -22,7 +22,6 @@ OUTPUT: EURUSD_M5_2020_2025.csv e XAUUSD_M5_2020_2025.csv
         nella stessa cartella dei ZIP.
 """
 
-import csv
 import os
 import struct
 import zipfile
@@ -52,13 +51,14 @@ def parse_hst(data: bytes) -> list:
         print(f"    Versione .hst non supportata: {version}")
         return []
 
-    records = []
-    offset = 148
-    while offset + rec_size <= len(data):
-        row = struct.unpack_from(rec_fmt, data, offset)
-        ts = datetime.utcfromtimestamp(row[I_TS])
-        records.append((ts, row[I_O], row[I_H], row[I_L], row[I_C], row[I_V]))
-        offset += rec_size
+    body = data[148:]
+    # Taglia al multiplo esatto di rec_size (iter_unpack richiede dimensione esatta)
+    n = (len(body) // rec_size) * rec_size
+    ts_from_epoch = datetime.utcfromtimestamp
+    records = [
+        (ts_from_epoch(row[I_TS]), row[I_O], row[I_H], row[I_L], row[I_C], row[I_V])
+        for row in struct.iter_unpack(rec_fmt, body[:n])
+    ]
     return records
 
 
@@ -66,16 +66,21 @@ def m1_to_m5(records: list) -> list:
     """Aggrega barre M1 in M5 (OHLCV). Input già ordinato per timestamp."""
     bars = {}
     for ts, o, h, l, c, v in records:
-        key = ts.replace(second=0, microsecond=0,
-                         minute=(ts.minute // 5) * 5)
-        if key not in bars:
+        # Usa timestamp intero come chiave (5 min = 300s) — evita datetime.replace per ogni barra
+        epoch = int(ts.timestamp())
+        key = epoch - (epoch % 300)
+        bar = bars.get(key)
+        if bar is None:
             bars[key] = [o, h, l, c, int(v)]
         else:
-            if h > bars[key][1]: bars[key][1] = h
-            if l < bars[key][2]: bars[key][2] = l
-            bars[key][3] = c
-            bars[key][4] += int(v)
-    return sorted(bars.items())
+            if h > bar[1]: bar[1] = h
+            if l < bar[2]: bar[2] = l
+            bar[3] = c
+            bar[4] += int(v)
+    # Riconverti le chiavi in datetime solo al momento dell'output
+    return sorted(
+        (datetime.utcfromtimestamp(k), v) for k, v in bars.items()
+    )
 
 
 def process_zip(zip_path: str) -> list:
@@ -119,12 +124,13 @@ def collect_hst_files(folder: str, pair: str) -> tuple:
 
 
 def save_csv(bars: list, out_path: str):
-    with open(out_path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["datetime", "open", "high", "low", "close", "volume"])
-        for ts, (o, h, l, c, v) in bars:
-            w.writerow([ts.strftime("%Y-%m-%d %H:%M:%S"),
-                        f"{o:.5f}", f"{h:.5f}", f"{l:.5f}", f"{c:.5f}", v])
+    lines = ["datetime,open,high,low,close,volume\n"]
+    for ts, (o, h, l, c, v) in bars:
+        lines.append(
+            f"{ts.strftime('%Y-%m-%d %H:%M:%S')},{o:.5f},{h:.5f},{l:.5f},{c:.5f},{v}\n"
+        )
+    with open(out_path, "w") as f:
+        f.writelines(lines)
 
 
 def main():
