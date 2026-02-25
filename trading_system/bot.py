@@ -108,24 +108,49 @@ def _reason(level: str, msg: str):
     _block_reasons.append({"level": level, "msg": msg})
 
 
-def write_state(risk_manager, session_f, bot_status: str = "running"):
+def write_state(risk_manager, session_f, bot_status: str = "running", connector=None):
     """Scrive lo stato corrente su state.json per la dashboard."""
     try:
         status = risk_manager.status()
 
-        def trade_to_dict(t):
-            return {
-                "symbol":      t.symbol,
-                "direction":   t.direction,
-                "lot_size":    t.lot_size,
-                "entry_price": t.entry,
-                "sl":          t.sl,
-                "tp":          t.tp,
-                "pnl":         t.pnl,
-                "open_time":   t.open_time.isoformat() if t.open_time else None,
-                "close_time":  t.close_time.isoformat() if t.close_time else None,
-                "result":      t.result,
-            }
+        # Legge posizioni aperte e trade chiusi oggi direttamente da MT5
+        # (cattura anche trade manuali e sessioni precedenti)
+        if connector is not None:
+            try:
+                open_trades   = connector.get_open_positions_full()
+                closed_trades = connector.get_closed_deals_today()
+                trades_today  = len(closed_trades)
+                wins          = sum(1 for t in closed_trades if t["result"] == "win")
+                losses        = sum(1 for t in closed_trades if t["result"] == "loss")
+                win_rate      = round(wins / max(wins + losses, 1) * 100, 1)
+            except Exception as e:
+                logger.debug(f"[Dashboard] Errore lettura MT5 trades: {e}")
+                open_trades   = []
+                closed_trades = []
+                trades_today  = status["trades_today"]
+                wins          = status["total_wins"]
+                losses        = status["total_losses"]
+                win_rate      = status["win_rate"]
+        else:
+            def trade_to_dict(t):
+                return {
+                    "symbol":      t.symbol,
+                    "direction":   t.direction,
+                    "lot_size":    t.lot_size,
+                    "entry_price": t.entry,
+                    "sl":          t.sl,
+                    "tp":          t.tp,
+                    "pnl":         t.pnl,
+                    "open_time":   t.open_time.isoformat() if t.open_time else None,
+                    "close_time":  t.close_time.isoformat() if t.close_time else None,
+                    "result":      t.result,
+                }
+            open_trades   = [trade_to_dict(t) for t in risk_manager.open_trades]
+            closed_trades = [trade_to_dict(t) for t in risk_manager.closed_trades]
+            trades_today  = status["trades_today"]
+            wins          = status["total_wins"]
+            losses        = status["total_losses"]
+            win_rate      = status["win_rate"]
 
         state = {
             "bot_status":         bot_status,
@@ -135,17 +160,16 @@ def write_state(risk_manager, session_f, bot_status: str = "running"):
             "balance":            status["balance"],
             "daily_dd_pct":       status["daily_drawdown_pct"],
             "total_dd_pct":       status["total_drawdown_pct"],
-            "trades_today":       status["trades_today"],
-            "win_rate":           status["win_rate"],
+            "trades_today":       trades_today,
+            "win_rate":           win_rate,
             "consecutive_losses": status["consecutive_losses"],
-            "open_positions":     status["open_positions"],
-            "total_wins":         status["total_wins"],
-            "total_losses":       status["total_losses"],
+            "total_wins":         wins,
+            "total_losses":       losses,
             "max_trades_day":     config.PROP_MAX_TRADES_PER_DAY,
             "symbols":            _symbol_signals,
             "block_reasons":      list(_block_reasons),
-            "open_trades":        [trade_to_dict(t) for t in risk_manager.open_trades],
-            "closed_trades":      [trade_to_dict(t) for t in risk_manager.closed_trades],
+            "open_trades":        open_trades,
+            "closed_trades":      closed_trades,
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
@@ -243,7 +267,7 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
 
     finally:
         # Aggiorna dashboard ad ogni ciclo, anche su uscite anticipate
-        write_state(risk_manager, session_f)
+        write_state(risk_manager, session_f, connector=connector)
 
 
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
@@ -348,7 +372,7 @@ if __name__ == "__main__":
             cmd = check_control()
             if cmd == "stop":
                 logger.info("[BOT] Comando STOP ricevuto dalla dashboard.")
-                write_state(components[2], components[3], bot_status="stopped")
+                write_state(components[2], components[3], bot_status="stopped", connector=components[0])
                 break
 
             run_cycle(*components)

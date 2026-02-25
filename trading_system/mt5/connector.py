@@ -143,6 +143,56 @@ class MT5Connector:
             positions = mt5.positions_get()
         return list(positions) if positions else []
 
+    def get_open_positions_full(self) -> list[dict]:
+        """Restituisce le posizioni aperte con tutti i dati necessari alla dashboard."""
+        positions = mt5.positions_get()
+        if not positions:
+            return []
+        result = []
+        for p in positions:
+            result.append({
+                "symbol":      p.symbol,
+                "direction":   "long" if p.type == 0 else "short",
+                "lot_size":    p.volume,
+                "entry_price": p.price_open,
+                "sl":          p.sl,
+                "tp":          p.tp,
+                "pnl":         round(p.profit, 2),
+                "open_time":   datetime.fromtimestamp(p.time).isoformat(),
+                "ticket":      p.ticket,
+            })
+        return result
+
+    def get_closed_deals_today(self) -> list[dict]:
+        """
+        Restituisce i deal di chiusura eseguiti oggi (DEAL_ENTRY_OUT = 1).
+        Usa mt5.history_deals_get() con intervallo da mezzanotte a ora corrente.
+        """
+        from datetime import date
+        import pytz
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        now         = datetime.now()
+        deals = mt5.history_deals_get(today_start, now)
+        if not deals:
+            return []
+        result = []
+        for d in deals:
+            if d.entry != 1:   # 1 = DEAL_ENTRY_OUT (chiusura)
+                continue
+            result.append({
+                "symbol":     d.symbol,
+                "direction":  "long" if d.type == 1 else "short",  # type=1 sell=chiusura long
+                "lot_size":   d.volume,
+                "entry_price": None,
+                "sl":          None,
+                "tp":          None,
+                "pnl":         round(d.profit + d.commission + d.swap, 2),
+                "close_time":  datetime.fromtimestamp(d.time).isoformat(),
+                "result":      "win" if (d.profit + d.commission + d.swap) > 0 else "loss",
+                "ticket":      d.ticket,
+            })
+        return result
+
     def get_symbol_info(self, symbol: str):
         return mt5.symbol_info(symbol)
 
