@@ -418,9 +418,8 @@ FEATURE_COLUMNS = [
     # ── TEMPO & SESSIONE (kill zone — cruciale per XAUUSD) ───────────────────
     "hour_sin", "hour_cos", "dow_sin", "dow_cos",
     "is_london", "is_ny", "is_asia",
-    # ── VOLUME (tickvol MT5) ──────────────────────────────────────────────────
-    # Decommentare DOPO aver eseguito merge_volume_30m.py sul CSV M5:
-    # "vol_norm", "vol_spike", "vol_trend",
+    # ── VOLUME (tickvol MT5 / proxy M30÷6) ───────────────────────────────────
+    "vol_norm", "vol_spike", "vol_trend",
     # ── FORZA TREND & BANDA ──────────────────────────────────────────────────
     "adx", "bb_position", "bb_width",
     # ── SMC STRUTTURA (generali) ─────────────────────────────────────────────

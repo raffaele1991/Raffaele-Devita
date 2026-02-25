@@ -78,7 +78,7 @@ ML_EARLY_STOPPING_ROUNDS = 150    # più pazienza — con LR bassa servono più 
 # 'gpu'  = OpenCL — AMD RX 9070 / qualsiasi GPU con driver OpenCL (consigliato)
 # 'cuda' = CUDA — solo GPU NVIDIA
 # NOTA: richiede LightGBM con GPU support (su Windows: pip install lightgbm lo include già)
-ML_DEVICE                = 'gpu'
+ML_DEVICE                = 'cpu'
 
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
