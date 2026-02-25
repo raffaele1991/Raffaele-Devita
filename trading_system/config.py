@@ -69,6 +69,13 @@ ML_REG_ALPHA             = 0.1    # L1 regularization
 ML_REG_LAMBDA            = 0.1    # L2 regularization
 ML_EARLY_STOPPING_ROUNDS = 100    # stop se nessun miglioramento per 100 round
 
+# GPU per training LightGBM
+# 'cpu'  = solo CPU (default sicuro)
+# 'gpu'  = OpenCL — AMD RX 9070 / qualsiasi GPU con driver OpenCL (consigliato)
+# 'cuda' = CUDA — solo GPU NVIDIA
+# NOTA: richiede LightGBM con GPU support (su Windows: pip install lightgbm lo include già)
+ML_DEVICE                = 'gpu'
+
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
 # Regole prop firm standard (compatibile FTMO / MyFundedFX / The5ers)

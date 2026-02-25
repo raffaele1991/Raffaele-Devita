@@ -33,6 +33,7 @@ class SMCMLModel:
     def __init__(self, symbol: str):
         self.symbol    = symbol
         self.scaler    = StandardScaler()
+        _device = getattr(config, "ML_DEVICE", "cpu")
         self.model     = LGBMClassifier(
             n_estimators      = config.ML_N_ESTIMATORS,
             num_leaves        = config.ML_NUM_LEAVES,
@@ -44,7 +45,8 @@ class SMCMLModel:
             reg_alpha         = config.ML_REG_ALPHA,
             reg_lambda        = config.ML_REG_LAMBDA,
             random_state      = config.ML_RANDOM_SEED,
-            n_jobs            = -1,
+            device            = _device,
+            n_jobs            = 1 if _device != "cpu" else -1,
             verbose           = -1,
         )
         self.calibrator = None
