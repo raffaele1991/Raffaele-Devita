@@ -219,6 +219,16 @@ def api_log():
     return jsonify({"lines": lines})
 
 
+@app.route("/api/log/clear", methods=["POST"])
+def api_log_clear():
+    try:
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            f.write("")
+        return jsonify({"ok": True})
+    except OSError as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/control", methods=["POST"])
 def api_control():
     data = request.get_json(silent=True) or {}

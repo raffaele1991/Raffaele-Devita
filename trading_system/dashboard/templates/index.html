@@ -598,10 +598,15 @@
     <div class="card">
       <div class="log-header">
         <div class="card-title" style="margin-bottom:0;">Log Live</div>
-        <label class="log-autoscroll-toggle">
-          <input type="checkbox" id="autoScrollCheck" checked />
-          Auto-scroll
-        </label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label class="log-autoscroll-toggle">
+            <input type="checkbox" id="autoScrollCheck" checked />
+            Auto-scroll
+          </label>
+          <button onclick="clearLog()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;">
+            Pulisci Log
+          </button>
+        </div>
       </div>
       <div class="log-body" id="logBody">
         <div class="log-default">In attesa del log...</div>
@@ -845,7 +850,7 @@ function updateUI(s) {
   setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
   setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
 
-  const wr = s.win_rate_pct ?? null;
+  const wr = s.win_rate ?? null;
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
   document.getElementById('winRateSub').textContent =
     (s.total_wins ?? 0) + 'W / ' + (s.total_losses ?? 0) + 'L';
@@ -853,10 +858,14 @@ function updateUI(s) {
   document.getElementById('tradesToday').textContent = s.trades_today ?? '—';
   document.getElementById('tradesSub').textContent   = 'max ' + (s.max_trades_day ?? '—') + '/giorno';
 
-  renderSignals(s.signals || []);
-  renderPositions(s.open_positions || []);
+  // Converti il dict symbols in array di segnali attivi
+  const sigsArr = Object.entries(s.symbols || {})
+    .filter(([, v]) => v && v.last_signal)
+    .map(([sym, v]) => ({ symbol: sym, direction: v.last_signal, reason: v.reason || '', confidence: v.confidence || 0 }));
+  renderSignals(sigsArr);
+  renderPositions(s.open_trades || []);
   renderReasons(s.block_reasons || []);
-  renderClosedTrades(s.closed_trades_today || []);
+  renderClosedTrades(s.closed_trades || []);
 }
 
 function setDD(valId, gaugeId, pct, limit) {
@@ -875,10 +884,10 @@ function renderSignals(signals) {
   if (!signals.length) { c.innerHTML = '<div class="text-muted">Nessun segnale attivo</div>'; return; }
   c.innerHTML = signals.map(sig => `
     <div class="signal-row">
-      <span class="sig-dir ${sig.direction === 'long' ? 'sig-long' : 'sig-short'}">${sig.direction.toUpperCase()}</span>
+      <span class="sig-dir ${sig.direction === 'LONG' ? 'sig-long' : 'sig-short'}">${escHtml(sig.direction)}</span>
       <span style="font-weight:600;">${escHtml(sig.symbol)}</span>
       <span class="text-muted" style="font-size:12px;">${escHtml(sig.reason || '')}</span>
-      <span class="text-muted" style="margin-left:auto; font-size:11px;">${escHtml(sig.time || '')}</span>
+      <span class="text-muted" style="margin-left:auto; font-size:11px;">${sig.confidence ? (sig.confidence * 100).toFixed(0) + '%' : ''}</span>
     </div>`).join('');
 }
 
@@ -908,9 +917,10 @@ function renderReasons(reasons) {
     return;
   }
   list.innerHTML = reasons.map(r => {
-    const cls  = r.type === 'ok' ? 'reason-ok' : r.type === 'warning' ? 'reason-warning' : r.type === 'block' ? 'reason-block' : 'reason-info';
-    const icon = r.type === 'ok' ? '✓' : r.type === 'warning' ? '⚠' : r.type === 'block' ? '✗' : 'ℹ';
-    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.message)}</span></li>`;
+    const lvl  = r.level || r.type || 'info';
+    const cls  = lvl === 'ok' ? 'reason-ok' : lvl === 'warn' || lvl === 'warning' ? 'reason-warning' : lvl === 'block' ? 'reason-block' : 'reason-info';
+    const icon = lvl === 'ok' ? '✓' : lvl === 'warn' || lvl === 'warning' ? '⚠' : lvl === 'block' ? '✗' : 'ℹ';
+    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.msg || r.message || '')}</span></li>`;
   }).join('');
 }
 
@@ -1441,6 +1451,16 @@ function escHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOG CLEAR
+══════════════════════════════════════════════════════════════════════════ */
+async function clearLog() {
+  try {
+    await fetch('/api/log/clear', { method: 'POST' });
+    document.getElementById('logBody').innerHTML = '<div class="log-default">Log pulito.</div>';
+  } catch (e) {}
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
