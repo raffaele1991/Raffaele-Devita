@@ -418,8 +418,6 @@ FEATURE_COLUMNS = [
     # ── TEMPO & SESSIONE (kill zone — cruciale per XAUUSD) ───────────────────
     "hour_sin", "hour_cos", "dow_sin", "dow_cos",
     "is_london", "is_ny", "is_asia",
-    # ── VOLUME (tick volume MT5 — proxy forza istituzionale) ─────────────────
-    "vol_norm", "vol_spike", "vol_trend",
     # ── FORZA TREND & BANDA ──────────────────────────────────────────────────
     "adx", "bb_position", "bb_width",
     # ── SMC STRUTTURA (generali) ─────────────────────────────────────────────
