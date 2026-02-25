@@ -2,7 +2,8 @@
 """
 HistData Downloader + M1->M5 Converter per iPhone (a-Shell)
 ============================================================
-Scarica EURUSD e XAUUSD M1 da HistData e converte in M5.
+Scarica EURUSD e XAUUSD M1 da HistData (1 ZIP per anno) e converte in M5.
+Totale: 12 ZIP  (2 coppie x 6 anni)
 
 INSTALLAZIONE (in a-Shell su iPhone):
     pip install requests beautifulsoup4 pandas
@@ -10,7 +11,7 @@ INSTALLAZIONE (in a-Shell su iPhone):
 USO:
     python histdata_iphone.py
 
-I file vengono salvati in ~/Documents/ (visibili nell'app File di iPhone)
+I file vengono salvati in ~/Documents/HistData_M5/ (visibili nell'app File)
 """
 
 import requests
@@ -23,7 +24,7 @@ import time
 
 # ── Configurazione ────────────────────────────────────────────────────────────
 PAIRS  = ["EURUSD", "XAUUSD"]
-YEARS  = range(2020, 2026)   # 2020 incluso → 2025 incluso
+YEARS  = range(2020, 2026)   # 2020 → 2025 inclusi
 OUTPUT = os.path.expanduser("~/Documents/HistData_M5")
 os.makedirs(OUTPUT, exist_ok=True)
 
@@ -37,11 +38,11 @@ HEADERS = {
 
 # ── Funzioni ──────────────────────────────────────────────────────────────────
 
-def get_token(session: requests.Session, pair: str, year: int, month: int) -> str | None:
-    """Recupera il token CSRF dalla pagina di download HistData."""
+def get_token(session: requests.Session, pair: str, year: int) -> str | None:
+    """Recupera il token CSRF dalla pagina di download annuale HistData."""
     url = (
         f"https://www.histdata.com/download-free-forex-historical-data/"
-        f"?/ascii/1-minute-bar-quotes/{pair}/{year}/{month}"
+        f"?/ascii/1-minute-bar-quotes/{pair}/{year}"
     )
     try:
         r = session.get(url, headers=HEADERS, timeout=30)
@@ -54,17 +55,17 @@ def get_token(session: requests.Session, pair: str, year: int, month: int) -> st
         return None
 
 
-def download_zip(session: requests.Session, pair: str, year: int, month: int, token: str) -> bytes | None:
-    """Scarica lo ZIP del mese da HistData."""
+def download_zip(session: requests.Session, pair: str, year: int, token: str) -> bytes | None:
+    """Scarica lo ZIP annuale da HistData (datemonth=0 = anno intero)."""
     ref = (
         f"https://www.histdata.com/download-free-forex-historical-data/"
-        f"?/ascii/1-minute-bar-quotes/{pair}/{year}/{month}"
+        f"?/ascii/1-minute-bar-quotes/{pair}/{year}"
     )
     headers = {**HEADERS, "Referer": ref}
     data = {
         "tk":          token,
-        "date":        f"{year}{month:02d}",
-        "datemonth":   f"{year}{month:02d}",
+        "date":        str(year),
+        "datemonth":   "0",        # 0 = anno intero
         "platform":    "ASCII",
         "timeframe":   "M1",
         "fxpair":      pair,
@@ -72,7 +73,7 @@ def download_zip(session: requests.Session, pair: str, year: int, month: int, to
     try:
         r = session.post(
             "https://www.histdata.com/get.php",
-            data=data, headers=headers, timeout=60
+            data=data, headers=headers, timeout=120
         )
         r.raise_for_status()
         if len(r.content) < 1000:
@@ -85,22 +86,29 @@ def download_zip(session: requests.Session, pair: str, year: int, month: int, to
 
 
 def zip_to_dataframe(zip_bytes: bytes) -> pd.DataFrame | None:
-    """Estrae il CSV dallo ZIP e lo carica come DataFrame."""
+    """Estrae tutti i CSV dallo ZIP annuale e li unisce in un DataFrame."""
     try:
+        frames = []
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
-            csv_name = next((n for n in z.namelist() if n.endswith(".csv")), None)
-            if not csv_name:
+            csv_names = [n for n in z.namelist() if n.endswith(".csv")]
+            if not csv_names:
                 print("    Nessun CSV nello ZIP")
                 return None
-            with z.open(csv_name) as f:
-                df = pd.read_csv(
-                    f, sep=";", header=None,
-                    names=["Date", "Time", "Open", "High", "Low", "Close", "Volume"],
-                    dtype={"Date": str, "Time": str}
-                )
-        df["DateTime"] = pd.to_datetime(df["Date"] + " " + df["Time"],
-                                        format="%Y%m%d %H%M%S", errors="coerce")
-        df = df.dropna(subset=["DateTime"]).set_index("DateTime")
+            for csv_name in csv_names:
+                with z.open(csv_name) as f:
+                    df = pd.read_csv(
+                        f, sep=";", header=None,
+                        names=["Date", "Time", "Open", "High", "Low", "Close", "Volume"],
+                        dtype={"Date": str, "Time": str}
+                    )
+                frames.append(df)
+
+        df = pd.concat(frames, ignore_index=True)
+        df["DateTime"] = pd.to_datetime(
+            df["Date"] + " " + df["Time"],
+            format="%Y%m%d %H%M%S", errors="coerce"
+        )
+        df = df.dropna(subset=["DateTime"]).set_index("DateTime").sort_index()
         for col in ["Open", "High", "Low", "Close", "Volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         return df.dropna()
@@ -130,43 +138,39 @@ def main():
         print(f"  {pair}")
         print(f"{'='*50}")
 
-        all_months: list[pd.DataFrame] = []
+        all_years: list[pd.DataFrame] = []
 
         for year in YEARS:
-            for month in range(1, 13):
-                label = f"{pair} {year}/{month:02d}"
-                print(f"  Scarico {label} ...", end=" ", flush=True)
+            print(f"  Scarico {pair} {year} ...", end=" ", flush=True)
 
-                token = get_token(session, pair, year, month)
-                if not token:
-                    print("token non trovato – skip")
-                    time.sleep(1)
-                    continue
+            token = get_token(session, pair, year)
+            if not token:
+                print("token non trovato – skip")
+                time.sleep(2)
+                continue
 
-                zip_bytes = download_zip(session, pair, year, month, token)
-                if not zip_bytes:
-                    time.sleep(2)
-                    continue
+            zip_bytes = download_zip(session, pair, year, token)
+            if not zip_bytes:
+                time.sleep(3)
+                continue
 
-                df_m1 = zip_to_dataframe(zip_bytes)
-                if df_m1 is None or df_m1.empty:
-                    print("CSV vuoto – skip")
-                    time.sleep(1)
-                    continue
+            df_m1 = zip_to_dataframe(zip_bytes)
+            if df_m1 is None or df_m1.empty:
+                print("CSV vuoto – skip")
+                time.sleep(1)
+                continue
 
-                df_m5 = m1_to_m5(df_m1)
-                all_months.append(df_m5)
-                print(f"OK ({len(df_m5)} barre M5)")
+            df_m5 = m1_to_m5(df_m1)
+            all_years.append(df_m5)
+            print(f"OK  {len(df_m1):,} barre M1  →  {len(df_m5):,} barre M5")
 
-                # Pausa educata per non far bloccare l'IP
-                time.sleep(1.5)
+            time.sleep(2)   # pausa educata tra un anno e l'altro
 
-        if not all_months:
+        if not all_years:
             print(f"  Nessun dato scaricato per {pair}")
             continue
 
-        # Unisci tutti i mesi e salva
-        full = pd.concat(all_months).sort_index()
+        full = pd.concat(all_years).sort_index()
         full = full[~full.index.duplicated(keep="first")]
 
         out_path = os.path.join(OUTPUT, f"{pair}_M5_2020_2025.csv")
