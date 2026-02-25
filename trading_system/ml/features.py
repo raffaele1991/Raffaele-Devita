@@ -132,29 +132,33 @@ def add_trend_strength(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     period = 14
 
-    # ADX — usa ATR già calcolato
-    high = df["high"]
-    low  = df["low"]
+    high  = df["high"]
+    low   = df["low"]
+    close = df["close"]
     atr14 = df["atr"].replace(0, np.nan)
 
-    plus_dm  = high.diff().clip(lower=0)
-    minus_dm = (-low.diff()).clip(lower=0)
+    # +DM / -DM: diff()[0] è sempre NaN → fillna(0) per non bloccare l'EWM
+    # Usiamo .where() per evitare SettingWithCopyWarning
+    raw_up   = high.diff().fillna(0).clip(lower=0)
+    raw_down = (-low.diff()).fillna(0).clip(lower=0)
     both_pos = (high.diff() > 0) & (-low.diff() > 0)
-    plus_dm[both_pos & (plus_dm < minus_dm)]  = 0.0
-    minus_dm[both_pos & (minus_dm <= plus_dm)] = 0.0
+    plus_dm  = raw_up.where(~(both_pos & (raw_up < raw_down)), 0.0)
+    minus_dm = raw_down.where(~(both_pos & (raw_down <= raw_up)), 0.0)
 
-    plus_di  = 100 * plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr14
-    minus_di = 100 * minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr14
+    # ignore_na=True: le prime righe dove atr14 è NaN non bloccano l'intera serie
+    _ewm = dict(alpha=1 / period, adjust=False, ignore_na=True)
+    plus_di  = 100 * plus_dm.ewm(**_ewm).mean() / atr14
+    minus_di = 100 * minus_dm.ewm(**_ewm).mean() / atr14
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
-    df["adx"] = dx.ewm(alpha=1/period, adjust=False).mean() / 100  # normalizzato 0-1
+    # fillna(0) su dx: per i primi ~14 bar (atr NaN) trattiamo DX=0
+    df["adx"] = dx.fillna(0).ewm(**_ewm).mean() / 100  # normalizzato 0-1
 
     # Bollinger Bands
-    close   = df["close"]
-    bb_ma   = close.rolling(20).mean()
-    bb_std  = close.rolling(20).std()
-    bb_rng  = (4 * bb_std).replace(0, np.nan)
-    df["bb_position"] = (close - (bb_ma - 2 * bb_std)) / bb_rng   # 0=bottom, 0.5=mid, 1=top
-    df["bb_width"]    = (4 * bb_std) / close                        # larghezza relativa
+    bb_ma  = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_rng = (4 * bb_std).replace(0, np.nan)
+    df["bb_position"] = (close - (bb_ma - 2 * bb_std)) / bb_rng  # 0=bottom, 0.5=mid, 1=top
+    df["bb_width"]    = (4 * bb_std) / close                       # larghezza relativa
 
     return df
 
