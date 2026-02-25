@@ -2,108 +2,179 @@
 """
 HistData Downloader + M1->M5 Converter per iPhone (a-Shell)
 ============================================================
-Scarica EURUSD e XAUUSD M1 da HistData (1 ZIP per anno) e converte in M5.
-Totale: 12 ZIP  (2 coppie x 6 anni)
+Scarica EURUSD e XAUUSD M1 (MetaTrader .hst o ASCII .csv)
+e converte in M5 CSV. Totale: 12 ZIP (2 coppie x 6 anni).
 
-INSTALLAZIONE (in a-Shell su iPhone):
+INSTALLAZIONE:
     pip install requests beautifulsoup4 pandas
 
 USO:
     python histdata_iphone.py
 
-I file vengono salvati in ~/Documents/HistData_M5/ (visibili nell'app File)
+Output: ~/Documents/HistData_M5/  (visibile nell'app File iPhone)
 """
 
 import requests
 from bs4 import BeautifulSoup
 import zipfile
 import pandas as pd
+import struct
 import io
 import os
 import time
 
-# ── Configurazione ────────────────────────────────────────────────────────────
+# ── Config ────────────────────────────────────────────────────────────────────
 PAIRS  = ["EURUSD", "XAUUSD"]
-YEARS  = range(2020, 2026)   # 2020 → 2025 inclusi
+YEARS  = range(2020, 2026)
 OUTPUT = os.path.expanduser("~/Documents/HistData_M5")
 os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-        "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
 }
 
-# ── Funzioni ──────────────────────────────────────────────────────────────────
+# ── Token + form ──────────────────────────────────────────────────────────────
 
-def get_token(session: requests.Session, pair: str, year: int) -> str | None:
-    """Recupera il token CSRF dalla pagina di download annuale HistData."""
-    url = (
-        f"https://www.histdata.com/download-free-forex-historical-data/"
-        f"?/ascii/1-minute-bar-quotes/{pair}/{year}"
-    )
-    try:
-        r = session.get(url, headers=HEADERS, timeout=30)
-        r.raise_for_status()
+def get_form_data(session: requests.Session, pair: str, year: int) -> dict | None:
+    """
+    Prova prima MetaTrader (come mostrato sul sito), poi ASCII come fallback.
+    Estrae TUTTI i campi hidden del form per evitare errori di token.
+    """
+    attempts = [
+        ("metatrader", "MetaTrader"),
+        ("ascii",      "ASCII"),
+    ]
+    for url_fmt, form_fmt in attempts:
+        url = (
+            f"https://www.histdata.com/download-free-forex-historical-data/"
+            f"?/{url_fmt}/1-minute-bar-quotes/{pair}/{year}"
+        )
+        try:
+            r = session.get(
+                url,
+                headers={**HEADERS, "Referer": "https://www.histdata.com/"},
+                timeout=30
+            )
+            r.raise_for_status()
+        except Exception as e:
+            print(f"    GET [{url_fmt}] error: {e}")
+            continue
+
         soup = BeautifulSoup(r.text, "html.parser")
-        inp = soup.find("input", {"id": "tk"})
-        return inp["value"] if inp else None
-    except Exception as e:
-        print(f"    Errore pagina token: {e}")
-        return None
+        form = soup.find("form", {"id": "file_down"}) or soup.find("form")
+        if not form:
+            continue
+
+        data = {
+            inp.get("name"): inp.get("value", "")
+            for inp in form.find_all("input")
+            if inp.get("name")
+        }
+
+        if not data.get("tk"):
+            continue
+
+        # Sovrascriviamo con i valori corretti per anno intero
+        data.update({
+            "datemonth": "0",
+            "date":      str(year),
+            "platform":  form_fmt,
+            "timeframe": "M1",
+            "fxpair":    pair,
+        })
+        return data
+
+    return None
 
 
-def download_zip(session: requests.Session, pair: str, year: int, token: str) -> bytes | None:
-    """Scarica lo ZIP annuale da HistData (datemonth=0 = anno intero)."""
+def download_zip(session: requests.Session, pair: str, year: int, form_data: dict) -> bytes | None:
+    fmt = form_data.get("platform", "?")
     ref = (
         f"https://www.histdata.com/download-free-forex-historical-data/"
-        f"?/ascii/1-minute-bar-quotes/{pair}/{year}"
+        f"?/{fmt.lower()}/1-minute-bar-quotes/{pair}/{year}"
     )
-    headers = {**HEADERS, "Referer": ref}
-    data = {
-        "tk":          token,
-        "date":        str(year),
-        "datemonth":   "0",        # 0 = anno intero
-        "platform":    "ASCII",
-        "timeframe":   "M1",
-        "fxpair":      pair,
-    }
     try:
         r = session.post(
             "https://www.histdata.com/get.php",
-            data=data, headers=headers, timeout=120
+            data=form_data,
+            headers={**HEADERS, "Referer": ref},
+            timeout=120
         )
         r.raise_for_status()
-        if len(r.content) < 1000:
-            print(f"    Risposta troppo piccola ({len(r.content)} bytes) – skip")
+        if len(r.content) < 2000:
+            print(f"    Risposta troppo piccola ({len(r.content)} B)")
             return None
         return r.content
     except Exception as e:
-        print(f"    Errore download: {e}")
+        print(f"    POST error: {e}")
         return None
 
 
-def zip_to_dataframe(zip_bytes: bytes) -> pd.DataFrame | None:
-    """Estrae tutti i CSV dallo ZIP annuale e li unisce in un DataFrame."""
-    try:
-        frames = []
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
-            csv_names = [n for n in z.namelist() if n.endswith(".csv")]
-            if not csv_names:
-                print("    Nessun CSV nello ZIP")
-                return None
-            for csv_name in csv_names:
-                with z.open(csv_name) as f:
-                    df = pd.read_csv(
-                        f, sep=";", header=None,
-                        names=["Date", "Time", "Open", "High", "Low", "Close", "Volume"],
-                        dtype={"Date": str, "Time": str}
-                    )
-                frames.append(df)
+# ── Parser .hst (MetaTrader binario) ──────────────────────────────────────────
 
-        df = pd.concat(frames, ignore_index=True)
+def parse_hst(data: bytes) -> pd.DataFrame | None:
+    """
+    Legge un file .hst MetaTrader 4/5 e restituisce un DataFrame OHLCV.
+    Supporta version 400 (record 44 B) e 401 (record 60 B).
+    """
+    if len(data) < 148:
+        return None
+    version = struct.unpack_from("<i", data, 0)[0]
+
+    if version == 400:
+        # Header 148 B | Record: CTM(i4) O(d8) L(d8) H(d8) C(d8) VOL(q8) = 44 B
+        rec_fmt  = "<iddddq"
+        rec_size = 44
+        hdr_size = 148
+        fields   = ["ts", "Open", "Low", "High", "Close", "Volume"]
+    elif version == 401:
+        # Header 148 B | Record: CTM(q8) O(d8) H(d8) L(d8) C(d8) TV(q8) SP(i4) RV(q8) = 60 B
+        rec_fmt  = "<qddddqiq"
+        rec_size = 60
+        hdr_size = 148
+        fields   = ["ts", "Open", "High", "Low", "Close", "TickVol", "Spread", "RealVol"]
+    else:
+        print(f"    Versione .hst sconosciuta: {version}")
+        return None
+
+    n_records = (len(data) - hdr_size) // rec_size
+    if n_records == 0:
+        return None
+
+    rows = []
+    offset = hdr_size
+    for _ in range(n_records):
+        row = struct.unpack_from(rec_fmt, data, offset)
+        rows.append(row)
+        offset += rec_size
+
+    df = pd.DataFrame(rows, columns=fields)
+    df["DateTime"] = pd.to_datetime(df["ts"], unit="s", utc=True).dt.tz_localize(None)
+    df = df.set_index("DateTime")
+
+    # v401 ha H e L invertiti rispetto a v400 — normalizziamo
+    if version == 401:
+        df = df.rename(columns={"High": "H_tmp", "Low": "L_tmp"})
+        df = df.rename(columns={"H_tmp": "High", "L_tmp": "Low"})
+
+    return df[["Open", "High", "Low", "Close", "Volume"]].sort_index()
+
+
+# ── Parser .csv (ASCII) ───────────────────────────────────────────────────────
+
+def parse_csv(data: bytes) -> pd.DataFrame | None:
+    try:
+        df = pd.read_csv(
+            io.BytesIO(data), sep=";", header=None,
+            names=["Date", "Time", "Open", "High", "Low", "Close", "Volume"],
+            dtype={"Date": str, "Time": str}
+        )
         df["DateTime"] = pd.to_datetime(
             df["Date"] + " " + df["Time"],
             format="%Y%m%d %H%M%S", errors="coerce"
@@ -111,20 +182,49 @@ def zip_to_dataframe(zip_bytes: bytes) -> pd.DataFrame | None:
         df = df.dropna(subset=["DateTime"]).set_index("DateTime").sort_index()
         for col in ["Open", "High", "Low", "Close", "Volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-        return df.dropna()
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
     except Exception as e:
-        print(f"    Errore parsing ZIP: {e}")
+        print(f"    CSV parse error: {e}")
         return None
 
 
+# ── ZIP -> DataFrame ──────────────────────────────────────────────────────────
+
+def zip_to_dataframe(zip_bytes: bytes) -> pd.DataFrame | None:
+    frames = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+            for name in z.namelist():
+                with z.open(name) as f:
+                    raw = f.read()
+                nl = name.lower()
+                if nl.endswith(".hst"):
+                    df = parse_hst(raw)
+                elif nl.endswith(".csv"):
+                    df = parse_csv(raw)
+                else:
+                    continue
+                if df is not None and not df.empty:
+                    frames.append(df)
+    except Exception as e:
+        print(f"    ZIP error: {e}")
+        return None
+
+    if not frames:
+        return None
+    result = pd.concat(frames).sort_index()
+    return result[~result.index.duplicated(keep="first")]
+
+
+# ── Ricampionamento M1 -> M5 ──────────────────────────────────────────────────
+
 def m1_to_m5(df: pd.DataFrame) -> pd.DataFrame:
-    """Ricampiona M1 → M5 (OHLCV)."""
     return df.resample("5min").agg(
-        Open=("Open", "first"),
-        High=("High", "max"),
-        Low=("Low", "min"),
-        Close=("Close", "last"),
-        Volume=("Volume", "sum"),
+        Open  =("Open",  "first"),
+        High  =("High",  "max"),
+        Low   =("Low",   "min"),
+        Close =("Close", "last"),
+        Volume=("Volume","sum"),
     ).dropna(subset=["Open"])
 
 
@@ -132,52 +232,54 @@ def m1_to_m5(df: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     session = requests.Session()
+    print("Inizializzo sessione...")
+    try:
+        session.get("https://www.histdata.com/", headers=HEADERS, timeout=30)
+    except Exception as e:
+        print(f"  Homepage warning: {e}")
 
     for pair in PAIRS:
-        print(f"\n{'='*50}")
-        print(f"  {pair}")
-        print(f"{'='*50}")
-
+        print(f"\n{'='*52}\n  {pair}\n{'='*52}")
         all_years: list[pd.DataFrame] = []
 
         for year in YEARS:
-            print(f"  Scarico {pair} {year} ...", end=" ", flush=True)
+            print(f"  [{pair} {year}] form...", end=" ", flush=True)
 
-            token = get_token(session, pair, year)
-            if not token:
-                print("token non trovato – skip")
-                time.sleep(2)
+            form_data = get_form_data(session, pair, year)
+            if not form_data:
+                print("ERRORE: form non trovato – skip")
+                time.sleep(3)
                 continue
 
-            zip_bytes = download_zip(session, pair, year, token)
+            fmt = form_data.get("platform", "?")
+            print(f"OK ({fmt}), download...", end=" ", flush=True)
+
+            zip_bytes = download_zip(session, pair, year, form_data)
             if not zip_bytes:
                 time.sleep(3)
                 continue
 
             df_m1 = zip_to_dataframe(zip_bytes)
             if df_m1 is None or df_m1.empty:
-                print("CSV vuoto – skip")
-                time.sleep(1)
+                print("dati vuoti – skip")
+                time.sleep(2)
                 continue
 
             df_m5 = m1_to_m5(df_m1)
             all_years.append(df_m5)
-            print(f"OK  {len(df_m1):,} barre M1  →  {len(df_m5):,} barre M5")
-
-            time.sleep(2)   # pausa educata tra un anno e l'altro
+            print(f"OK  {len(df_m1):,} M1 -> {len(df_m5):,} M5")
+            time.sleep(2)
 
         if not all_years:
-            print(f"  Nessun dato scaricato per {pair}")
+            print(f"  Nessun dato per {pair}")
             continue
 
         full = pd.concat(all_years).sort_index()
         full = full[~full.index.duplicated(keep="first")]
-
-        out_path = os.path.join(OUTPUT, f"{pair}_M5_2020_2025.csv")
-        full.to_csv(out_path)
-        print(f"\n  Salvato: {out_path}")
-        print(f"  Totale barre M5: {len(full):,}")
-        print(f"  Da {full.index[0]}  a  {full.index[-1]}")
+        out  = os.path.join(OUTPUT, f"{pair}_M5_2020_2025.csv")
+        full.to_csv(out)
+        print(f"\n  Salvato: {out}")
+        print(f"  {len(full):,} barre M5  |  {full.index[0]} -> {full.index[-1]}")
 
 
 if __name__ == "__main__":
