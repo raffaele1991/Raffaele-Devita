@@ -109,6 +109,12 @@ def train_symbol(symbol: str):
     print(f"  Candele totali caricate: {len(df):,}")
     print(f"  Periodo: {df.index[0]} → {df.index[-1]}")
 
+    # Applica cutoff: allena SOLO su dati precedenti a TRAIN_CUTOFF_DATE
+    cutoff = pd.Timestamp(config.TRAIN_CUTOFF_DATE)
+    df = df[df.index < cutoff]
+    print(f"  [SPLIT] Training limitato a dati < {config.TRAIN_CUTOFF_DATE}")
+    print(f"  Candele training: {len(df):,}  (fino a {df.index[-1]})")
+
     # Feature engineering + struttura SMC
     print("  Rilevamento struttura SMC...")
     df = detect_structure(df)
