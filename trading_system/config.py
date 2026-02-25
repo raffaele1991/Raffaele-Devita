@@ -58,11 +58,16 @@ ML_RANDOM_SEED          = 42
 # Il backtest out-of-sample va eseguito da questa data in poi.
 TRAIN_CUTOFF_DATE       = "2025-09-19"  # 70k barre train | 30k barre test
 
-# Parametri modello (GradientBoosting)
-ML_N_ESTIMATORS     = 300
-ML_MAX_DEPTH        = 5
-ML_LEARNING_RATE    = 0.05
-ML_SUBSAMPLE        = 0.8
+# Parametri modello (LightGBM)
+ML_N_ESTIMATORS          = 2000   # max alberi — early stopping troverà il numero ottimale
+ML_NUM_LEAVES            = 63     # complessità foglie (63 = profondità ~6, ottimo per finanza)
+ML_LEARNING_RATE         = 0.05
+ML_SUBSAMPLE             = 0.8    # bagging per ridurre overfitting
+ML_COLSAMPLE_BYTREE      = 0.8    # fraction di feature per albero
+ML_MIN_CHILD_SAMPLES     = 20     # campioni minimi per foglia
+ML_REG_ALPHA             = 0.1    # L1 regularization
+ML_REG_LAMBDA            = 0.1    # L2 regularization
+ML_EARLY_STOPPING_ROUNDS = 100    # stop se nessun miglioramento per 100 round
 
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
