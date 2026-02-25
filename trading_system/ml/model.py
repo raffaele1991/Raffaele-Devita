@@ -71,10 +71,21 @@ class SMCMLModel:
         y_test  = y.iloc[split_val:]
 
         # LightGBM non richiede normalizzazione ma la manteniamo per coerenza
-        # con il predict_proba usato live (stesso scaler)
-        X_train_s = self.scaler.fit_transform(X_train[FEATURE_COLUMNS])
-        X_val_s   = self.scaler.transform(X_val[FEATURE_COLUMNS])
-        X_test_s  = self.scaler.transform(X_test[FEATURE_COLUMNS])
+        # con il predict_proba usato live (stesso scaler).
+        # Convertiamo in DataFrame per preservare i nomi delle feature ed eliminare
+        # il warning "X does not have valid feature names".
+        X_train_s = pd.DataFrame(
+            self.scaler.fit_transform(X_train[FEATURE_COLUMNS]),
+            columns=FEATURE_COLUMNS,
+        )
+        X_val_s = pd.DataFrame(
+            self.scaler.transform(X_val[FEATURE_COLUMNS]),
+            columns=FEATURE_COLUMNS,
+        )
+        X_test_s = pd.DataFrame(
+            self.scaler.transform(X_test[FEATURE_COLUMNS]),
+            columns=FEATURE_COLUMNS,
+        )
 
         # Bilancia le classi tramite sample_weight
         n_neg = (y_train == 0).sum()
@@ -136,7 +147,10 @@ class SMCMLModel:
             raise RuntimeError(f"Modello {self.symbol} non addestrato. Lancia train.py prima.")
 
         features   = X[FEATURE_COLUMNS].iloc[[-1]]
-        features_s = self.scaler.transform(features)
+        features_s = pd.DataFrame(
+            self.scaler.transform(features),
+            columns=FEATURE_COLUMNS,
+        )
         raw_proba  = self.model.predict_proba(features_s)[0][1]
 
         if self.calibrator is not None:

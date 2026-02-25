@@ -90,6 +90,75 @@ def add_momentum(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Feature temporali: ora del giorno (ciclica) e sessioni di trading."""
+    df = df.copy()
+
+    hour = df.index.hour + df.index.minute / 60.0
+
+    # Encoding ciclico: mantiene la continuità tra 23:59 e 00:00
+    df["hour_sin"] = np.sin(2 * np.pi * hour / 24)
+    df["hour_cos"] = np.cos(2 * np.pi * hour / 24)
+
+    # Giorno della settimana ciclico (0=lun, 4=ven)
+    dow = df.index.dayofweek.astype(float)
+    df["dow_sin"] = np.sin(2 * np.pi * dow / 5)
+    df["dow_cos"] = np.cos(2 * np.pi * dow / 5)
+
+    # Kill zone sessioni (ora del server MT5, tipicamente UTC+2/3)
+    # London KZ: 07:00-10:00 | NY KZ: 13:00-16:00 | Asia: 00:00-04:00
+    h_int = df.index.hour
+    df["is_london"] = ((h_int >= 7)  & (h_int < 11)).astype(float)
+    df["is_ny"]     = ((h_int >= 13) & (h_int < 17)).astype(float)
+    df["is_asia"]   = ((h_int >= 0)  & (h_int < 4)).astype(float)
+
+    return df
+
+
+def add_volume_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Feature di volume: normalizzazione e spike istituzionali."""
+    df = df.copy()
+
+    vol_ma20 = df["volume"].rolling(20).mean().replace(0, np.nan)
+    df["vol_norm"]  = (df["volume"] / vol_ma20).clip(0, 10)   # volume relativo, cap a 10x
+    df["vol_spike"] = (df["vol_norm"] > 2.0).astype(float)    # spike = segnale istituzionale
+    df["vol_trend"] = (df["volume"].rolling(5).mean() > vol_ma20).astype(float)  # volume crescente
+
+    return df
+
+
+def add_trend_strength(df: pd.DataFrame) -> pd.DataFrame:
+    """ADX (forza trend) e posizione nelle Bollinger Bands."""
+    df = df.copy()
+    period = 14
+
+    # ADX — usa ATR già calcolato
+    high = df["high"]
+    low  = df["low"]
+    atr14 = df["atr"].replace(0, np.nan)
+
+    plus_dm  = high.diff().clip(lower=0)
+    minus_dm = (-low.diff()).clip(lower=0)
+    both_pos = (high.diff() > 0) & (-low.diff() > 0)
+    plus_dm[both_pos & (plus_dm < minus_dm)]  = 0.0
+    minus_dm[both_pos & (minus_dm <= plus_dm)] = 0.0
+
+    plus_di  = 100 * plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr14
+    minus_di = 100 * minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr14
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    df["adx"] = dx.ewm(alpha=1/period, adjust=False).mean() / 100  # normalizzato 0-1
+
+    # Bollinger Bands
+    close   = df["close"]
+    bb_ma   = close.rolling(20).mean()
+    bb_std  = close.rolling(20).std()
+    bb_rng  = (4 * bb_std).replace(0, np.nan)
+    df["bb_position"] = (close - (bb_ma - 2 * bb_std)) / bb_rng   # 0=bottom, 0.5=mid, 1=top
+    df["bb_width"]    = (4 * bb_std) / close                        # larghezza relativa
+
+    return df
+
+
 def add_smc_features(df: pd.DataFrame) -> pd.DataFrame:
     """Feature derivate dall'analisi SMC già presente nel DataFrame."""
     df = df.copy()
@@ -99,9 +168,14 @@ def add_smc_features(df: pd.DataFrame) -> pd.DataFrame:
     df["choch_bull_n"] = df.get("choch_bull", pd.Series(False, index=df.index)).astype(int)
     df["choch_bear_n"] = df.get("choch_bear", pd.Series(False, index=df.index)).astype(int)
 
-    # Quante candele fa è stato l'ultimo BOS
+    # Quante candele fa è stato l'ultimo BOS/CHoCH (forward-fill dell'indice dell'evento)
     bos_events = (df["bos_bull_n"] | df["bos_bear_n"] | df["choch_bull_n"] | df["choch_bear_n"]).astype(bool)
-    df["bars_since_structure"] = bos_events[::-1].cumsum()[::-1].where(bos_events, 0)
+    n = len(df)
+    positions = np.arange(n, dtype=np.float64)
+    last_event_pos = np.where(bos_events.values, positions, np.nan)
+    last_event_pos = pd.Series(last_event_pos).ffill().values
+    bars_since = np.where(np.isnan(last_event_pos), n, positions - last_event_pos)
+    df["bars_since_structure"] = np.clip(bars_since / 100.0, 0, 1)  # normalizzato 0-1, cap 100 bar
 
     return df
 
@@ -311,7 +385,10 @@ def build_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.DataFrame:
     df = add_moving_averages(df)
     df = add_volatility(df)
     df = add_momentum(df)
+    df = add_time_features(df)
+    df = add_volume_features(df)
     df = add_smc_features(df)
+    df = add_trend_strength(df)       # richiede atr (da add_volatility)
     df = add_smc_signal_features(df, symbol=symbol)
     df = df.dropna()
     return df
@@ -328,6 +405,13 @@ FEATURE_COLUMNS = [
     "atr_pct", "vol_5", "vol_20",
     # ── MOMENTUM (contesto) ───────────────────────────────────────────────────
     "rsi_norm", "macd_norm", "macd_hist", "stoch_k", "stoch_d",
+    # ── TEMPO & SESSIONE (kill zone — cruciale per XAUUSD) ───────────────────
+    "hour_sin", "hour_cos", "dow_sin", "dow_cos",
+    "is_london", "is_ny", "is_asia",
+    # ── VOLUME (tick volume MT5 — proxy forza istituzionale) ─────────────────
+    "vol_norm", "vol_spike", "vol_trend",
+    # ── FORZA TREND & BANDA ──────────────────────────────────────────────────
+    "adx", "bb_position", "bb_width",
     # ── SMC STRUTTURA (generali) ─────────────────────────────────────────────
     "trend_num", "bos_bull_n", "bos_bear_n", "choch_bull_n", "choch_bear_n",
     "bars_since_structure",
@@ -337,6 +421,7 @@ FEATURE_COLUMNS = [
     "ob_penetration",   # profondità entry: 0=bordo ideale, 1=fondo OB
     "ob_has_fvg",       # 1 se c'è FVG confluente nella zona OB (±3 ATR)
     "fvg_size_atr",     # dimensione FVG in ATR (0 se assente)
+    "liq_swept_smc",    # 1 se c'è stato sweep di liquidità sul livello OB
     "dist_to_liq_atr",  # distanza alla prossima liquidità obiettivo (ATR)
     "ob_count_zone",    # OB sovrapposti nella zona (0-5)
     "is_choch",         # 1=CHoCH (inversione), 0=BOS (continuazione)
