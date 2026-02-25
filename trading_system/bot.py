@@ -158,8 +158,11 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "session":            session_f.active_session(),
             "minutes_to_next":    session_f.minutes_to_next_session(),
             "balance":            status["balance"],
+            "equity":             status["equity"],
             "daily_dd_pct":       status["daily_drawdown_pct"],
             "total_dd_pct":       status["total_drawdown_pct"],
+            "daily_pnl":          status["daily_pnl"],
+            "daily_pnl_pct":      status["daily_pnl_pct"],
             "trades_today":       trades_today,
             "win_rate":           win_rate,
             "consecutive_losses": status["consecutive_losses"],
@@ -204,9 +207,11 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
     now = datetime.now()
 
     try:
-        # Aggiorna saldo
+        # Aggiorna saldo ed equity (equity include floating P&L posizioni aperte)
         balance = connector.get_account_balance()
+        equity  = connector.get_account_equity()
         risk_manager.update_balance(balance)
+        risk_manager.update_equity(equity)
 
         # ── 1. CHIUSURA EOD ───────────────────────────────────────────────────────
         if now.hour >= config.PROP_CLOSE_EOD_HOUR:

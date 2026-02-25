@@ -345,12 +345,17 @@
   <!-- ── KPI STRIP ────────────────────────────────────────────────────────── -->
   <div class="kpi-grid">
     <div class="card">
-      <div class="card-label">Saldo</div>
+      <div class="card-label">Saldo / Equity</div>
       <div class="card-value text-accent" id="balance">—</div>
       <div class="card-sub" id="balanceSub">—</div>
     </div>
     <div class="card">
-      <div class="card-label">DD Giornaliero</div>
+      <div class="card-label">P&amp;L Oggi</div>
+      <div class="card-value" id="dailyPnl">—</div>
+      <div class="card-sub" id="dailyPnlSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Giornaliero (equity)</div>
       <div class="card-value" id="dailyDD">—</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
@@ -358,7 +363,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-label">DD Totale</div>
+      <div class="card-label">DD Totale (equity)</div>
       <div class="card-value" id="totalDD">—</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
@@ -369,11 +374,6 @@
       <div class="card-label">Win Rate</div>
       <div class="card-value" id="winRate">—</div>
       <div class="card-sub" id="winRateSub">—</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Trade Oggi</div>
-      <div class="card-value" id="tradesToday">—</div>
-      <div class="card-sub" id="tradesSub">—</div>
     </div>
   </div>
 
@@ -842,10 +842,24 @@ function updateUI(s) {
 
   // KPI
   const bal = s.balance ?? null;
-  document.getElementById('balance').textContent =
-    bal !== null ? '$' + bal.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  const eq  = s.equity  ?? null;
+  const fmt = v => '$' + v.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('balance').textContent = bal !== null ? fmt(bal) : '—';
   document.getElementById('balanceSub').textContent =
-    s.account_name ? s.account_name : '—';
+    eq !== null ? 'Equity: ' + fmt(eq) : '—';
+
+  // P&L oggi
+  const pnl    = s.daily_pnl     ?? null;
+  const pnlPct = s.daily_pnl_pct ?? null;
+  const pnlEl  = document.getElementById('dailyPnl');
+  const pnlSub = document.getElementById('dailyPnlSub');
+  if (pnl !== null) {
+    pnlEl.textContent  = (pnl >= 0 ? '+' : '') + fmt(pnl);
+    pnlEl.className    = 'card-value ' + (pnl >= 0 ? 'text-green' : 'text-red');
+    pnlSub.textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '% dal giorno';
+  } else {
+    pnlEl.textContent = '—'; pnlSub.textContent = '—';
+  }
 
   setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
   setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
@@ -854,9 +868,6 @@ function updateUI(s) {
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
   document.getElementById('winRateSub').textContent =
     (s.total_wins ?? 0) + 'W / ' + (s.total_losses ?? 0) + 'L';
-
-  document.getElementById('tradesToday').textContent = s.trades_today ?? '—';
-  document.getElementById('tradesSub').textContent   = 'max ' + (s.max_trades_day ?? '—') + '/giorno';
 
   // Converti il dict symbols in array di segnali attivi
   const sigsArr = Object.entries(s.symbols || {})

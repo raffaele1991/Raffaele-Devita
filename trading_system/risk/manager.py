@@ -37,7 +37,8 @@ class RiskManager:
     def __init__(self, account_balance: float):
         self.initial_balance     = account_balance
         self.current_balance     = account_balance
-        self.peak_balance        = account_balance
+        self.current_equity      = account_balance   # equity MT5 (include floating P&L)
+        self.peak_equity         = account_balance
 
         self.daily_start_balance: float = account_balance
         self.daily_start_date:    date  = date.today()
@@ -47,13 +48,11 @@ class RiskManager:
         self.open_trades:          list = []
         self.closed_trades:        list = []
 
-    # ── AGGIORNAMENTO SALDO ───────────────────────────────────────────────────
+    # ── AGGIORNAMENTO SALDO / EQUITY ──────────────────────────────────────────
 
     def update_balance(self, new_balance: float):
         """Chiama ogni volta che il saldo MT5 cambia."""
         self.current_balance = new_balance
-        if new_balance > self.peak_balance:
-            self.peak_balance = new_balance
 
         # Reset giornaliero
         today = date.today()
@@ -63,6 +62,12 @@ class RiskManager:
             self.trades_today        = 0
             self.consecutive_losses  = 0
             logger.info("[Risk] Reset giornaliero contatori")
+
+    def update_equity(self, new_equity: float):
+        """Chiama ogni ciclo con l'equity MT5 (balance + floating P&L)."""
+        self.current_equity = new_equity
+        if new_equity > self.peak_equity:
+            self.peak_equity = new_equity
 
     # ── CONTROLLO LIMITI ──────────────────────────────────────────────────────
 
@@ -79,13 +84,13 @@ class RiskManager:
         if self.consecutive_losses >= config.MAX_CONSECUTIVE_LOSSES:
             return False, f"Stop: {config.MAX_CONSECUTIVE_LOSSES} stop loss consecutivi"
 
-        # Drawdown giornaliero
-        daily_dd = (self.daily_start_balance - self.current_balance) / self.daily_start_balance
+        # Drawdown giornaliero (su equity — include floating P&L)
+        daily_dd = (self.daily_start_balance - self.current_equity) / self.daily_start_balance
         if daily_dd >= config.PROP_MAX_DAILY_LOSS_PCT:
             return False, f"Daily drawdown limit: {daily_dd*100:.2f}% >= {config.PROP_MAX_DAILY_LOSS_PCT*100:.1f}%"
 
-        # Drawdown totale
-        total_dd = (self.initial_balance - self.current_balance) / self.initial_balance
+        # Drawdown totale (su equity)
+        total_dd = (self.initial_balance - self.current_equity) / self.initial_balance
         if total_dd >= config.PROP_MAX_TOTAL_LOSS_PCT:
             return False, f"Total drawdown limit: {total_dd*100:.2f}% >= {config.PROP_MAX_TOTAL_LOSS_PCT*100:.1f}%"
 
@@ -169,16 +174,25 @@ class RiskManager:
     # ── STATISTICHE ───────────────────────────────────────────────────────────
 
     def status(self) -> dict:
-        daily_dd  = (self.daily_start_balance - self.current_balance) / self.daily_start_balance
-        total_dd  = (self.initial_balance - self.current_balance) / self.initial_balance
+        # DD su equity (standard prop firm): clampato a 0 se in profitto
+        daily_dd = max(0.0, (self.daily_start_balance - self.current_equity) / self.daily_start_balance)
+        total_dd = max(0.0, (self.initial_balance     - self.current_equity) / self.initial_balance)
+
+        # P&L giornaliero in $ e %
+        daily_pnl     = self.current_equity - self.daily_start_balance
+        daily_pnl_pct = daily_pnl / self.daily_start_balance * 100
+
         wins      = sum(1 for t in self.closed_trades if t.result == "win")
         losses    = sum(1 for t in self.closed_trades if t.result == "loss")
         win_rate  = wins / max(wins + losses, 1) * 100
 
         return {
             "balance":            self.current_balance,
+            "equity":             self.current_equity,
             "daily_drawdown_pct": round(daily_dd * 100, 2),
             "total_drawdown_pct": round(total_dd * 100, 2),
+            "daily_pnl":          round(daily_pnl, 2),
+            "daily_pnl_pct":      round(daily_pnl_pct, 2),
             "trades_today":       self.trades_today,
             "consecutive_losses": self.consecutive_losses,
             "total_wins":         wins,
