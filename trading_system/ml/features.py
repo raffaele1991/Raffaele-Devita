@@ -116,13 +116,19 @@ def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_volume_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Feature di volume: normalizzazione e spike istituzionali."""
+    """Feature di volume: normalizzazione e spike istituzionali.
+    Robusto a volume=0 (broker senza dati volume reale per spot FX/Gold).
+    """
     df = df.copy()
+    vol = df["volume"]
+    vol_ma20 = vol.rolling(20).mean()
 
-    vol_ma20 = df["volume"].rolling(20).mean().replace(0, np.nan)
-    df["vol_norm"]  = (df["volume"] / vol_ma20).clip(0, 10)   # volume relativo, cap a 10x
-    df["vol_spike"] = (df["vol_norm"] > 2.0).astype(float)    # spike = segnale istituzionale
-    df["vol_trend"] = (df["volume"].rolling(5).mean() > vol_ma20).astype(float)  # volume crescente
+    # Se vol_ma20 = 0 (volume reale assente), fillna(1.0) → feature neutra
+    # Così dropna() non elimina queste righe
+    safe_ma20 = vol_ma20.where(vol_ma20 > 0, np.nan)
+    df["vol_norm"]  = (vol / safe_ma20).clip(0, 10).fillna(1.0)
+    df["vol_spike"] = (df["vol_norm"] > 2.0).astype(float)
+    df["vol_trend"] = (vol.rolling(5).mean() > vol_ma20).fillna(False).astype(float)
 
     return df
 
@@ -157,8 +163,8 @@ def add_trend_strength(df: pd.DataFrame) -> pd.DataFrame:
     bb_ma  = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
     bb_rng = (4 * bb_std).replace(0, np.nan)
-    df["bb_position"] = (close - (bb_ma - 2 * bb_std)) / bb_rng  # 0=bottom, 0.5=mid, 1=top
-    df["bb_width"]    = (4 * bb_std) / close                       # larghezza relativa
+    df["bb_position"] = ((close - (bb_ma - 2 * bb_std)) / bb_rng).fillna(0.5)  # 0.5=neutro se flat
+    df["bb_width"]    = (4 * bb_std / close).fillna(0.0)
 
     return df
 

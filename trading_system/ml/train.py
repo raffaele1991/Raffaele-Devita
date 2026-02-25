@@ -122,6 +122,20 @@ def train_symbol(symbol: str):
     print("  Costruzione feature (incluse feature SMC specifiche)...")
     df = build_features(df, symbol=symbol)
 
+    # ── DIAGNOSTICA ──────────────────────────────────────────────────────────
+    print(f"  [DIAG] Righe dopo build_features+dropna : {len(df):,}")
+    _vol_nan = df["vol_norm"].isna().sum() if "vol_norm" in df.columns else "n/a"
+    _bb_nan  = df["bb_position"].isna().sum() if "bb_position" in df.columns else "n/a"
+    _adx_nan = df["adx"].isna().sum() if "adx" in df.columns else "n/a"
+    print(f"  [DIAG] NaN: vol_norm={_vol_nan}, bb_position={_bb_nan}, adx={_adx_nan}")
+    _trend_nz = (df["trend_num"] != 0).sum() if "trend_num" in df.columns else 0
+    _ob_nz    = (df["ob_age_norm"] > 0).sum() if "ob_age_norm" in df.columns else 0
+    print(f"  [DIAG] trend_num!=0: {_trend_nz:,}  |  ob_age_norm>0: {_ob_nz:,}")
+    if "volume" in df.columns:
+        _vmin, _vmax, _vmean = df["volume"].min(), df["volume"].max(), df["volume"].mean()
+        print(f"  [DIAG] Volume: min={_vmin:.0f}, max={_vmax:.0f}, mean={_vmean:.1f}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     lookahead = config.ML_LOOKAHEAD
     print(f"  Costruzione etichette (lookahead {lookahead} candele = {lookahead * 5} min su M5)...")
     labels = build_labels(df, lookahead=lookahead)
