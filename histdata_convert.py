@@ -97,14 +97,25 @@ def process_zip(zip_path: str) -> list:
     return all_records
 
 
-def find_zips(folder: str, pair: str) -> list:
-    """Trova tutti i ZIP HistData per una coppia nella cartella."""
-    zips = []
-    for fname in sorted(os.listdir(folder)):
-        fl = fname.lower()
-        if fl.endswith(".zip") and pair.lower() in fl:
-            zips.append(os.path.join(folder, fname))
-    return zips
+def collect_hst_files(folder: str, pair: str) -> tuple:
+    """
+    Cerca ricorsivamente nella cartella:
+    - file .zip contenenti .hst  (ZIP non estratti)
+    - file .hst direttamente nelle sottocartelle (ZIP già estratti da iOS)
+    Ritorna (lista_zip, lista_hst_diretti)
+    """
+    zips, hsts = [], []
+    for root, dirs, files in os.walk(folder):
+        dirs.sort()
+        for fname in sorted(files):
+            fl = fname.lower()
+            path = os.path.join(root, fname)
+            if pair.lower() in fl:
+                if fl.endswith(".zip"):
+                    zips.append(path)
+                elif fl.endswith(".hst"):
+                    hsts.append(path)
+    return zips, hsts
 
 
 def save_csv(bars: list, out_path: str):
@@ -117,25 +128,30 @@ def save_csv(bars: list, out_path: str):
 
 
 def main():
-    print(f"Cartella ZIP: {ZIP_FOLDER}\n")
+    print(f"Cartella: {ZIP_FOLDER}\n")
 
     for pair in ["EURUSD", "XAUUSD"]:
         print(f"{'='*50}\n  {pair}\n{'='*50}")
 
-        zips = find_zips(ZIP_FOLDER, pair)
-        if not zips:
-            print(f"  Nessun ZIP trovato per {pair} in {ZIP_FOLDER}")
-            print(f"  (cerca file con '{pair}' nel nome)\n")
+        zips, hsts = collect_hst_files(ZIP_FOLDER, pair)
+        if not zips and not hsts:
+            print(f"  Nessun file trovato per {pair}")
+            print(f"  (cerca .zip o .hst con '{pair}' nel nome, anche in sottocartelle)\n")
             continue
 
-        print(f"  Trovati {len(zips)} ZIP:")
-        for z in zips:
-            print(f"    {os.path.basename(z)}")
-
         all_records = []
+
         for z in zips:
-            print(f"  Processo {os.path.basename(z)} ...", end=" ", flush=True)
+            print(f"  ZIP  {os.path.basename(z)} ...", end=" ", flush=True)
             records = process_zip(z)
+            print(f"{len(records):,} barre M1")
+            all_records.extend(records)
+
+        for h in hsts:
+            print(f"  HST  {os.path.basename(h)} ...", end=" ", flush=True)
+            with open(h, "rb") as f:
+                data = f.read()
+            records = parse_hst(data)
             print(f"{len(records):,} barre M1")
             all_records.extend(records)
 
