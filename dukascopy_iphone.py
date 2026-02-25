@@ -25,11 +25,12 @@ from collections import defaultdict
 
 # ─── CONFIGURAZIONE ────────────────────────────────────────────────────────────
 
-SYMBOL      = "XAUUSD"
+SYMBOLS = {
+    "XAUUSD": 1000,     # oro: prezzo intero / 1000
+    "EURUSD": 100000,   # forex: prezzo intero / 100000
+}
 DATE_START  = datetime(2020, 1, 1,  tzinfo=timezone.utc)
 DATE_END    = datetime(2025, 12, 31, tzinfo=timezone.utc)
-OUTPUT_FILE = f"{SYMBOL}_M5.csv"
-PRICE_DIV   = 1000      # XAUUSD: prezzo intero / 1000
 BAR_MINS    = 5         # aggregazione M5
 RETRY       = 3
 TIMEOUT     = 30
@@ -37,11 +38,10 @@ DELAY       = 0.05      # pausa tra richieste (iPhone: no multi-thread)
 
 # ─── DOWNLOAD ──────────────────────────────────────────────────────────────────
 
-def download_hour(dt: datetime):
+def download_hour(symbol: str, price_div: int, dt: datetime):
     """Scarica 1 ora di tick. Ritorna lista di (timestamp_utc, mid_price)."""
-    # mese 0-indexed in Dukascopy
     url = (
-        f"https://datafeed.dukascopy.com/datafeed/{SYMBOL}/"
+        f"https://datafeed.dukascopy.com/datafeed/{symbol}/"
         f"{dt.year}/{dt.month - 1:02d}/{dt.day:02d}/{dt.hour:02d}h_ticks.bi5"
     )
     for attempt in range(RETRY):
@@ -59,13 +59,13 @@ def download_hour(dt: datetime):
             for i in range(n):
                 ms, ask, bid, _, _ = struct.unpack(">IIIff", raw[i * 20: i * 20 + 20])
                 ts  = dt + timedelta(milliseconds=int(ms))
-                mid = (ask + bid) / 2 / PRICE_DIV
+                mid = (ask + bid) / 2 / price_div
                 ticks.append((ts, mid))
             return ticks
 
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return []   # ora vuota (notte/weekend)
+                return []
             time.sleep(2 ** attempt)
         except Exception:
             time.sleep(2 ** attempt)
@@ -132,62 +132,66 @@ def write_bars(bars, filepath, append=False):
 
 # ─── MAIN ──────────────────────────────────────────────────────────────────────
 
-def main():
-    print(f"Dukascopy iPhone Downloader — {SYMBOL} M{BAR_MINS}")
-    print(f"Output: {OUTPUT_FILE}")
+def download_symbol(symbol: str, price_div: int):
+    output_file = f"{symbol}_M5.csv"
+    print(f"\n{'='*50}")
+    print(f"  {symbol} M{BAR_MINS}")
+    print(f"  Output: {output_file}")
 
-    # Resume check
-    last = get_last_date(OUTPUT_FILE)
+    last = get_last_date(output_file)
     if last:
         start = last.replace(minute=0, second=0, microsecond=0)
-        print(f"Resume da: {start}")
+        print(f"  Resume da: {start}")
         append_mode = True
     else:
         start = DATE_START
         append_mode = False
 
-    # Genera lista ore
     hours = []
     dt = start
     while dt <= DATE_END:
-        if dt.weekday() != 6:  # salta domeniche
+        if dt.weekday() != 6:
             hours.append(dt)
         dt += timedelta(hours=1)
 
     total = len(hours)
-    print(f"Ore da scaricare: {total:,}\n")
+    print(f"  Ore da scaricare: {total:,}")
 
     accumulated = {}
     written     = 0
-    flush_every = 24  # scrivi su disco ogni 24 ore (1 giorno)
+    flush_every = 24
 
     for i, hour_dt in enumerate(hours, 1):
-        ticks = download_hour(hour_dt)
+        ticks = download_hour(symbol, price_div, hour_dt)
         if ticks:
             bars = ticks_to_m5(ticks)
             accumulated.update(bars)
 
-        # Progress ogni 100 ore
         if i % 100 == 0 or i == total:
             pct = i / total * 100
             print(f"  {i:,}/{total:,} ({pct:.1f}%) — {hour_dt.date()} — bars: {len(accumulated):,}")
 
-        # Flush su disco ogni giorno (evita perdite su crash iPhone)
-        if len(accumulated) >= flush_every * 12:  # ~12 bar/ora * 24h
-            write_bars(accumulated, OUTPUT_FILE, append=append_mode)
+        if len(accumulated) >= flush_every * 12:
+            write_bars(accumulated, output_file, append=append_mode)
             written    += len(accumulated)
             accumulated = {}
             append_mode = True
 
         time.sleep(DELAY)
 
-    # Flush finale
     if accumulated:
-        write_bars(accumulated, OUTPUT_FILE, append=append_mode)
+        write_bars(accumulated, output_file, append=append_mode)
         written += len(accumulated)
 
-    print(f"\nCompletato! Candele totali scritte: {written:,}")
-    print(f"File: {OUTPUT_FILE}")
+    print(f"  Completato! Candele: {written:,} → {output_file}")
+
+
+def main():
+    print(f"Dukascopy iPhone Downloader — M{BAR_MINS}")
+    print(f"Periodo: {DATE_START.date()} → {DATE_END.date()}")
+
+    for symbol, price_div in SYMBOLS.items():
+        download_symbol(symbol, price_div)
 
 if __name__ == "__main__":
     try:

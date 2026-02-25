@@ -14,3 +14,11 @@ reports/*.html
 reports/*.md
 .mypy_cache/
 .pytest_cache/
+
+# Dati storici grezzi (troppo grandi per GitHub)
+trading_system/data/raw/
+trading_system/data/*.zip
+trading_system/data/EURUSD_M1*.csv
+trading_system/data/XAUUSD_M1*.csv
+data/raw/
+*.histdata.csv
