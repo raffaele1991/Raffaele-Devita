@@ -28,8 +28,9 @@ import struct
 import zipfile
 from datetime import datetime
 
-# ── IMPOSTA QUI LA CARTELLA CON I ZIP ─────────────────────────────────────────
-ZIP_FOLDER = os.path.expanduser("~/Documents")
+# ── CARTELLA ZIP: argomento da riga di comando oppure default ─────────────────
+import sys
+ZIP_FOLDER = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 else os.path.expanduser("~/Downloads")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
