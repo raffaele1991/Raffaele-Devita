@@ -49,20 +49,36 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equ
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
 USE_ML_FILTER           = True   # True = filtra segnali con ML | False = solo SMC
-ML_CONFIDENCE_THRESHOLD = 0.35   # soglia confidence calibrata (AUC=0.59-0.62 — modello OB-filtrato)
+ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata — alzata per più precision e meno rumore
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42
 
 # Data cutoff: il modello viene trainato SOLO sui dati precedenti a questa data.
 # Il backtest out-of-sample va eseguito da questa data in poi.
-TRAIN_CUTOFF_DATE       = "2025-09-19"  # 70k barre train | 30k barre test
+TRAIN_CUTOFF_DATE       = "2026-01-01"  # train su tutto il 2025, backtest out-of-sample su gen-feb 2026
 
-# Parametri modello (GradientBoosting)
-ML_N_ESTIMATORS     = 300
-ML_MAX_DEPTH        = 5
-ML_LEARNING_RATE    = 0.05
-ML_SUBSAMPLE        = 0.8
+# Lookahead etichette (candele M5 future per valutare TP/SL)
+# 30 candele M5 = 2.5 ore — ottimale per XAUUSD M5 (bilancia velocità e qualità segnale)
+ML_LOOKAHEAD             = 30
+
+# Parametri modello (LightGBM)
+ML_N_ESTIMATORS          = 3000   # max alberi — early stopping troverà il numero ottimale
+ML_NUM_LEAVES            = 127    # profondità ~7 — più espressivo senza overfitting
+ML_LEARNING_RATE         = 0.03   # più lento = più robusto (early stopping compensa)
+ML_SUBSAMPLE             = 0.8    # bagging per ridurre overfitting
+ML_COLSAMPLE_BYTREE      = 0.75   # fraction di feature per albero (più diversità)
+ML_MIN_CHILD_SAMPLES     = 30     # foglie più robuste (meno overfitting su dati finanziari)
+ML_REG_ALPHA             = 0.1    # L1 regularization
+ML_REG_LAMBDA            = 1.0    # L2 regularization (aumentata per evitare overfitting)
+ML_EARLY_STOPPING_ROUNDS = 150    # più pazienza — con LR bassa servono più round
+
+# GPU per training LightGBM
+# 'cpu'  = solo CPU (default sicuro)
+# 'gpu'  = OpenCL — AMD RX 9070 / qualsiasi GPU con driver OpenCL (consigliato)
+# 'cuda' = CUDA — solo GPU NVIDIA
+# NOTA: richiede LightGBM con GPU support (su Windows: pip install lightgbm lo include già)
+ML_DEVICE                = 'gpu'
 
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 

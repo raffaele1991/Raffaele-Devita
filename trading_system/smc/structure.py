@@ -35,49 +35,59 @@ def detect_structure(df: pd.DataFrame) -> pd.DataFrame:
     CHoCH bearish = trend era bullish, ora rompe swing low  (inversione)
 
     Aggiunge colonne: bos_bull, bos_bear, choch_bull, choch_bear, trend
+
+    Ottimizzato: usa array NumPy invece di df.iloc/df.at per 10-20x speedup.
     """
     df = find_swing_points(df)
-    df["bos_bull"]   = False
-    df["bos_bear"]   = False
-    df["choch_bull"] = False
-    df["choch_bear"] = False
-    df["trend"]      = 0   # 1 = bullish, -1 = bearish, 0 = undefined
+
+    n       = len(df)
+    high    = df["high"].values
+    low     = df["low"].values
+    close   = df["close"].values
+    swing_h = df["swing_high"].values
+    swing_l = df["swing_low"].values
+
+    bos_bull   = np.zeros(n, dtype=bool)
+    bos_bear   = np.zeros(n, dtype=bool)
+    choch_bull = np.zeros(n, dtype=bool)
+    choch_bear = np.zeros(n, dtype=bool)
+    trend      = np.zeros(n, dtype=np.int8)
 
     confirm = config.SMC_BOS_CONFIRMATION
-    last_swing_high = None
-    last_swing_low  = None
+    last_swing_high = np.nan
+    last_swing_low  = np.nan
     current_trend   = 0
 
-    for i in range(len(df)):
-        row = df.iloc[i]
+    for i in range(n):
+        if swing_h[i]:
+            last_swing_high = high[i]
+        if swing_l[i]:
+            last_swing_low = low[i]
 
-        if row["swing_high"]:
-            last_swing_high = row["high"]
-
-        if row["swing_low"]:
-            last_swing_low = row["low"]
-
-        # Verifica rottura confermata (chiusura oltre il livello per N candele)
-        if last_swing_high is not None and i >= confirm:
-            closes = df["close"].iloc[i - confirm + 1: i + 1]
-            if all(c > last_swing_high for c in closes):
+        if not np.isnan(last_swing_high) and i >= confirm:
+            if np.all(close[i - confirm + 1: i + 1] > last_swing_high):
                 if current_trend == -1:
-                    df.at[df.index[i], "choch_bull"] = True
+                    choch_bull[i] = True
                     current_trend = 1
                 else:
-                    df.at[df.index[i], "bos_bull"] = True
+                    bos_bull[i] = True
                     current_trend = 1
 
-        if last_swing_low is not None and i >= confirm:
-            closes = df["close"].iloc[i - confirm + 1: i + 1]
-            if all(c < last_swing_low for c in closes):
+        if not np.isnan(last_swing_low) and i >= confirm:
+            if np.all(close[i - confirm + 1: i + 1] < last_swing_low):
                 if current_trend == 1:
-                    df.at[df.index[i], "choch_bear"] = True
+                    choch_bear[i] = True
                     current_trend = -1
                 else:
-                    df.at[df.index[i], "bos_bear"] = True
+                    bos_bear[i] = True
                     current_trend = -1
 
-        df.at[df.index[i], "trend"] = current_trend
+        trend[i] = current_trend
 
+    df = df.copy()
+    df["bos_bull"]   = bos_bull
+    df["bos_bear"]   = bos_bear
+    df["choch_bull"] = choch_bull
+    df["choch_bear"] = choch_bear
+    df["trend"]      = trend.astype(int)
     return df
