@@ -168,9 +168,8 @@ class MT5Connector:
         Restituisce i deal di chiusura eseguiti oggi (DEAL_ENTRY_OUT = 1).
         Usa mt5.history_deals_get() con intervallo da mezzanotte a ora corrente.
         """
-        from datetime import date
-        import pytz
-        today_start = datetime.combine(date.today(), datetime.min.time())
+        from datetime import date, time as dtime
+        today_start = datetime.combine(date.today(), dtime(0, 0, 0))
         now         = datetime.now()
         deals = mt5.history_deals_get(today_start, now)
         if not deals:
