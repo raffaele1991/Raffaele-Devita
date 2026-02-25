@@ -159,8 +159,10 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "minutes_to_next":    session_f.minutes_to_next_session(),
             "balance":            status["balance"],
             "equity":             status["equity"],
-            "daily_dd_pct":       status["daily_drawdown_pct"],
-            "total_dd_pct":       status["total_drawdown_pct"],
+            "daily_dd_pct":       status["daily_drawdown_pct"],    # max FTMO-style
+            "total_dd_pct":       status["total_drawdown_pct"],    # max FTMO-style
+            "daily_dd_now_pct":   status["daily_dd_now_pct"],      # DD live corrente
+            "total_dd_now_pct":   status["total_dd_now_pct"],      # DD live corrente
             "daily_pnl":          status["daily_pnl"],
             "daily_pnl_pct":      status["daily_pnl_pct"],
             "trades_today":       trades_today,

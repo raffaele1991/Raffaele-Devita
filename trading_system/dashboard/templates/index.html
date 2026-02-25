@@ -355,16 +355,18 @@
       <div class="card-sub" id="dailyPnlSub">—</div>
     </div>
     <div class="card">
-      <div class="card-label">DD Giornaliero (equity)</div>
+      <div class="card-label">DD Giornaliero <span style="font-size:.7em;opacity:.6">(max registrato)</span></div>
       <div class="card-value" id="dailyDD">—</div>
+      <div class="card-sub" id="dailyDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
         <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
       </div>
     </div>
     <div class="card">
-      <div class="card-label">DD Totale (equity)</div>
+      <div class="card-label">DD Totale <span style="font-size:.7em;opacity:.6">(max registrato)</span></div>
       <div class="card-value" id="totalDD">—</div>
+      <div class="card-sub" id="totalDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
         <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
@@ -861,8 +863,8 @@ function updateUI(s) {
     pnlEl.textContent = '—'; pnlSub.textContent = '—';
   }
 
-  setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
-  setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
+  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, 3, 'dailyDDSub', s.daily_dd_now_pct);
+  setDD('totalDD', 'totalGauge', s.total_dd_pct, 7, 'totalDDSub', s.total_dd_now_pct);
 
   const wr = s.win_rate ?? null;
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
@@ -879,7 +881,8 @@ function updateUI(s) {
   renderClosedTrades(s.closed_trades || []);
 }
 
-function setDD(valId, gaugeId, pct, limit) {
+// pct = max DD registrato (FTMO-style), nowPct = DD live corrente, subId = elemento sottotitolo
+function setDD(valId, gaugeId, pct, limit, subId, nowPct) {
   const el    = document.getElementById(valId);
   const gauge = document.getElementById(gaugeId);
   if (pct === null || pct === undefined) { el.textContent = '—'; return; }
@@ -887,6 +890,13 @@ function setDD(valId, gaugeId, pct, limit) {
   el.className = 'card-value ' + (pct > limit * 0.8 ? 'text-red' : pct > limit * 0.5 ? 'text-yellow' : 'text-green');
   gauge.style.width = Math.min(pct / limit * 100, 100) + '%';
   gauge.style.background = pct > limit * 0.8 ? 'var(--red)' : pct > limit * 0.5 ? 'var(--yellow)' : 'var(--accent)';
+  // Sottotitolo: DD live (può essere inferiore al max se si è recuperato)
+  if (subId) {
+    const sub = document.getElementById(subId);
+    if (sub) sub.textContent = nowPct !== null && nowPct !== undefined
+      ? 'live: ' + nowPct.toFixed(2) + '%'
+      : 'live: —';
+  }
 }
 
 /* ── Signals ─────────────────────────────────────────────────────────────── */
