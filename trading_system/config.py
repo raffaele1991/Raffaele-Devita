@@ -56,7 +56,7 @@ ML_RANDOM_SEED          = 42
 
 # Data cutoff: il modello viene trainato SOLO sui dati precedenti a questa data.
 # Il backtest out-of-sample va eseguito da questa data in poi.
-TRAIN_CUTOFF_DATE       = "2025-09-19"  # 70k barre train | 30k barre test
+TRAIN_CUTOFF_DATE       = "2026-01-01"  # train su tutto il 2025, backtest out-of-sample su gen-feb 2026
 
 # Parametri modello (LightGBM)
 ML_N_ESTIMATORS          = 2000   # max alberi — early stopping troverà il numero ottimale
