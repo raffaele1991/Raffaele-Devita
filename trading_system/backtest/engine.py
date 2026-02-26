@@ -151,16 +151,50 @@ def _load_csv(symbol: str) -> pd.DataFrame:
 
 # ── CORE ENGINE ───────────────────────────────────────────────────────────────
 
+def _htf_trend(ctx: pd.DataFrame) -> int:
+    """
+    Calcola il trend M30 dal contesto M5 (resample).
+    Ritorna 1 (bull), -1 (bear), 0 (neutro).
+    Usato come hard filter: se M5 signal != M30 trend → scarta il segnale.
+    """
+    try:
+        if 'time' not in ctx.columns:
+            return 0
+        tmp = ctx.set_index('time')[["open", "high", "low", "close", "volume"]]
+        m30 = tmp.resample("30min").agg({
+            "open": "first", "high": "max",
+            "low": "min", "close": "last", "volume": "sum",
+        }).dropna()
+        if len(m30) < 50:
+            return 0
+        ema20 = m30["close"].ewm(span=20, adjust=False).mean().iloc[-1]
+        ema50 = m30["close"].ewm(span=50, adjust=False).mean().iloc[-1]
+        if ema20 > ema50:
+            return 1
+        elif ema20 < ema50:
+            return -1
+        return 0
+    except Exception:
+        return 0
+
+
 def run_backtest(
     symbol: str,
     start_date: str,
     end_date: str,
     initial_balance: float = 10_000.0,
+    ml_threshold: Optional[float] = None,
+    htf_hard_filter: bool = False,
 ) -> Dict[str, Any]:
+
+    # Threshold ML: usa il parametro se fornito, altrimenti prende da config
+    threshold = ml_threshold if ml_threshold is not None else config.ML_CONFIDENCE_THRESHOLD
 
     _log(f"{'=' * 50}")
     _log(f"  BACKTEST {symbol}")
     _log(f"  Periodo: {start_date} → {end_date}")
+    _log(f"  ML threshold : {threshold}")
+    _log(f"  HTF hard filter: {htf_hard_filter}")
     _log(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
@@ -219,6 +253,7 @@ def run_backtest(
         "session_bars": 0,
         "no_trend":     0,
         "no_ob":        0,
+        "htf_blocked":  0,
         "ml_blocked":   0,
         "rr_rejected":  0,
         "signals":      0,
@@ -268,17 +303,31 @@ def run_backtest(
 
         _diag["signals"] += 1
 
+        # Hard filter HTF: scarta segnali contro il trend M30
+        if htf_hard_filter:
+            ht = _htf_trend(ctx)
+            if ht != 0:
+                sig_dir = 1 if signal.direction == 'long' else -1
+                if sig_dir != ht:
+                    _diag["htf_blocked"] += 1
+                    i += 1
+                    continue
+
         # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
             try:
-                feat_df = build_features(ctx_struct, symbol=symbol)
+                # build_features richiede un DatetimeIndex (usa df.index.hour per le sessioni)
+                ctx_for_ml = ctx_struct.copy()
+                if 'time' in ctx_for_ml.columns:
+                    ctx_for_ml = ctx_for_ml.set_index('time')
+                feat_df = build_features(ctx_for_ml, symbol=symbol)
                 if len(feat_df) == 0:
                     _diag["ml_blocked"] += 1
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
-                _log(f"  [ML] conf={conf:.3f} soglia={config.ML_CONFIDENCE_THRESHOLD} dir={signal.direction}")
-                if conf < config.ML_CONFIDENCE_THRESHOLD:
+                _log(f"  [ML] conf={conf:.3f} soglia={threshold} dir={signal.direction}")
+                if conf < threshold:
                     _diag["ml_blocked"] += 1
                     i += 1
                     continue
@@ -401,6 +450,7 @@ def run_backtest(
     _log(f"  Scartate (no trend)  : {_diag['no_trend']}")
     _log(f"  Scartate (no OB hit) : {_diag['no_ob']}")
     _log(f"  Segnali SMC trovati  : {_diag['signals']}")
+    _log(f"  Bloccati da HTF      : {_diag['htf_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
     _log(f"  Trade aperti         : {len(trades)}")
