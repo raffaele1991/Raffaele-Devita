@@ -17,6 +17,7 @@ import os
 import sys
 import glob
 import pandas as pd
+from concurrent.futures import ProcessPoolExecutor
 
 # Aggiungi root al path
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -77,7 +78,7 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
 
 # ─── TRAINING ─────────────────────────────────────────────────────────────────
 
-def train_symbol(symbol: str):
+def train_symbol(symbol: str, n_threads: int = -1):
     print(f"\n{'='*60}")
     print(f"  Addestramento modello: {symbol}")
     print(f"{'='*60}")
@@ -158,7 +159,7 @@ def train_symbol(symbol: str):
 
     # Train
     print("  Addestramento in corso...")
-    ml = SMCMLModel(symbol)
+    ml = SMCMLModel(symbol, n_threads=n_threads)
     metrics = ml.fit(X, y)
 
     print(f"\n  ── RISULTATI TEST ──────────────────────────────")
@@ -199,8 +200,16 @@ if __name__ == "__main__":
     print(f"CSV trovati: {[os.path.basename(f) for f in csv_files]}")
     os.makedirs(MODELS_DIR_ABS, exist_ok=True)
 
-    for symbol in config.SYMBOLS:
-        train_symbol(symbol)
+    cpu_count  = os.cpu_count() or 4
+    n_workers  = min(len(config.SYMBOLS), cpu_count)
+    n_threads  = max(1, cpu_count // n_workers)
+    print(f"CPU disponibili: {cpu_count} — simboli in parallelo: {n_workers} — thread/simbolo: {n_threads}")
+
+    def _train(symbol):
+        train_symbol(symbol, n_threads=n_threads)
+
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        list(executor.map(_train, config.SYMBOLS))
 
     print("\n\nTraining completato!")
     print("Ora puoi avviare il bot con: python trading_system/bot.py")

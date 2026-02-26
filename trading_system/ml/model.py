@@ -30,10 +30,16 @@ class SMCMLModel:
     Addestrato una volta, poi usato live per filtrare i segnali SMC.
     """
 
-    def __init__(self, symbol: str):
+    def __init__(self, symbol: str, n_threads: int = -1):
         self.symbol    = symbol
         self.scaler    = StandardScaler()
         _device = getattr(config, "ML_DEVICE", "cpu")
+        if _device != "cpu":
+            _n_jobs = 1
+        elif n_threads == -1:
+            _n_jobs = os.cpu_count() or 4
+        else:
+            _n_jobs = n_threads
         self.model     = LGBMClassifier(
             n_estimators      = config.ML_N_ESTIMATORS,
             num_leaves        = config.ML_NUM_LEAVES,
@@ -46,7 +52,7 @@ class SMCMLModel:
             reg_lambda        = config.ML_REG_LAMBDA,
             random_state      = config.ML_RANDOM_SEED,
             device            = _device,
-            n_jobs            = 1 if _device != "cpu" else -1,
+            n_jobs            = _n_jobs,
             verbose           = -1,
         )
         self.calibrator = None

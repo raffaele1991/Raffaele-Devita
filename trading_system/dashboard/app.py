@@ -361,6 +361,7 @@ _SETTINGS_DEFAULTS = {
     "symbols":                   ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"],
     "session_london":            True,
     "session_ny":                True,
+    "session_asian":             True,
     "timeframe":                 "M5",
     "risk_per_trade_pct":        0.5,
     "max_trades_per_day":        3,

@@ -58,18 +58,20 @@ def _log(msg: str) -> None:
 
 # ── FILTRO SESSIONE (su timestamp storico) ────────────────────────────────────
 
-def _in_session(ts: pd.Timestamp) -> bool:
+def _in_session(ts: pd.Timestamp, symbol: str = "") -> bool:
     """
     Verifica se la candela cade in una kill zone.
     I dati MT5 sono in ora broker (solitamente UTC+2/+3, simile a CET/CEST).
     Usiamo direttamente l'ora del timestamp senza conversione timezone.
-    London: 08:00–11:00 | NY: 14:00–17:00
+    London: 08:00–11:00 | NY: 14:00–17:00 | Asian: 00:00–04:00 (solo ASIAN_SESSION_SYMBOLS)
     """
     try:
         h = ts.hour
         in_london = 8 <= h < 11
         in_ny     = 14 <= h < 17
-        return in_london or in_ny
+        asian_symbols = [s.upper() for s in getattr(config, 'ASIAN_SESSION_SYMBOLS', [])]
+        in_asian  = (0 <= h < 4) and (symbol.upper() in asian_symbols)
+        return in_london or in_ny or in_asian
     except Exception:
         return True
 
@@ -286,8 +288,8 @@ def run_backtest(
         candle = df.iloc[i]
         ts     = candle['time']
 
-        # Filtro sessione (London / NY)
-        if not _in_session(ts):
+        # Filtro sessione (London / NY / Asian per USDJPY)
+        if not _in_session(ts, symbol):
             i += 1
             continue
 

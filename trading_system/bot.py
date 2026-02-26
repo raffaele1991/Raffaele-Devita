@@ -161,6 +161,8 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "equity":             status["equity"],
             "daily_dd_pct":       status["daily_drawdown_pct"],    # max FTMO-style
             "total_dd_pct":       status["total_drawdown_pct"],    # max FTMO-style
+            "max_daily_dd_pct":   round(config.PROP_MAX_DAILY_LOSS_PCT * 100, 2),
+            "max_total_dd_pct":   round(config.PROP_MAX_TOTAL_LOSS_PCT * 100, 2),
             "daily_dd_now_pct":   status["daily_dd_now_pct"],      # DD live corrente
             "total_dd_now_pct":   status["total_dd_now_pct"],      # DD live corrente
             "daily_pnl":          status["daily_pnl"],
@@ -280,6 +282,10 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
     """Analizza un singolo simbolo e apre un trade se il setup è valido."""
     global _symbol_signals
+
+    # Asian KZ: opera solo sui simboli abilitati (es. USDJPY)
+    if session == "ASIAN" and symbol.upper() not in [s.upper() for s in config.ASIAN_SESSION_SYMBOLS]:
+        return
 
     # Recupera ultime 200 candele M5
     df = connector.get_ohlcv(symbol, timeframe=config.TIMEFRAME, n_candles=200)
