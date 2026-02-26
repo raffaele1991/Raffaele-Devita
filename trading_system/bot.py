@@ -161,6 +161,8 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "equity":             status["equity"],
             "daily_dd_pct":       status["daily_drawdown_pct"],    # max FTMO-style
             "total_dd_pct":       status["total_drawdown_pct"],    # max FTMO-style
+            "max_daily_dd_pct":   round(config.PROP_MAX_DAILY_LOSS_PCT * 100, 2),
+            "max_total_dd_pct":   round(config.PROP_MAX_TOTAL_LOSS_PCT * 100, 2),
             "daily_dd_now_pct":   status["daily_dd_now_pct"],      # DD live corrente
             "total_dd_now_pct":   status["total_dd_now_pct"],      # DD live corrente
             "daily_pnl":          status["daily_pnl"],

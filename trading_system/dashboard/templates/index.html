@@ -870,8 +870,8 @@ function updateUI(s) {
     pnlEl.textContent = '—'; pnlSub.textContent = '—';
   }
 
-  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, 3, 'dailyDDSub', s.daily_dd_now_pct);
-  setDD('totalDD', 'totalGauge', s.total_dd_pct, 7, 'totalDDSub', s.total_dd_now_pct);
+  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, s.max_daily_dd_pct ?? 3, 'dailyDDSub', s.daily_dd_now_pct);
+  setDD('totalDD', 'totalGauge', s.total_dd_pct, s.max_total_dd_pct ?? 7, 'totalDDSub', s.total_dd_now_pct);
 
   const wr = s.win_rate ?? null;
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
