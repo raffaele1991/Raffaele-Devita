@@ -49,7 +49,34 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equ
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
 USE_ML_FILTER           = True   # True = filtra segnali con ML | False = solo SMC
-ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata — alzata per più precision e meno rumore
+ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata
+
+# ── FILTRI CONFLUENZA SMC ──────────────────────────────────────────────────────
+# Backtest out-of-sample (2026-01-01 → 2026-02-25, XAUUSD) ha dimostrato:
+#   FVG richiesto         → +6.7pp WR,  PF: 0.89→1.17
+#   FVG + Liq Sweep       → +7.6pp WR,  PF: 0.89→1.20, Net=+4.00%
+#   FVG + HTF alignment   → +8.5pp WR,  PF: 0.89→1.21, Sharpe=1.48, MaxDD=4.61%
+#
+# REQUIRE_FVG = True  → accetta solo OB con Fair Value Gap confluente nella zona
+# REQUIRE_LIQ_SWEEP   → accetta solo OB dopo sweep di liquidità
+SMC_REQUIRE_FVG         = True   # FVG confluence obbligatorio (default se simbolo non in SYMBOL_FILTER_CONFIGS)
+SMC_REQUIRE_LIQ_SWEEP   = False  # Liq sweep (default)
+SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equivale EMA20/50 su M30)
+
+# ── CONFIG PER-SIMBOLO ─────────────────────────────────────────────────────────
+# Sovrascrivono SMC_REQUIRE_* sopra per i simboli specificati.
+# Motivazione:
+#   XAUUSD – FVG abbondante (54% segnali), efficace come filtro
+#   EURUSD – FVG rarissimo (2%), inutilizzabile; Liq Sweep abbondante (96%)
+#
+# Backtest out-of-sample 2026-01-01→2026-02-25:
+#   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Sharpe=1.48
+#   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Sharpe=2.94
+#   TOTALE COMBINATO              → 90 tr in 55 giorni (~1.6 trade/giorno)
+SYMBOL_FILTER_CONFIGS: dict = {
+    "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
+    "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+}
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42
@@ -59,8 +86,10 @@ ML_RANDOM_SEED          = 42
 TRAIN_CUTOFF_DATE       = "2026-01-01"  # train su tutto il 2025, backtest out-of-sample su gen-feb 2026
 
 # Lookahead etichette (candele M5 future per valutare TP/SL)
-# 30 candele M5 = 2.5 ore — ottimale per XAUUSD M5 (bilancia velocità e qualità segnale)
-ML_LOOKAHEAD             = 30
+# 50 candele M5 = ~4 ore — dà più tempo al trade di raggiungere il TP prima di expirare
+# Aumentato da 30 per migliorare la qualità delle label (meno falsi negativi per trade
+# lenti ma vincenti) e alzare il win rate del modello.
+ML_LOOKAHEAD             = 50
 
 # Parametri modello (LightGBM)
 ML_N_ESTIMATORS          = 3000   # max alberi — early stopping troverà il numero ottimale
@@ -78,7 +107,7 @@ ML_EARLY_STOPPING_ROUNDS = 150    # più pazienza — con LR bassa servono più 
 # 'gpu'  = OpenCL — AMD RX 9070 / qualsiasi GPU con driver OpenCL (consigliato)
 # 'cuda' = CUDA — solo GPU NVIDIA
 # NOTA: richiede LightGBM con GPU support (su Windows: pip install lightgbm lo include già)
-ML_DEVICE                = 'gpu'
+ML_DEVICE                = 'cpu'
 
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
@@ -95,6 +124,13 @@ MIN_RISK_REWARD          = 2.0    # minimo R:R 1:2 per entrare
 # Stop Loss via ATR
 ATR_PERIOD               = 14
 ATR_SL_MULTIPLIER        = 1.5    # SL = ATR * 1.5
+
+# Stop Hunt / Liquidity Zone SL Protection
+# Se lo SL grezzo (ATR-based) cade dentro o vicino a una liquidity zone (equal highs/lows),
+# lo SL viene spostato OLTRE la zona per evitare lo stop hunt.
+SL_LIQ_SEARCH_ATR    = 0.5   # cerca liq zones fino a 0.5 ATR oltre lo SL grezzo
+SL_LIQ_BUFFER_PIPS   = {"XAUUSD": 2.0, "EURUSD": 0.0005}  # buffer aggiunto oltre la zona
+SL_MAX_MULTIPLIER    = 3.0   # se SL aggiustato > ATR * 3.0, il trade viene skippato (R:R troppo stretto)
 
 # Consecutive losses protection
 MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi

@@ -345,21 +345,28 @@
   <!-- ── KPI STRIP ────────────────────────────────────────────────────────── -->
   <div class="kpi-grid">
     <div class="card">
-      <div class="card-label">Saldo</div>
+      <div class="card-label">Saldo / Equity</div>
       <div class="card-value text-accent" id="balance">—</div>
       <div class="card-sub" id="balanceSub">—</div>
     </div>
     <div class="card">
-      <div class="card-label">DD Giornaliero</div>
+      <div class="card-label">P&amp;L Oggi</div>
+      <div class="card-value" id="dailyPnl">—</div>
+      <div class="card-sub" id="dailyPnlSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DD Giornaliero <span style="font-size:.7em;opacity:.6">(max registrato)</span></div>
       <div class="card-value" id="dailyDD">—</div>
+      <div class="card-sub" id="dailyDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
         <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
       </div>
     </div>
     <div class="card">
-      <div class="card-label">DD Totale</div>
+      <div class="card-label">DD Totale <span style="font-size:.7em;opacity:.6">(max registrato)</span></div>
       <div class="card-value" id="totalDD">—</div>
+      <div class="card-sub" id="totalDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
         <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
@@ -369,11 +376,6 @@
       <div class="card-label">Win Rate</div>
       <div class="card-value" id="winRate">—</div>
       <div class="card-sub" id="winRateSub">—</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Trade Oggi</div>
-      <div class="card-value" id="tradesToday">—</div>
-      <div class="card-sub" id="tradesSub">—</div>
     </div>
   </div>
 
@@ -598,10 +600,15 @@
     <div class="card">
       <div class="log-header">
         <div class="card-title" style="margin-bottom:0;">Log Live</div>
-        <label class="log-autoscroll-toggle">
-          <input type="checkbox" id="autoScrollCheck" checked />
-          Auto-scroll
-        </label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label class="log-autoscroll-toggle">
+            <input type="checkbox" id="autoScrollCheck" checked />
+            Auto-scroll
+          </label>
+          <button onclick="clearLog()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;">
+            Pulisci Log
+          </button>
+        </div>
       </div>
       <div class="log-body" id="logBody">
         <div class="log-default">In attesa del log...</div>
@@ -837,29 +844,45 @@ function updateUI(s) {
 
   // KPI
   const bal = s.balance ?? null;
-  document.getElementById('balance').textContent =
-    bal !== null ? '$' + bal.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  const eq  = s.equity  ?? null;
+  const fmt = v => '$' + v.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('balance').textContent = bal !== null ? fmt(bal) : '—';
   document.getElementById('balanceSub').textContent =
-    s.account_name ? s.account_name : '—';
+    eq !== null ? 'Equity: ' + fmt(eq) : '—';
 
-  setDD('dailyDD',  'dailyGauge',  s.daily_dd_pct,  3);
-  setDD('totalDD',  'totalGauge',  s.total_dd_pct,  7);
+  // P&L oggi
+  const pnl    = s.daily_pnl     ?? null;
+  const pnlPct = s.daily_pnl_pct ?? null;
+  const pnlEl  = document.getElementById('dailyPnl');
+  const pnlSub = document.getElementById('dailyPnlSub');
+  if (pnl !== null) {
+    pnlEl.textContent  = (pnl >= 0 ? '+' : '') + fmt(pnl);
+    pnlEl.className    = 'card-value ' + (pnl >= 0 ? 'text-green' : 'text-red');
+    pnlSub.textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '% dal giorno';
+  } else {
+    pnlEl.textContent = '—'; pnlSub.textContent = '—';
+  }
 
-  const wr = s.win_rate_pct ?? null;
+  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, 3, 'dailyDDSub', s.daily_dd_now_pct);
+  setDD('totalDD', 'totalGauge', s.total_dd_pct, 7, 'totalDDSub', s.total_dd_now_pct);
+
+  const wr = s.win_rate ?? null;
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
   document.getElementById('winRateSub').textContent =
     (s.total_wins ?? 0) + 'W / ' + (s.total_losses ?? 0) + 'L';
 
-  document.getElementById('tradesToday').textContent = s.trades_today ?? '—';
-  document.getElementById('tradesSub').textContent   = 'max ' + (s.max_trades_day ?? '—') + '/giorno';
-
-  renderSignals(s.signals || []);
-  renderPositions(s.open_positions || []);
+  // Converti il dict symbols in array di segnali attivi
+  const sigsArr = Object.entries(s.symbols || {})
+    .filter(([, v]) => v && v.last_signal)
+    .map(([sym, v]) => ({ symbol: sym, direction: v.last_signal, reason: v.reason || '', confidence: v.confidence || 0 }));
+  renderSignals(sigsArr);
+  renderPositions(s.open_trades || []);
   renderReasons(s.block_reasons || []);
-  renderClosedTrades(s.closed_trades_today || []);
+  renderClosedTrades(s.closed_trades || []);
 }
 
-function setDD(valId, gaugeId, pct, limit) {
+// pct = max DD registrato (FTMO-style), nowPct = DD live corrente, subId = elemento sottotitolo
+function setDD(valId, gaugeId, pct, limit, subId, nowPct) {
   const el    = document.getElementById(valId);
   const gauge = document.getElementById(gaugeId);
   if (pct === null || pct === undefined) { el.textContent = '—'; return; }
@@ -867,6 +890,13 @@ function setDD(valId, gaugeId, pct, limit) {
   el.className = 'card-value ' + (pct > limit * 0.8 ? 'text-red' : pct > limit * 0.5 ? 'text-yellow' : 'text-green');
   gauge.style.width = Math.min(pct / limit * 100, 100) + '%';
   gauge.style.background = pct > limit * 0.8 ? 'var(--red)' : pct > limit * 0.5 ? 'var(--yellow)' : 'var(--accent)';
+  // Sottotitolo: DD live (può essere inferiore al max se si è recuperato)
+  if (subId) {
+    const sub = document.getElementById(subId);
+    if (sub) sub.textContent = nowPct !== null && nowPct !== undefined
+      ? 'live: ' + nowPct.toFixed(2) + '%'
+      : 'live: —';
+  }
 }
 
 /* ── Signals ─────────────────────────────────────────────────────────────── */
@@ -875,10 +905,10 @@ function renderSignals(signals) {
   if (!signals.length) { c.innerHTML = '<div class="text-muted">Nessun segnale attivo</div>'; return; }
   c.innerHTML = signals.map(sig => `
     <div class="signal-row">
-      <span class="sig-dir ${sig.direction === 'long' ? 'sig-long' : 'sig-short'}">${sig.direction.toUpperCase()}</span>
+      <span class="sig-dir ${sig.direction === 'LONG' ? 'sig-long' : 'sig-short'}">${escHtml(sig.direction)}</span>
       <span style="font-weight:600;">${escHtml(sig.symbol)}</span>
       <span class="text-muted" style="font-size:12px;">${escHtml(sig.reason || '')}</span>
-      <span class="text-muted" style="margin-left:auto; font-size:11px;">${escHtml(sig.time || '')}</span>
+      <span class="text-muted" style="margin-left:auto; font-size:11px;">${sig.confidence ? (sig.confidence * 100).toFixed(0) + '%' : ''}</span>
     </div>`).join('');
 }
 
@@ -908,9 +938,10 @@ function renderReasons(reasons) {
     return;
   }
   list.innerHTML = reasons.map(r => {
-    const cls  = r.type === 'ok' ? 'reason-ok' : r.type === 'warning' ? 'reason-warning' : r.type === 'block' ? 'reason-block' : 'reason-info';
-    const icon = r.type === 'ok' ? '✓' : r.type === 'warning' ? '⚠' : r.type === 'block' ? '✗' : 'ℹ';
-    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.message)}</span></li>`;
+    const lvl  = r.level || r.type || 'info';
+    const cls  = lvl === 'ok' ? 'reason-ok' : lvl === 'warn' || lvl === 'warning' ? 'reason-warning' : lvl === 'block' ? 'reason-block' : 'reason-info';
+    const icon = lvl === 'ok' ? '✓' : lvl === 'warn' || lvl === 'warning' ? '⚠' : lvl === 'block' ? '✗' : 'ℹ';
+    return `<li class="reason-item ${cls}"><span class="reason-icon">${icon}</span><span>${escHtml(r.msg || r.message || '')}</span></li>`;
   }).join('');
 }
 
@@ -1441,6 +1472,16 @@ function escHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOG CLEAR
+══════════════════════════════════════════════════════════════════════════ */
+async function clearLog() {
+  try {
+    await fetch('/api/log/clear', { method: 'POST' });
+    document.getElementById('logBody').innerHTML = '<div class="log-default">Log pulito.</div>';
+  } catch (e) {}
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

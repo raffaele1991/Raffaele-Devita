@@ -108,24 +108,49 @@ def _reason(level: str, msg: str):
     _block_reasons.append({"level": level, "msg": msg})
 
 
-def write_state(risk_manager, session_f, bot_status: str = "running"):
+def write_state(risk_manager, session_f, bot_status: str = "running", connector=None):
     """Scrive lo stato corrente su state.json per la dashboard."""
     try:
         status = risk_manager.status()
 
-        def trade_to_dict(t):
-            return {
-                "symbol":      t.symbol,
-                "direction":   t.direction,
-                "lot_size":    t.lot_size,
-                "entry_price": t.entry,
-                "sl":          t.sl,
-                "tp":          t.tp,
-                "pnl":         t.pnl,
-                "open_time":   t.open_time.isoformat() if t.open_time else None,
-                "close_time":  t.close_time.isoformat() if t.close_time else None,
-                "result":      t.result,
-            }
+        # Legge posizioni aperte e trade chiusi oggi direttamente da MT5
+        # (cattura anche trade manuali e sessioni precedenti)
+        if connector is not None:
+            try:
+                open_trades   = connector.get_open_positions_full()
+                closed_trades = connector.get_closed_deals_today()
+                trades_today  = len(closed_trades)
+                wins          = sum(1 for t in closed_trades if t["result"] == "win")
+                losses        = sum(1 for t in closed_trades if t["result"] == "loss")
+                win_rate      = round(wins / max(wins + losses, 1) * 100, 1)
+            except Exception as e:
+                logger.debug(f"[Dashboard] Errore lettura MT5 trades: {e}")
+                open_trades   = []
+                closed_trades = []
+                trades_today  = status["trades_today"]
+                wins          = status["total_wins"]
+                losses        = status["total_losses"]
+                win_rate      = status["win_rate"]
+        else:
+            def trade_to_dict(t):
+                return {
+                    "symbol":      t.symbol,
+                    "direction":   t.direction,
+                    "lot_size":    t.lot_size,
+                    "entry_price": t.entry,
+                    "sl":          t.sl,
+                    "tp":          t.tp,
+                    "pnl":         t.pnl,
+                    "open_time":   t.open_time.isoformat() if t.open_time else None,
+                    "close_time":  t.close_time.isoformat() if t.close_time else None,
+                    "result":      t.result,
+                }
+            open_trades   = [trade_to_dict(t) for t in risk_manager.open_trades]
+            closed_trades = [trade_to_dict(t) for t in risk_manager.closed_trades]
+            trades_today  = status["trades_today"]
+            wins          = status["total_wins"]
+            losses        = status["total_losses"]
+            win_rate      = status["win_rate"]
 
         state = {
             "bot_status":         bot_status,
@@ -133,18 +158,23 @@ def write_state(risk_manager, session_f, bot_status: str = "running"):
             "session":            session_f.active_session(),
             "minutes_to_next":    session_f.minutes_to_next_session(),
             "balance":            status["balance"],
-            "daily_dd_pct":       status["daily_drawdown_pct"],
-            "total_dd_pct":       status["total_drawdown_pct"],
-            "trades_today":       status["trades_today"],
-            "win_rate":           status["win_rate"],
+            "equity":             status["equity"],
+            "daily_dd_pct":       status["daily_drawdown_pct"],    # max FTMO-style
+            "total_dd_pct":       status["total_drawdown_pct"],    # max FTMO-style
+            "daily_dd_now_pct":   status["daily_dd_now_pct"],      # DD live corrente
+            "total_dd_now_pct":   status["total_dd_now_pct"],      # DD live corrente
+            "daily_pnl":          status["daily_pnl"],
+            "daily_pnl_pct":      status["daily_pnl_pct"],
+            "trades_today":       trades_today,
+            "win_rate":           win_rate,
             "consecutive_losses": status["consecutive_losses"],
-            "open_positions":     status["open_positions"],
-            "total_wins":         status["total_wins"],
-            "total_losses":       status["total_losses"],
+            "total_wins":         wins,
+            "total_losses":       losses,
+            "max_trades_day":     config.PROP_MAX_TRADES_PER_DAY,
             "symbols":            _symbol_signals,
             "block_reasons":      list(_block_reasons),
-            "open_trades":        [trade_to_dict(t) for t in risk_manager.open_trades],
-            "closed_trades":      [trade_to_dict(t) for t in risk_manager.closed_trades],
+            "open_trades":        open_trades,
+            "closed_trades":      closed_trades,
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
@@ -178,69 +208,73 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
     _block_reasons = []   # reset ad ogni ciclo
     now = datetime.now()
 
-    # Aggiorna saldo
-    balance = connector.get_account_balance()
-    risk_manager.update_balance(balance)
+    try:
+        # Aggiorna saldo ed equity (equity include floating P&L posizioni aperte)
+        balance = connector.get_account_balance()
+        equity  = connector.get_account_equity()
+        risk_manager.update_balance(balance)
+        risk_manager.update_equity(equity)
 
-    # ── 1. CHIUSURA EOD ───────────────────────────────────────────────────────
-    if now.hour >= config.PROP_CLOSE_EOD_HOUR:
-        open_pos = connector.get_open_positions()
-        if open_pos:
-            logger.info("[BOT] EOD: chiusura tutte le posizioni aperte")
-            executor.close_all()
-        _reason("warn", f"EOD – nessun nuovo trade oltre le {config.PROP_CLOSE_EOD_HOUR}:00")
-        return
+        # ── 1. CHIUSURA EOD ───────────────────────────────────────────────────────
+        if now.hour >= config.PROP_CLOSE_EOD_HOUR:
+            open_pos = connector.get_open_positions()
+            if open_pos:
+                logger.info("[BOT] EOD: chiusura tutte le posizioni aperte")
+                executor.close_all()
+            _reason("warn", f"EOD – nessun nuovo trade oltre le {config.PROP_CLOSE_EOD_HOUR}:00")
+            return
 
-    # ── 2. SESSIONE ───────────────────────────────────────────────────────────
-    session = session_f.active_session()
-    if session in ("CLOSED", "EOD"):
-        mins = session_f.minutes_to_next_session()
-        if now.minute % 30 == 0:  # log ogni 30 min
-            logger.info(f"[BOT] Sessione {session} | Prossima kill zone tra {mins} min")
-        h, m = divmod(mins, 60)
-        timer_str = f"{h}h {m}m" if h else f"{m}m"
-        _reason("info", f"Sessione chiusa – prossima kill zone tra {timer_str}")
-        return
+        # ── 2. SESSIONE ───────────────────────────────────────────────────────────
+        session = session_f.active_session()
+        if session in ("CLOSED", "EOD"):
+            mins = session_f.minutes_to_next_session()
+            if now.minute % 30 == 0:  # log ogni 30 min
+                logger.info(f"[BOT] Sessione {session} | Prossima kill zone tra {mins} min")
+            h, m = divmod(mins, 60)
+            timer_str = f"{h}h {m}m" if h else f"{m}m"
+            _reason("info", f"Sessione chiusa – prossima kill zone tra {timer_str}")
+            return
 
-    # ── 3. NEWS FILTER ────────────────────────────────────────────────────────
-    if not news_f.is_safe():
-        event = news_f.next_blocked_event()
-        logger.info(f"[BOT] Blocco news attivo | {event}")
-        _reason("warn", f"News ad alto impatto: {event}")
-        return
+        # ── 3. NEWS FILTER ────────────────────────────────────────────────────────
+        if not news_f.is_safe():
+            event = news_f.next_blocked_event()
+            logger.info(f"[BOT] Blocco news attivo | {event}")
+            _reason("warn", f"News ad alto impatto: {event}")
+            return
 
-    # ── 4. RISK CHECK ─────────────────────────────────────────────────────────
-    can, reason = risk_manager.can_trade()
-    if not can:
-        logger.warning(f"[BOT] Trading bloccato: {reason}")
-        _reason("warn", reason)
-        return
+        # ── 4. RISK CHECK ─────────────────────────────────────────────────────────
+        can, reason = risk_manager.can_trade()
+        if not can:
+            logger.warning(f"[BOT] Trading bloccato: {reason}")
+            _reason("warn", reason)
+            return
 
-    # ── 5. ANALISI SIMBOLI ────────────────────────────────────────────────────
-    for symbol in config.SYMBOLS:
-        try:
-            analyze_symbol(
-                symbol, connector, executor,
-                risk_manager, ml_models[symbol],
-                smc_detectors[symbol], session,
+        # ── 5. ANALISI SIMBOLI ────────────────────────────────────────────────────
+        for symbol in config.SYMBOLS:
+            try:
+                analyze_symbol(
+                    symbol, connector, executor,
+                    risk_manager, ml_models[symbol],
+                    smc_detectors[symbol], session,
+                )
+            except Exception as e:
+                logger.error(f"[BOT] Errore analisi {symbol}: {e}", exc_info=True)
+                _reason("warn", f"{symbol}: errore analisi – {e}")
+
+        # Status log ogni 5 minuti
+        if now.minute % 5 == 0:
+            status = risk_manager.status()
+            logger.info(
+                f"[STATUS] Balance={status['balance']:.2f} | "
+                f"DD_daily={status['daily_drawdown_pct']}% | "
+                f"Trades_oggi={status['trades_today']} | "
+                f"Win_rate={status['win_rate']}% | "
+                f"Sessione={session}"
             )
-        except Exception as e:
-            logger.error(f"[BOT] Errore analisi {symbol}: {e}", exc_info=True)
-            _reason("warn", f"{symbol}: errore analisi – {e}")
 
-    # Status log ogni 5 minuti
-    if now.minute % 5 == 0:
-        status = risk_manager.status()
-        logger.info(
-            f"[STATUS] Balance={status['balance']:.2f} | "
-            f"DD_daily={status['daily_drawdown_pct']}% | "
-            f"Trades_oggi={status['trades_today']} | "
-            f"Win_rate={status['win_rate']}% | "
-            f"Sessione={session}"
-        )
-
-    # Aggiorna dashboard
-    write_state(risk_manager, session_f)
+    finally:
+        # Aggiorna dashboard ad ogni ciclo, anche su uscite anticipate
+        write_state(risk_manager, session_f, connector=connector)
 
 
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
@@ -345,7 +379,7 @@ if __name__ == "__main__":
             cmd = check_control()
             if cmd == "stop":
                 logger.info("[BOT] Comando STOP ricevuto dalla dashboard.")
-                write_state(components[2], components[3], bot_status="stopped")
+                write_state(components[2], components[3], bot_status="stopped", connector=components[0])
                 break
 
             run_cycle(*components)

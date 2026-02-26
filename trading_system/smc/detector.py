@@ -29,6 +29,7 @@ class SMCSignal:
     fvg_bottom: float = 0.0
     liquidity_swept: bool = False
     trend_aligned: bool = False
+    sl_adjusted: bool = False   # True se SL è stato spostato oltre una liq zone
 
 
 class SMCDetector:
@@ -44,6 +45,58 @@ class SMCDetector:
 
     def __init__(self, symbol: str):
         self.symbol = symbol
+
+    def _adjust_sl_for_liquidity(
+        self,
+        entry: float,
+        sl_raw: float,
+        direction: str,
+        liq_levels,
+        atr: float,
+    ) -> tuple[float, bool]:
+        """
+        Sposta lo SL oltre una liquidity zone se lo SL grezzo ci cade dentro.
+
+        SHORT: SL è sopra entry → cerca liq "highs" tra entry e sl_raw + search_range
+               → porta SL sopra il livello più alto trovato + buffer
+        LONG:  SL è sotto entry → cerca liq "lows"  tra sl_raw - search_range e entry
+               → porta SL sotto il livello più basso trovato - buffer
+
+        Ritorna (sl_aggiustato, adjusted_flag).
+        Se il nuovo SL supera ATR * SL_MAX_MULTIPLIER ritorna (None, False)
+        per segnalare che il trade va skippato (R:R troppo stretto).
+        """
+        buffer       = config.SL_LIQ_BUFFER_PIPS.get(self.symbol, 0.0005)
+        search_range = atr * config.SL_LIQ_SEARCH_ATR
+        max_sl_dist  = atr * config.SL_MAX_MULTIPLIER
+
+        if direction == "short":
+            # Cerca equal-highs zone tra entry e sl_raw + search_range
+            candidates = [
+                lv.price for lv in liq_levels
+                if lv.direction == "highs"
+                and entry < lv.price <= sl_raw + search_range
+            ]
+            if candidates:
+                sl_new = max(candidates) + buffer
+                if (sl_new - entry) > max_sl_dist:
+                    return None, False          # SL troppo largo → skip trade
+                return sl_new, True
+
+        else:  # long
+            # Cerca equal-lows zone tra sl_raw - search_range e entry
+            candidates = [
+                lv.price for lv in liq_levels
+                if lv.direction == "lows"
+                and sl_raw - search_range <= lv.price < entry
+            ]
+            if candidates:
+                sl_new = min(candidates) - buffer
+                if sl_new <= 0 or (entry - sl_new) > max_sl_dist:
+                    return None, False          # SL troppo largo → skip trade
+                return sl_new, True
+
+        return sl_raw, False                    # nessuna zona trovata → SL invariato
 
     def analyze(self, df: pd.DataFrame, return_struct: bool = False):
         """
@@ -123,9 +176,18 @@ class SMCDetector:
                     for lv in liq_levels
                 )
 
-                entry = current_price
-                sl    = entry - sl_dist     # SL = ATR * ATR_SL_MULTIPLIER sotto entry
-                tp    = entry + tp_dist     # TP = SL_dist * MIN_RISK_REWARD sopra entry
+                entry    = current_price
+                sl_raw   = entry - sl_dist  # SL grezzo ATR-based
+
+                # Aggiusta SL se cade dentro una liquidity zone (stop hunt protection)
+                sl, sl_adj = self._adjust_sl_for_liquidity(
+                    entry, sl_raw, "long", liq_levels, atr
+                )
+                if sl is None:
+                    continue  # SL troppo largo dopo aggiustamento → skip
+
+                sl_dist_actual = entry - sl
+                tp = entry + sl_dist_actual * config.MIN_RISK_REWARD
 
                 if sl <= 0 or tp <= 0:
                     continue
@@ -135,6 +197,8 @@ class SMCDetector:
                     reason_parts.append("FVG confluence")
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
+                if sl_adj:
+                    reason_parts.append("SL beyond liq zone")
 
                 sig = SMCSignal(
                     direction="long",
@@ -148,6 +212,7 @@ class SMCDetector:
                     fvg_bottom=fvg_in_zone.bottom if fvg_in_zone else 0,
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
+                    sl_adjusted=sl_adj,
                 )
                 return (sig, df) if return_struct else sig
 
@@ -184,9 +249,18 @@ class SMCDetector:
                     for lv in liq_levels
                 )
 
-                entry = current_price
-                sl    = entry + sl_dist     # SL = ATR * ATR_SL_MULTIPLIER sopra entry
-                tp    = entry - tp_dist     # TP = SL_dist * MIN_RISK_REWARD sotto entry
+                entry    = current_price
+                sl_raw   = entry + sl_dist  # SL grezzo ATR-based
+
+                # Aggiusta SL se cade dentro una liquidity zone (stop hunt protection)
+                sl, sl_adj = self._adjust_sl_for_liquidity(
+                    entry, sl_raw, "short", liq_levels, atr
+                )
+                if sl is None:
+                    continue  # SL troppo largo dopo aggiustamento → skip
+
+                sl_dist_actual = sl - entry
+                tp = entry - sl_dist_actual * config.MIN_RISK_REWARD
 
                 if sl <= 0 or tp <= 0:
                     continue
@@ -196,6 +270,8 @@ class SMCDetector:
                     reason_parts.append("FVG confluence")
                 if liq_swept:
                     reason_parts.append("Liquidity swept")
+                if sl_adj:
+                    reason_parts.append("SL beyond liq zone")
 
                 sig = SMCSignal(
                     direction="short",
@@ -209,6 +285,7 @@ class SMCDetector:
                     fvg_bottom=fvg_in_zone.bottom if fvg_in_zone else 0,
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
+                    sl_adjusted=sl_adj,
                 )
                 return (sig, df) if return_struct else sig
 
