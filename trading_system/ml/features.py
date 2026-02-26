@@ -169,6 +169,39 @@ def add_trend_strength(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_htf_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Feature del timeframe superiore M30 per allineamento di trend.
+    Resampla i dati M5 a M30, calcola EMA20/EMA50, forward-fill su M5.
+
+    htf_trend  : 1=M30 bullish, -1=M30 bearish, 0=neutro
+    htf_aligned: 1 se M5 trend e M30 trend concordano (setup più forte)
+    """
+    df = df.copy()
+
+    m30 = df[["open", "high", "low", "close", "volume"]].resample("30min").agg({
+        "open": "first", "high": "max", "low": "min",
+        "close": "last",  "volume": "sum",
+    }).dropna()
+
+    m30["ema20"] = m30["close"].ewm(span=20, adjust=False).mean()
+    m30["ema50"] = m30["close"].ewm(span=50, adjust=False).mean()
+    m30["htf_trend_raw"] = np.where(
+        m30["ema20"] > m30["ema50"],  1.0,
+        np.where(m30["ema20"] < m30["ema50"], -1.0, 0.0),
+    )
+
+    # Forward-fill su M5: ogni candela M5 eredita il trend M30 precedente
+    htf_m5 = m30["htf_trend_raw"].reindex(df.index, method="ffill").fillna(0.0)
+    df["htf_trend"] = htf_m5
+
+    # Allineamento M5 vs M30
+    m5_trend = df.get("trend", pd.Series(0, index=df.index))
+    df["htf_aligned"] = ((m5_trend != 0) & (m5_trend == df["htf_trend"])).astype(float)
+
+    return df
+
+
 def add_smc_features(df: pd.DataFrame) -> pd.DataFrame:
     """Feature derivate dall'analisi SMC già presente nel DataFrame."""
     df = df.copy()
@@ -255,14 +288,17 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
 
     OB_MAX_AGE = 80
 
-    ob_age_norm    = np.zeros(n)
-    ob_size_atr    = np.zeros(n)
-    ob_penetration = np.zeros(n)
-    ob_has_fvg     = np.zeros(n)
-    fvg_size_atr   = np.zeros(n)
-    liq_swept_arr  = np.zeros(n)
-    dist_to_liq    = np.full(n, 10.0)
-    ob_count_zone  = np.zeros(n)
+    ob_age_norm      = np.zeros(n)
+    ob_size_atr      = np.zeros(n)
+    ob_penetration   = np.zeros(n)
+    ob_has_fvg       = np.zeros(n)
+    fvg_size_atr     = np.zeros(n)
+    liq_swept_arr    = np.zeros(n)
+    dist_to_liq      = np.full(n, 10.0)
+    ob_count_zone    = np.zeros(n)
+    sl_in_liq_zone   = np.zeros(n)           # 1 se SL grezzo cade dentro una liq zone
+    dist_sl_to_liq   = np.full(n, 10.0)      # distanza SL→liq zone più vicina (in ATR)
+    sl_dist_adjusted = np.zeros(n)           # SL dist aggiustato (per build_labels)
 
     # ── is_choch: forward-fill vettorizzato ───────────────────────────────────
     choch_bull = df.get("choch_bull", pd.Series(False, index=df.index)).values.astype(bool)
@@ -376,15 +412,63 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
         overlap2 = np.minimum(ob_top_a, ob_top_a[best_j]) - np.maximum(ob_bot_a, ob_bot_a[best_j])
         ob_count_zone[i] = min(float(np.sum(valid2 & (overlap2 > 0))), 5.0)
 
-    df["ob_age_norm"]     = ob_age_norm
-    df["ob_size_atr"]     = ob_size_atr
-    df["ob_penetration"]  = ob_penetration
-    df["ob_has_fvg"]      = ob_has_fvg
-    df["fvg_size_atr"]    = fvg_size_atr
-    df["liq_swept_smc"]   = liq_swept_arr
-    df["dist_to_liq_atr"] = dist_to_liq
-    df["ob_count_zone"]   = ob_count_zone
-    df["is_choch"]        = is_choch_arr
+        # ── Stop Hunt: SL grezzo dentro una liquidity zone? ───────────────────
+        sl_mult    = config.ATR_SL_MULTIPLIER
+        sl_search  = a * config.SL_LIQ_SEARCH_ATR
+        sl_max_d   = a * config.SL_MAX_MULTIPLIER
+        liq_buf    = config.SL_LIQ_BUFFER_PIPS.get(symbol, 0.0005)
+        raw_sl_d   = a * sl_mult          # distanza SL grezza dall'entry
+
+        if t == 1:  # long: SL è sotto l'entry
+            sl_raw_price = c - raw_sl_d
+            if len(liq_lows_arr) > 0:
+                in_range = liq_lows_arr[
+                    (liq_lows_arr >= sl_raw_price - sl_search) & (liq_lows_arr < c)
+                ]
+                all_near = liq_lows_arr[np.abs(liq_lows_arr - sl_raw_price) <= sl_search * 2]
+                if len(all_near) > 0:
+                    dist_sl_to_liq[i] = float(np.min(np.abs(all_near - sl_raw_price))) / a
+                if len(in_range) > 0:
+                    sl_in_liq_zone[i] = 1.0
+                    sl_new_price = float(in_range.min()) - liq_buf
+                    new_dist = c - sl_new_price
+                    sl_dist_adjusted[i] = new_dist if new_dist <= sl_max_d else sl_max_d
+                else:
+                    sl_dist_adjusted[i] = raw_sl_d
+            else:
+                sl_dist_adjusted[i] = raw_sl_d
+
+        else:  # short: SL è sopra l'entry
+            sl_raw_price = c + raw_sl_d
+            if len(liq_highs_arr) > 0:
+                in_range = liq_highs_arr[
+                    (liq_highs_arr > c) & (liq_highs_arr <= sl_raw_price + sl_search)
+                ]
+                all_near = liq_highs_arr[np.abs(liq_highs_arr - sl_raw_price) <= sl_search * 2]
+                if len(all_near) > 0:
+                    dist_sl_to_liq[i] = float(np.min(np.abs(all_near - sl_raw_price))) / a
+                if len(in_range) > 0:
+                    sl_in_liq_zone[i] = 1.0
+                    sl_new_price = float(in_range.max()) + liq_buf
+                    new_dist = sl_new_price - c
+                    sl_dist_adjusted[i] = new_dist if new_dist <= sl_max_d else sl_max_d
+                else:
+                    sl_dist_adjusted[i] = raw_sl_d
+            else:
+                sl_dist_adjusted[i] = raw_sl_d
+
+    df["ob_age_norm"]      = ob_age_norm
+    df["ob_size_atr"]      = ob_size_atr
+    df["ob_penetration"]   = ob_penetration
+    df["ob_has_fvg"]       = ob_has_fvg
+    df["fvg_size_atr"]     = fvg_size_atr
+    df["liq_swept_smc"]    = liq_swept_arr
+    df["dist_to_liq_atr"]  = dist_to_liq
+    df["ob_count_zone"]    = ob_count_zone
+    df["is_choch"]         = is_choch_arr
+    df["sl_in_liq_zone"]   = sl_in_liq_zone
+    df["dist_sl_to_liq"]   = dist_sl_to_liq
+    df["sl_dist_adjusted"] = sl_dist_adjusted
 
     return df
 
@@ -398,8 +482,9 @@ def build_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.DataFrame:
     df = add_time_features(df)
     df = add_volume_features(df)
     df = add_smc_features(df)
-    df = add_trend_strength(df)       # richiede atr (da add_volatility)
-    df = add_smc_signal_features(df, symbol=symbol)
+    df = add_trend_strength(df)           # richiede atr (da add_volatility)
+    df = add_htf_features(df)             # trend M30 (resample da M5)
+    df = add_smc_signal_features(df, symbol=symbol)   # include SL stop-hunt features
     df = df.dropna()
     return df
 
@@ -435,6 +520,12 @@ FEATURE_COLUMNS = [
     "dist_to_liq_atr",  # distanza alla prossima liquidità obiettivo (ATR)
     "ob_count_zone",    # OB sovrapposti nella zona (0-5)
     "is_choch",         # 1=CHoCH (inversione), 0=BOS (continuazione)
+    # ── TREND TIMEFRAME SUPERIORE (M30) ──────────────────────────────────────
+    "htf_trend",        # trend M30: 1=bull, -1=bear, 0=neutro
+    "htf_aligned",      # 1 se M5 e M30 concordano (setup più forte)
+    # ── STOP HUNT RISK ────────────────────────────────────────────────────────
+    "sl_in_liq_zone",   # 1 se SL grezzo cade dentro una liq zone (stop hunt risk)
+    "dist_sl_to_liq",   # distanza SL → liq zone più vicina (ATR; bassa = rischio alto)
 ]
 
 
@@ -443,8 +534,12 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
     Label binaria: 1 se il trade nella direzione del trend era vincente.
     Un trade è vincente se il TP viene colpito PRIMA dello SL entro `lookahead` candele.
 
+    Usa SL grezzo ATR-based (identico all'originale): le label riflettono la realtà storica,
+    inclusi i casi di stop hunt (SL in liq zone → colpito → label 0).
+    Le nuove feature sl_in_liq_zone/dist_sl_to_liq insegnano al modello a riconoscere
+    queste situazioni senza alterare l'integrità delle label storiche.
+
     Ottimizzato: matrice NumPy 2D per lookahead → elimina il doppio loop Python.
-    Logica identica all'originale (controllo sequenziale, stesso tie-break).
     """
     n      = len(df)
     labels = np.zeros(n, dtype=np.int8)
