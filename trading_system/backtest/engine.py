@@ -183,16 +183,22 @@ def run_backtest(
     end_date: str,
     initial_balance: float = 10_000.0,
     ml_threshold: Optional[float] = None,
-    htf_hard_filter: bool = False,
-    require_fvg: bool = False,
-    require_liq_sweep: bool = False,
+    htf_hard_filter: Optional[bool] = None,
+    require_fvg: Optional[bool] = None,
+    require_liq_sweep: Optional[bool] = None,
 ) -> Dict[str, Any]:
 
-    # Parametri: usano il valore passato se esplicito, altrimenti leggono config
-    threshold     = ml_threshold  if ml_threshold  is not None else config.ML_CONFIDENCE_THRESHOLD
-    htf_hard_filter   = htf_hard_filter   if htf_hard_filter   else getattr(config, 'SMC_REQUIRE_HTF_ALIGN',   False)
-    require_fvg       = require_fvg       if require_fvg       else getattr(config, 'SMC_REQUIRE_FVG',         False)
-    require_liq_sweep = require_liq_sweep if require_liq_sweep else getattr(config, 'SMC_REQUIRE_LIQ_SWEEP',   False)
+    # Parametri: None = usa config per-simbolo (se disponibile) o default globale
+    threshold = ml_threshold if ml_threshold is not None else config.ML_CONFIDENCE_THRESHOLD
+
+    # Leggi config per-simbolo (es. EURUSD usa Liq Sweep, XAUUSD usa FVG)
+    _sym_cfg = getattr(config, 'SYMBOL_FILTER_CONFIGS', {}).get(symbol.upper(), {})
+    if htf_hard_filter is None:
+        htf_hard_filter   = _sym_cfg.get('htf_align',        getattr(config, 'SMC_REQUIRE_HTF_ALIGN',  False))
+    if require_fvg is None:
+        require_fvg       = _sym_cfg.get('require_fvg',      getattr(config, 'SMC_REQUIRE_FVG',        False))
+    if require_liq_sweep is None:
+        require_liq_sweep = _sym_cfg.get('require_liq_sweep', getattr(config, 'SMC_REQUIRE_LIQ_SWEEP', False))
 
     _log(f"{'=' * 50}")
     _log(f"  BACKTEST {symbol}")

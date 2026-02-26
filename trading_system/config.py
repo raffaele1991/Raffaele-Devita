@@ -59,9 +59,24 @@ ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata
 #
 # REQUIRE_FVG = True  → accetta solo OB con Fair Value Gap confluente nella zona
 # REQUIRE_LIQ_SWEEP   → accetta solo OB dopo sweep di liquidità
-SMC_REQUIRE_FVG         = True   # FVG confluence obbligatorio
-SMC_REQUIRE_LIQ_SWEEP   = False  # Liq sweep opzionale (attivare per max selectività)
-SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 obbligatorio (EMA120/300 su M5)
+SMC_REQUIRE_FVG         = True   # FVG confluence obbligatorio (default se simbolo non in SYMBOL_FILTER_CONFIGS)
+SMC_REQUIRE_LIQ_SWEEP   = False  # Liq sweep (default)
+SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equivale EMA20/50 su M30)
+
+# ── CONFIG PER-SIMBOLO ─────────────────────────────────────────────────────────
+# Sovrascrivono SMC_REQUIRE_* sopra per i simboli specificati.
+# Motivazione:
+#   XAUUSD – FVG abbondante (54% segnali), efficace come filtro
+#   EURUSD – FVG rarissimo (2%), inutilizzabile; Liq Sweep abbondante (96%)
+#
+# Backtest out-of-sample 2026-01-01→2026-02-25:
+#   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Sharpe=1.48
+#   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Sharpe=2.94
+#   TOTALE COMBINATO              → 90 tr in 55 giorni (~1.6 trade/giorno)
+SYMBOL_FILTER_CONFIGS: dict = {
+    "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
+    "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+}
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42

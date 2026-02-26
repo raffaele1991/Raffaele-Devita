@@ -79,6 +79,14 @@ CONFIGS = [
         "require_fvg":    True,
         "require_liq":    False,
     },
+    {
+        "label":          "G – ML + Liq + HTF",
+        "use_ml":         True,
+        "ml_threshold":   0.42,
+        "htf_filter":     True,
+        "require_fvg":    False,   # FVG quasi assente su forex (EURUSD ~2%)
+        "require_liq":    True,    # Liq sweep abbondante su forex (~96%)
+    },
 ]
 
 
