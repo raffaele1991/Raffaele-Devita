@@ -201,13 +201,11 @@ if __name__ == "__main__":
     print(f"CSV trovati: {[os.path.basename(f) for f in csv_files]}")
     os.makedirs(MODELS_DIR_ABS, exist_ok=True)
 
-    cpu_count  = os.cpu_count() or 4
-    n_workers  = min(len(config.SYMBOLS), cpu_count)
-    n_threads  = max(1, cpu_count // n_workers)
-    print(f"CPU disponibili: {cpu_count} — simboli in parallelo: {n_workers} — thread/simbolo: {n_threads}")
+    cpu_count = os.cpu_count() or 4
+    print(f"CPU disponibili: {cpu_count} — training sequenziale con tutti i core per simbolo")
 
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        list(executor.map(partial(train_symbol, n_threads=n_threads), config.SYMBOLS))
+    for symbol in config.SYMBOLS:
+        train_symbol(symbol, n_threads=cpu_count)
 
     print("\n\nTraining completato!")
     print("Ora puoi avviare il bot con: python trading_system/bot.py")
