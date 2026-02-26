@@ -210,10 +210,11 @@ if __name__ == "__main__":
     os.makedirs(MODELS_DIR_ABS, exist_ok=True)
 
     cpu_count = os.cpu_count() or 4
-    print(f"CPU disponibili: {cpu_count} — training sequenziale, tutti i core per simbolo")
+    n_workers = min(len(config.SYMBOLS), cpu_count)
+    print(f"CPU disponibili: {cpu_count} — {n_workers} simboli in parallelo (1 core ciascuno)")
 
-    for symbol in config.SYMBOLS:
-        train_symbol(symbol, n_threads=cpu_count)
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        list(executor.map(partial(train_symbol, n_threads=1), config.SYMBOLS))
 
     print("\n\nTraining completato!")
     print("Ora puoi avviare il bot con: python trading_system/bot.py")
