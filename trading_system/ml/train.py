@@ -15,6 +15,14 @@ oppure:
 
 import os
 import sys
+
+# DEVE essere prima di qualsiasi import che carichi LightGBM/OpenMP
+_cpu = str(os.cpu_count() or 4)
+os.environ["OMP_NUM_THREADS"]        = _cpu
+os.environ["OPENBLAS_NUM_THREADS"]   = _cpu
+os.environ["MKL_NUM_THREADS"]        = _cpu
+os.environ["LIGHTGBM_NUM_THREADS"]   = _cpu
+
 import glob
 import pandas as pd
 from concurrent.futures import ProcessPoolExecutor
