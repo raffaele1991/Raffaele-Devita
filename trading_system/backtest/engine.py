@@ -153,25 +153,24 @@ def _load_csv(symbol: str) -> pd.DataFrame:
 
 def _htf_trend(ctx: pd.DataFrame) -> int:
     """
-    Calcola il trend M30 dal contesto M5 (resample).
-    Ritorna 1 (bull), -1 (bear), 0 (neutro).
-    Usato come hard filter: se M5 signal != M30 trend → scarta il segnale.
+    Approssima il trend M30 usando EMA120/EMA300 su M5 (equivalenti EMA20/EMA50 su M30).
+    Questo evita il problema del resample che genera troppo pochi bar M30 dalla finestra
+    di contesto M5 (200 bar M5 → ~33 bar M30, insufficienti per EMA50).
+
+    EMA120 su M5 ≈ EMA20 su M30 (120 = 20 × 6)
+    EMA300 su M5 ≈ EMA50 su M30 (300 = 50 × 6, cappato a lunghezza contesto)
+
+    Ritorna 1 (bull), -1 (bear), 0 (neutro / dati insufficienti).
     """
     try:
-        if 'time' not in ctx.columns:
+        close = ctx['close'] if 'close' in ctx.columns else None
+        if close is None or len(close) < 30:
             return 0
-        tmp = ctx.set_index('time')[["open", "high", "low", "close", "volume"]]
-        m30 = tmp.resample("30min").agg({
-            "open": "first", "high": "max",
-            "low": "min", "close": "last", "volume": "sum",
-        }).dropna()
-        if len(m30) < 50:
-            return 0
-        ema20 = m30["close"].ewm(span=20, adjust=False).mean().iloc[-1]
-        ema50 = m30["close"].ewm(span=50, adjust=False).mean().iloc[-1]
-        if ema20 > ema50:
+        ema_fast = close.ewm(span=min(120, len(close) - 1), adjust=False).mean().iloc[-1]
+        ema_slow = close.ewm(span=min(300, len(close) - 1), adjust=False).mean().iloc[-1]
+        if ema_fast > ema_slow:
             return 1
-        elif ema20 < ema50:
+        elif ema_fast < ema_slow:
             return -1
         return 0
     except Exception:
@@ -185,16 +184,23 @@ def run_backtest(
     initial_balance: float = 10_000.0,
     ml_threshold: Optional[float] = None,
     htf_hard_filter: bool = False,
+    require_fvg: bool = False,
+    require_liq_sweep: bool = False,
 ) -> Dict[str, Any]:
 
-    # Threshold ML: usa il parametro se fornito, altrimenti prende da config
-    threshold = ml_threshold if ml_threshold is not None else config.ML_CONFIDENCE_THRESHOLD
+    # Parametri: usano il valore passato se esplicito, altrimenti leggono config
+    threshold     = ml_threshold  if ml_threshold  is not None else config.ML_CONFIDENCE_THRESHOLD
+    htf_hard_filter   = htf_hard_filter   if htf_hard_filter   else getattr(config, 'SMC_REQUIRE_HTF_ALIGN',   False)
+    require_fvg       = require_fvg       if require_fvg       else getattr(config, 'SMC_REQUIRE_FVG',         False)
+    require_liq_sweep = require_liq_sweep if require_liq_sweep else getattr(config, 'SMC_REQUIRE_LIQ_SWEEP',   False)
 
     _log(f"{'=' * 50}")
     _log(f"  BACKTEST {symbol}")
     _log(f"  Periodo: {start_date} → {end_date}")
-    _log(f"  ML threshold : {threshold}")
-    _log(f"  HTF hard filter: {htf_hard_filter}")
+    _log(f"  ML threshold  : {threshold}")
+    _log(f"  HTF hard filter : {htf_hard_filter}")
+    _log(f"  Require FVG     : {require_fvg}")
+    _log(f"  Require Liq Sweep: {require_liq_sweep}")
     _log(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
@@ -250,13 +256,17 @@ def run_backtest(
 
     # Contatori diagnostici
     _diag = {
-        "session_bars": 0,
-        "no_trend":     0,
-        "no_ob":        0,
-        "htf_blocked":  0,
-        "ml_blocked":   0,
-        "rr_rejected":  0,
-        "signals":      0,
+        "session_bars":    0,
+        "no_trend":        0,
+        "no_ob":           0,
+        "htf_blocked":     0,
+        "fvg_blocked":     0,
+        "liq_blocked":     0,
+        "ml_blocked":      0,
+        "rr_rejected":     0,
+        "signals":         0,
+        "signals_with_fvg": 0,
+        "signals_with_liq": 0,
     }
 
     _log(f"Avvio simulazione...")
@@ -303,6 +313,14 @@ def run_backtest(
 
         _diag["signals"] += 1
 
+        # Traccia confluenze (per diagnostica)
+        has_fvg = signal.fvg_top > 0
+        has_liq = signal.liquidity_swept
+        if has_fvg:
+            _diag["signals_with_fvg"] += 1
+        if has_liq:
+            _diag["signals_with_liq"] += 1
+
         # Hard filter HTF: scarta segnali contro il trend M30
         if htf_hard_filter:
             ht = _htf_trend(ctx)
@@ -312,6 +330,18 @@ def run_backtest(
                     _diag["htf_blocked"] += 1
                     i += 1
                     continue
+
+        # Hard filter FVG: entra solo se c'è un FVG confluente nella zona OB
+        if require_fvg and not has_fvg:
+            _diag["fvg_blocked"] += 1
+            i += 1
+            continue
+
+        # Hard filter Liquidity Sweep: entra solo se c'è stato sweep prima del rimbalzo
+        if require_liq_sweep and not has_liq:
+            _diag["liq_blocked"] += 1
+            i += 1
+            continue
 
         # Conferma ML (riusa ctx_struct già calcolato sopra — nessuna doppia elaborazione)
         if ml_model is not None:
@@ -450,7 +480,11 @@ def run_backtest(
     _log(f"  Scartate (no trend)  : {_diag['no_trend']}")
     _log(f"  Scartate (no OB hit) : {_diag['no_ob']}")
     _log(f"  Segnali SMC trovati  : {_diag['signals']}")
+    _log(f"  di cui con FVG       : {_diag['signals_with_fvg']}  ({_diag['signals_with_fvg']/max(_diag['signals'],1)*100:.0f}%)")
+    _log(f"  di cui con Liq Sweep : {_diag['signals_with_liq']}  ({_diag['signals_with_liq']/max(_diag['signals'],1)*100:.0f}%)")
     _log(f"  Bloccati da HTF      : {_diag['htf_blocked']}")
+    _log(f"  Bloccati (no FVG)    : {_diag['fvg_blocked']}")
+    _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
     _log(f"  Trade aperti         : {len(trades)}")

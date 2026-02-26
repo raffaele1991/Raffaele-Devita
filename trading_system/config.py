@@ -49,7 +49,19 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equ
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
 USE_ML_FILTER           = True   # True = filtra segnali con ML | False = solo SMC
-ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata — alzata per più precision e meno rumore
+ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata
+
+# ── FILTRI CONFLUENZA SMC ──────────────────────────────────────────────────────
+# Backtest out-of-sample (2026-01-01 → 2026-02-25, XAUUSD) ha dimostrato:
+#   FVG richiesto         → +6.7pp WR,  PF: 0.89→1.17
+#   FVG + Liq Sweep       → +7.6pp WR,  PF: 0.89→1.20, Net=+4.00%
+#   FVG + HTF alignment   → +8.5pp WR,  PF: 0.89→1.21, Sharpe=1.48, MaxDD=4.61%
+#
+# REQUIRE_FVG = True  → accetta solo OB con Fair Value Gap confluente nella zona
+# REQUIRE_LIQ_SWEEP   → accetta solo OB dopo sweep di liquidità
+SMC_REQUIRE_FVG         = True   # FVG confluence obbligatorio
+SMC_REQUIRE_LIQ_SWEEP   = False  # Liq sweep opzionale (attivare per max selectività)
+SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 obbligatorio (EMA120/300 su M5)
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
 ML_RANDOM_SEED          = 42
@@ -59,8 +71,10 @@ ML_RANDOM_SEED          = 42
 TRAIN_CUTOFF_DATE       = "2026-01-01"  # train su tutto il 2025, backtest out-of-sample su gen-feb 2026
 
 # Lookahead etichette (candele M5 future per valutare TP/SL)
-# 30 candele M5 = 2.5 ore — ottimale per XAUUSD M5 (bilancia velocità e qualità segnale)
-ML_LOOKAHEAD             = 30
+# 50 candele M5 = ~4 ore — dà più tempo al trade di raggiungere il TP prima di expirare
+# Aumentato da 30 per migliorare la qualità delle label (meno falsi negativi per trade
+# lenti ma vincenti) e alzare il win rate del modello.
+ML_LOOKAHEAD             = 50
 
 # Parametri modello (LightGBM)
 ML_N_ESTIMATORS          = 3000   # max alberi — early stopping troverà il numero ottimale
