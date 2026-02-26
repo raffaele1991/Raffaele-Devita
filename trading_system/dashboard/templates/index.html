@@ -360,7 +360,7 @@
       <div class="card-sub" id="dailyDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
-        <div class="gauge-labels"><span>0%</span><span>Limite 3%</span></div>
+        <div class="gauge-labels"><span>0%</span><span id="dailyDDLimit">Limite 3%</span></div>
       </div>
     </div>
     <div class="card">
@@ -369,7 +369,7 @@
       <div class="card-sub" id="totalDDSub">live: —</div>
       <div class="gauge-wrap">
         <div class="gauge-track"><div class="gauge-fill" id="totalGauge" style="width:0%"></div></div>
-        <div class="gauge-labels"><span>0%</span><span>Limite 7%</span></div>
+        <div class="gauge-labels"><span>0%</span><span id="totalDDLimit">Limite 7%</span></div>
       </div>
     </div>
     <div class="card">
@@ -870,8 +870,12 @@ function updateUI(s) {
     pnlEl.textContent = '—'; pnlSub.textContent = '—';
   }
 
-  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, s.max_daily_dd_pct ?? 3, 'dailyDDSub', s.daily_dd_now_pct);
-  setDD('totalDD', 'totalGauge', s.total_dd_pct, s.max_total_dd_pct ?? 7, 'totalDDSub', s.total_dd_now_pct);
+  const maxDaily = s.max_daily_dd_pct ?? 3;
+  const maxTotal = s.max_total_dd_pct ?? 7;
+  setDD('dailyDD', 'dailyGauge', s.daily_dd_pct, maxDaily, 'dailyDDSub', s.daily_dd_now_pct);
+  setDD('totalDD', 'totalGauge', s.total_dd_pct, maxTotal, 'totalDDSub', s.total_dd_now_pct);
+  document.getElementById('dailyDDLimit').textContent = 'Limite ' + maxDaily + '%';
+  document.getElementById('totalDDLimit').textContent = 'Limite ' + maxTotal + '%';
 
   const wr = s.win_rate ?? null;
   document.getElementById('winRate').textContent = wr !== null ? wr.toFixed(1) + '%' : '—';
