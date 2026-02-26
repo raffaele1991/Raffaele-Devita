@@ -658,6 +658,10 @@
             </div>
           </div>
           <div class="settings-row">
+            <span class="settings-label">Sessione Asian (00–04, USDJPY)</span>
+            <input id="cfg_session_asian" class="settings-checkbox" type="checkbox" checked />
+          </div>
+          <div class="settings-row">
             <span class="settings-label">Sessione London (08–11)</span>
             <input id="cfg_session_london" class="settings-checkbox" type="checkbox" checked />
           </div>
@@ -1409,6 +1413,7 @@ async function loadSettings() {
     });
 
     // Sessioni
+    document.getElementById('cfg_session_asian').checked  = !!s.session_asian;
     document.getElementById('cfg_session_london').checked = !!s.session_london;
     document.getElementById('cfg_session_ny').checked     = !!s.session_ny;
     document.getElementById('cfg_timeframe').value         = s.timeframe || 'M5';
@@ -1444,6 +1449,7 @@ async function saveSettings() {
     mt5_account:               document.getElementById('cfg_mt5_account').value.trim(),
     mt5_password:              document.getElementById('cfg_mt5_password').value,
     symbols:                   [..._activeSymbols],
+    session_asian:             document.getElementById('cfg_session_asian').checked,
     session_london:            document.getElementById('cfg_session_london').checked,
     session_ny:                document.getElementById('cfg_session_ny').checked,
     timeframe:                 document.getElementById('cfg_timeframe').value,
