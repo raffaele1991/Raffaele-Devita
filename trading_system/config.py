@@ -96,6 +96,13 @@ MIN_RISK_REWARD          = 2.0    # minimo R:R 1:2 per entrare
 ATR_PERIOD               = 14
 ATR_SL_MULTIPLIER        = 1.5    # SL = ATR * 1.5
 
+# Stop Hunt / Liquidity Zone SL Protection
+# Se lo SL grezzo (ATR-based) cade dentro o vicino a una liquidity zone (equal highs/lows),
+# lo SL viene spostato OLTRE la zona per evitare lo stop hunt.
+SL_LIQ_SEARCH_ATR    = 0.5   # cerca liq zones fino a 0.5 ATR oltre lo SL grezzo
+SL_LIQ_BUFFER_PIPS   = {"XAUUSD": 2.0, "EURUSD": 0.0005}  # buffer aggiunto oltre la zona
+SL_MAX_MULTIPLIER    = 3.0   # se SL aggiustato > ATR * 3.0, il trade viene skippato (R:R troppo stretto)
+
 # Consecutive losses protection
 MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
 
