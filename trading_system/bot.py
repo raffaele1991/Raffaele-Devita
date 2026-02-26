@@ -281,6 +281,10 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     """Analizza un singolo simbolo e apre un trade se il setup è valido."""
     global _symbol_signals
 
+    # Asian KZ: opera solo sui simboli abilitati (es. USDJPY)
+    if session == "ASIAN" and symbol.upper() not in [s.upper() for s in config.ASIAN_SESSION_SYMBOLS]:
+        return
+
     # Recupera ultime 200 candele M5
     df = connector.get_ohlcv(symbol, timeframe=config.TIMEFRAME, n_candles=200)
     if df is None or len(df) < 100:

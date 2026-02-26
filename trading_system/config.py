@@ -25,6 +25,12 @@ SESSION_LONDON_END   = "11:00"
 SESSION_NY_START     = "14:00"
 SESSION_NY_END       = "17:00"
 
+SESSION_ASIAN_START  = "00:00"
+SESSION_ASIAN_END    = "04:00"
+
+# Simboli che operano durante la sessione asiatica (USDJPY beneficia del Tokyo open)
+ASIAN_SESSION_SYMBOLS = ["USDJPY"]
+
 # ─── FILTRO NEWS ──────────────────────────────────────────────────────────────
 
 NEWS_BUFFER_MINUTES = 30   # stop trading X minuti prima/dopo news ad alto impatto
