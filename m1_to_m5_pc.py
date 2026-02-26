@@ -37,7 +37,7 @@ except ImportError:
     sys.exit(1)
 
 # ── Configurazione ─────────────────────────────────────────────────────────────
-PAIRS = ["EURUSD", "XAUUSD"]
+PAIRS = ["EURUSD", "GBPUSD", "XAUUSD", "USDJPY"]
 SCRIPT_DIR = Path(__file__).parent
 OUT_DIR = SCRIPT_DIR / "trading_system" / "data"
 # ──────────────────────────────────────────────────────────────────────────────
