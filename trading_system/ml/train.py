@@ -18,6 +18,7 @@ import sys
 import glob
 import pandas as pd
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 # Aggiungi root al path
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -205,11 +206,8 @@ if __name__ == "__main__":
     n_threads  = max(1, cpu_count // n_workers)
     print(f"CPU disponibili: {cpu_count} — simboli in parallelo: {n_workers} — thread/simbolo: {n_threads}")
 
-    def _train(symbol):
-        train_symbol(symbol, n_threads=n_threads)
-
     with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        list(executor.map(_train, config.SYMBOLS))
+        list(executor.map(partial(train_symbol, n_threads=n_threads), config.SYMBOLS))
 
     print("\n\nTraining completato!")
     print("Ora puoi avviare il bot con: python trading_system/bot.py")
