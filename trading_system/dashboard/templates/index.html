@@ -490,16 +490,18 @@
       <!-- Controlli -->
       <div class="bt-controls">
         <span class="bt-label">Simbolo</span>
-        <select id="btSymbol" class="bt-select">
+        <select id="btSymbol" class="bt-select" onchange="onBtSymbolChange()">
           <option value="XAUUSD">XAUUSD</option>
           <option value="EURUSD">EURUSD</option>
+          <option value="GBPUSD">GBPUSD</option>
+          <option value="USDJPY">USDJPY</option>
         </select>
 
         <span class="bt-label">Da</span>
-        <input type="date" id="btStartDate" class="bt-date" value="2024-01-01" />
+        <input type="date" id="btStartDate" class="bt-date" value="2025-01-01" />
 
         <span class="bt-label">A</span>
-        <input type="date" id="btEndDate" class="bt-date" value="2024-12-31" />
+        <input type="date" id="btEndDate" class="bt-date" value="2025-12-31" />
 
         <button id="btRunBtn" class="bt-run-btn" onclick="startBacktest()">
           &#9654; Esegui Backtest
@@ -651,7 +653,8 @@
             <div class="settings-tag-group">
               <span id="tag_XAUUSD" class="settings-tag active" onclick="toggleTag('XAUUSD')">XAUUSD</span>
               <span id="tag_EURUSD" class="settings-tag active" onclick="toggleTag('EURUSD')">EURUSD</span>
-              <span id="tag_GBPUSD" class="settings-tag"       onclick="toggleTag('GBPUSD')">GBPUSD</span>
+              <span id="tag_GBPUSD" class="settings-tag active" onclick="toggleTag('GBPUSD')">GBPUSD</span>
+              <span id="tag_USDJPY" class="settings-tag active" onclick="toggleTag('USDJPY')">USDJPY</span>
             </div>
           </div>
           <div class="settings-row">
@@ -1201,6 +1204,20 @@ async function refreshModelFiles() {
 ══════════════════════════════════════════════════════════════════════════ */
 let _btPolling = null;
 
+// Date minime per simbolo (M5 disponibili da quella data)
+const BT_SYMBOL_START = {
+  'XAUUSD': '2018-02-16', 'EURUSD': '2018-02-16',
+  'GBPUSD': '2024-10-23', 'USDJPY': '2024-10-23',
+};
+function onBtSymbolChange() {
+  const sym = document.getElementById('btSymbol').value;
+  const minDate = BT_SYMBOL_START[sym] || '2018-01-01';
+  document.getElementById('btStartDate').min = minDate;
+  // Se la data attuale è precedente al minimo, aggiorna
+  const cur = document.getElementById('btStartDate').value;
+  if (cur && cur < minDate) document.getElementById('btStartDate').value = minDate;
+}
+
 async function startBacktest() {
   const symbol    = document.getElementById('btSymbol').value;
   const startDate = document.getElementById('btStartDate').value;
@@ -1322,7 +1339,7 @@ function renderBtResults(r) {
     const rCls   = t.r > 0 ? 'text-green' : 'text-red';
     const pnlCls = t.pnl > 0 ? 'pnl-pos' : 'pnl-neg';
     const dirCls = t.direction === 'long' ? 'text-blue' : 'text-red';
-    const dec    = t.symbol === 'XAUUSD' ? 2 : 5;
+    const dec    = t.symbol === 'XAUUSD' ? 2 : (t.symbol === 'USDJPY' ? 3 : 5);
     return `<tr>
       <td class="text-muted">${escHtml(t.time)}</td>
       <td class="text-muted">${escHtml(t.exit_time)}</td>
@@ -1358,8 +1375,8 @@ function btSetCls(id, val, cls) { btSet(id, val, cls); }
 /* ══════════════════════════════════════════════════════════════════════════
    IMPOSTAZIONI
 ══════════════════════════════════════════════════════════════════════════ */
-const ALL_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD'];
-let _activeSymbols = ['XAUUSD', 'EURUSD'];
+const ALL_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
+let _activeSymbols = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
 
 function toggleTag(sym) {
   const tag = document.getElementById('tag_' + sym);
@@ -1385,7 +1402,7 @@ async function loadSettings() {
     document.getElementById('cfg_mt5_password').value = s.mt5_password  || '';
 
     // Simboli
-    _activeSymbols = s.symbols || ['XAUUSD', 'EURUSD'];
+    _activeSymbols = s.symbols || ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
     ALL_SYMBOLS.forEach(sym => {
       const tag = document.getElementById('tag_' + sym);
       if (tag) tag.classList.toggle('active', _activeSymbols.includes(sym));

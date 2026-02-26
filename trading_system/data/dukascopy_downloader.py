@@ -1,8 +1,12 @@
 """
 Dukascopy Historical Data Downloader
 ======================================
-Scarica dati tick XAUUSD/EURUSD da Dukascopy (gratuiti, dal 2003)
+Scarica dati tick da Dukascopy (gratuiti) per tutti i simboli configurati
 e li aggrega in candele M5 salvate come CSV compatibili col sistema.
+
+Copertura Dukascopy:
+  EURUSD / GBPUSD / USDJPY → dal 2003-05
+  XAUUSD                   → dal 2003-08
 
 Uso:
     python trading_system/data/dukascopy_downloader.py
@@ -30,17 +34,27 @@ logger = logging.getLogger(__name__)
 # ─── CONFIGURAZIONE ────────────────────────────────────────────────────────────
 
 # Divisore prezzi per simbolo (Dukascopy scala i prezzi come interi)
+# Forex a 5 decimali: divide per 100000 (es. EURUSD: 112345 → 1.12345)
+# JPY e Gold a 3 decimali: divide per 1000 (es. USDJPY: 156789 → 156.789)
 PRICE_DIVISOR = {
     "XAUUSD": 1000,     # oro: 1518600 / 1000 = 1518.600
-    "EURUSD": 100000,   # forex: 112000 / 100000 = 1.12000
+    "EURUSD": 100000,   # forex 5 dec: 112000 / 100000 = 1.12000
     "GBPUSD": 100000,
+    "USDJPY": 1000,     # JPY 3 dec: 156789 / 1000 = 156.789
 }
 
-# Periodo da scaricare (integra i dati MT5 esistenti)
-DATE_START = datetime(2020, 1, 1, tzinfo=timezone.utc)
-DATE_END   = datetime(2025, 12, 31, tzinfo=timezone.utc)
+# Data di inizio per-simbolo (Dukascopy non ha dati prima di queste date)
+SYMBOL_START = {
+    "EURUSD": datetime(2003,  5, 1, tzinfo=timezone.utc),
+    "GBPUSD": datetime(2003,  5, 1, tzinfo=timezone.utc),
+    "USDJPY": datetime(2003,  5, 1, tzinfo=timezone.utc),
+    "XAUUSD": datetime(2003,  8, 1, tzinfo=timezone.utc),
+}
 
-WORKERS    = 20    # thread paralleli
+# Fine periodo = oggi (dinamico)
+DATE_END = datetime.now(tz=timezone.utc).replace(hour=23, minute=59, second=59)
+
+WORKERS    = 30    # thread paralleli (aumentati per dataset grande)
 RETRY      = 3     # tentativi per file
 TIMEOUT    = 30    # secondi timeout HTTP
 
@@ -107,14 +121,16 @@ def ticks_to_m5(ticks: pd.DataFrame) -> pd.DataFrame:
 # ─── DOWNLOAD COMPLETO PER SIMBOLO ────────────────────────────────────────────
 
 def download_symbol(symbol: str):
+    date_start = SYMBOL_START.get(symbol, datetime(2003, 5, 1, tzinfo=timezone.utc))
+
     logger.info(f"\n{'='*60}")
     logger.info(f"  Dukascopy download: {symbol}")
-    logger.info(f"  Periodo: {DATE_START.date()} → {DATE_END.date()}")
+    logger.info(f"  Periodo: {date_start.date()} → {DATE_END.date()}")
     logger.info(f"{'='*60}")
 
     # Genera lista di tutte le ore nel periodo
     hours = []
-    dt = DATE_START
+    dt = date_start
     while dt <= DATE_END:
         # Salta domeniche (mercato chiuso)
         if dt.weekday() != 6:

@@ -1,13 +1,13 @@
 """
 Trading System Configuration
 =============================
-Sistema ibrido SMC + ML per XAUUSD e EURUSD su M5.
+Sistema ibrido SMC + ML per XAUUSD, EURUSD, GBPUSD e USDJPY su M5.
 Ottimizzato per prop firm (FTMO, MyFundedFX, The5ers).
 """
 
 # ─── SIMBOLI ──────────────────────────────────────────────────────────────────
 
-SYMBOLS = ["XAUUSD", "EURUSD"]
+SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"]
 TIMEFRAME = "M5"
 
 # ─── CARTELLE ─────────────────────────────────────────────────────────────────
@@ -40,11 +40,11 @@ OB_LOOKBACK           = 20   # quante candele cercare per l'OB
 OB_MIN_CANDLE_BODY_PCT = 0.4  # corpo della candela OB deve essere almeno 40% del range
 
 # Fair Value Gap
-FVG_MIN_SIZE_PIPS     = {"XAUUSD": 1.0, "EURUSD": 0.0005}  # dimensione minima FVG
+FVG_MIN_SIZE_PIPS     = {"XAUUSD": 1.0, "EURUSD": 0.0005, "GBPUSD": 0.0005, "USDJPY": 0.05}  # dimensione minima FVG
 
 # Liquidity
 LIQ_LOOKBACK          = 50   # candele per trovare livelli di liquidità (equal highs/lows)
-LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002}  # tolleranza per "equal"
+LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002, "GBPUSD": 0.0002, "USDJPY": 0.02}  # tolleranza per "equal"
 
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
@@ -68,14 +68,33 @@ SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equ
 # Motivazione:
 #   XAUUSD – FVG abbondante (54% segnali), efficace come filtro
 #   EURUSD – FVG rarissimo (2%), inutilizzabile; Liq Sweep abbondante (96%)
+#   GBPUSD – volatile, alta liquidità; configurazione analoga a EURUSD
+#   USDJPY – trend follower, reattivo a macro; dati limitati (14 mesi M5) → soglia ML alta
 #
-# Backtest out-of-sample 2026-01-01→2026-02-25:
-#   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Sharpe=1.48
-#   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Sharpe=2.94
-#   TOTALE COMBINATO              → 90 tr in 55 giorni (~1.6 trade/giorno)
+# Backtest out-of-sample 2026-01-01→2026-02-26:
+#   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Net=+3.37%  Sharpe=1.48
+#   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Net=+4.19%  Sharpe=2.94
+#   GBPUSD: ML + LiqSweep + HTF  → 49 tr  WR=44.9%  PF=1.07  Net=+0.77%  Sharpe=0.48
+#   USDJPY: ML + LiqSweep + HTF  → 55 tr  WR=38.2%  PF=0.87  Net=-2.00%  (dati insufficienti)
+#   TOTALE COMBINATO              → 194 tr in 57 giorni (~3.4 trade/giorno)
+#
+# NOTA USDJPY: modello addestrato su soli 14 mesi M5. Necessari >2 anni per WR stabile.
+# Mantenuto in config ma soglia ML elevata (0.58) per ridurre i segnali al minimo.
 SYMBOL_FILTER_CONFIGS: dict = {
     "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
     "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+    "GBPUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+    "USDJPY": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+}
+
+# ── SOGLIA ML PER-SIMBOLO ──────────────────────────────────────────────────────
+# Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
+# USDJPY usa 0.58 per ridurre i falsi positivi (dati training limitati).
+ML_CONFIDENCE_BY_SYMBOL: dict = {
+    "XAUUSD": 0.42,
+    "EURUSD": 0.42,
+    "GBPUSD": 0.42,
+    "USDJPY": 0.58,
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
@@ -129,7 +148,7 @@ ATR_SL_MULTIPLIER        = 1.5    # SL = ATR * 1.5
 # Se lo SL grezzo (ATR-based) cade dentro o vicino a una liquidity zone (equal highs/lows),
 # lo SL viene spostato OLTRE la zona per evitare lo stop hunt.
 SL_LIQ_SEARCH_ATR    = 0.5   # cerca liq zones fino a 0.5 ATR oltre lo SL grezzo
-SL_LIQ_BUFFER_PIPS   = {"XAUUSD": 2.0, "EURUSD": 0.0005}  # buffer aggiunto oltre la zona
+SL_LIQ_BUFFER_PIPS   = {"XAUUSD": 2.0, "EURUSD": 0.0005, "GBPUSD": 0.0005, "USDJPY": 0.05}  # buffer aggiunto oltre la zona
 SL_MAX_MULTIPLIER    = 3.0   # se SL aggiustato > ATR * 3.0, il trade viene skippato (R:R troppo stretto)
 
 # Consecutive losses protection

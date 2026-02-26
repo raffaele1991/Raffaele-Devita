@@ -306,9 +306,11 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("info", f"{symbol}: feature insufficienti per ML")
         return
 
-    # ML confidence check
+    # ML confidence check (soglia per-simbolo se disponibile, altrimenti globale)
+    _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
+    ml_thresh = _by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD
     confidence = ml_model.predict_proba(df_feat)
-    logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {config.ML_CONFIDENCE_THRESHOLD})")
+    logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {ml_thresh})")
 
     # Aggiorna segnale per la dashboard
     _symbol_signals[symbol] = {
@@ -317,12 +319,12 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         "reason":      signal.reason,
     }
 
-    if confidence < config.ML_CONFIDENCE_THRESHOLD:
+    if confidence < ml_thresh:
         logger.info(f"[ML]  {symbol} segnale scartato (confidence insufficiente)")
         _reason(
             "info",
             f"{symbol}: segnale {signal.direction.upper()} scartato – "
-            f"ML {confidence:.2f} < soglia {config.ML_CONFIDENCE_THRESHOLD}",
+            f"ML {confidence:.2f} < soglia {ml_thresh}",
         )
         return
 

@@ -358,7 +358,7 @@ _SETTINGS_DEFAULTS = {
     "mt5_account":               "",
     "mt5_password":              "",
     "mt5_server":                "",
-    "symbols":                   ["XAUUSD", "EURUSD"],
+    "symbols":                   ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"],
     "session_london":            True,
     "session_ny":                True,
     "timeframe":                 "M5",
@@ -455,7 +455,7 @@ def api_settings_post():
 
 # ─── BACKTEST ──────────────────────────────────────────────────────────────────
 
-VALID_SYMBOLS = {"XAUUSD", "EURUSD"}
+VALID_SYMBOLS = {"XAUUSD", "EURUSD", "GBPUSD", "USDJPY"}
 
 @app.route("/api/backtest", methods=["POST"])
 def api_backtest():

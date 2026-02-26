@@ -189,7 +189,8 @@ def run_backtest(
 ) -> Dict[str, Any]:
 
     # Parametri: None = usa config per-simbolo (se disponibile) o default globale
-    threshold = ml_threshold if ml_threshold is not None else config.ML_CONFIDENCE_THRESHOLD
+    _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
+    threshold = ml_threshold if ml_threshold is not None else (_by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD)
 
     # Leggi config per-simbolo (es. EURUSD usa Liq Sweep, XAUUSD usa FVG)
     _sym_cfg = getattr(config, 'SYMBOL_FILTER_CONFIGS', {}).get(symbol.upper(), {})
