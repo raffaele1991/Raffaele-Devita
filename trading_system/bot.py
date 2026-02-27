@@ -384,6 +384,46 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("info", f"{symbol}: feature insufficienti per ML")
         return
 
+    # ── Filtri qualità setup (hard rules, prima del ML) ──────────────────────
+    # Legge la configurazione per-simbolo da SYMBOL_FILTER_CONFIGS, con fallback
+    # ai flag globali. Questi parametri erano nel config ma non venivano applicati.
+    _sym_cfg     = getattr(config, "SYMBOL_FILTER_CONFIGS", {}).get(symbol.upper(), {})
+    _require_htf = _sym_cfg.get("htf_align",        getattr(config, "SMC_REQUIRE_HTF_ALIGN",  True))
+    _require_fvg = _sym_cfg.get("require_fvg",       getattr(config, "SMC_REQUIRE_FVG",        False))
+    _require_liq = _sym_cfg.get("require_liq_sweep", getattr(config, "SMC_REQUIRE_LIQ_SWEEP",  False))
+    _min_adx     = getattr(config, "MIN_ADX_FILTER", 0.20)
+
+    last_feat = df_feat.iloc[-1]
+
+    # 1) HTF (M30) deve confermare il trend M5
+    if _require_htf and float(last_feat.get("htf_aligned", 0)) < 1.0:
+        logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
+        _reason("info", f"{symbol}: M30 contro-trend – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+
+    # 2) ADX normalizzato ≥ MIN_ADX_FILTER (0.20 = ADX 20): evita ranging
+    adx_val = float(last_feat.get("adx", 0))
+    if adx_val < _min_adx:
+        logger.info(f"[FILTER] {symbol}: ADX={adx_val:.3f} sotto soglia {_min_adx} (ranging) – skip")
+        _reason("info", f"{symbol}: mercato laterale (ADX {adx_val:.2f}) – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+
+    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep secondo SYMBOL_FILTER_CONFIGS
+    has_fvg   = float(last_feat.get("ob_has_fvg",    0)) >= 1.0
+    liq_swept = float(last_feat.get("liq_swept_smc", 0)) >= 1.0
+    if _require_fvg and not has_fvg:
+        logger.info(f"[FILTER] {symbol}: FVG richiesto ma assente – skip")
+        _reason("info", f"{symbol}: nessun FVG confluente – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+    if _require_liq and not liq_swept:
+        logger.info(f"[FILTER] {symbol}: liq sweep richiesto ma assente – skip")
+        _reason("info", f"{symbol}: nessun sweep di liquidità – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+
     # ML confidence check (soglia per-simbolo se disponibile, altrimenti globale)
     _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
     ml_thresh = _by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD

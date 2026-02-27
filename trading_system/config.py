@@ -164,6 +164,11 @@ MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
 # Cooldown per simbolo dopo uno stop loss (minuti)
 SYMBOL_COOLDOWN_MINUTES  = 60     # non rientrare sullo stesso simbolo per 60 min dopo SL
 
+# Filtro trend minimo prima di valutare segnali SMC
+# ADX normalizzato (features.py lo divide per 100): 0.20 = ADX 20 standard
+# Sotto questa soglia il mercato è laterale e gli OB vengono violati avanti/indietro
+MIN_ADX_FILTER           = 0.20
+
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
 MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo

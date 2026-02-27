@@ -553,13 +553,28 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
     rr         = config.MIN_RISK_REWARD
     valid_mask = ~np.isnan(atr) & (atr > 0)
 
+    # ── SL distance: usa sl_dist_adjusted se disponibile ─────────────────────
+    # sl_dist_adjusted riflette lo SL reale usato in live (aggiustato oltre le
+    # liquidity zones). Usarlo nelle label allinea training e live trading,
+    # riducendo la distorsione della calibrazione ML.
+    if "sl_dist_adjusted" in df.columns:
+        sl_dist_col = df["sl_dist_adjusted"].values
+    else:
+        sl_dist_col = None
+
     # ── LONG ──────────────────────────────────────────────────────────────────
     long_idx = np.where((trend == 1) & valid_mask)[0]
     long_idx = long_idx[long_idx < n - lookahead]
 
     if len(long_idx) > 0:
-        sl = close[long_idx] - atr[long_idx] * sl_mult
-        tp = close[long_idx] + atr[long_idx] * sl_mult * rr
+        if sl_dist_col is not None:
+            sl_d = sl_dist_col[long_idx]
+            # sl_dist_adjusted = 0 quando nessuna liq zone in range → fallback su raw ATR
+            sl_d = np.where(sl_d > 0, sl_d, atr[long_idx] * sl_mult)
+        else:
+            sl_d = atr[long_idx] * sl_mult
+        sl = close[long_idx] - sl_d
+        tp = close[long_idx] + sl_d * rr
 
         # Matrici (n_long, lookahead): future_low[j, k] = low[long_idx[j] + k + 1]
         future_low   = np.stack([low  [long_idx + k + 1] for k in range(lookahead)], axis=1)
@@ -590,8 +605,13 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
     short_idx = short_idx[short_idx < n - lookahead]
 
     if len(short_idx) > 0:
-        sl = close[short_idx] + atr[short_idx] * sl_mult
-        tp = close[short_idx] - atr[short_idx] * sl_mult * rr
+        if sl_dist_col is not None:
+            sl_d = sl_dist_col[short_idx]
+            sl_d = np.where(sl_d > 0, sl_d, atr[short_idx] * sl_mult)
+        else:
+            sl_d = atr[short_idx] * sl_mult
+        sl = close[short_idx] + sl_d
+        tp = close[short_idx] - sl_d * rr
 
         future_low   = np.stack([low  [short_idx + k + 1] for k in range(lookahead)], axis=1)
         future_high  = np.stack([high [short_idx + k + 1] for k in range(lookahead)], axis=1)
