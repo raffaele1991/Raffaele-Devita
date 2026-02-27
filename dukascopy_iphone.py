@@ -253,14 +253,13 @@ def download_symbol(symbol: str):
         # Salva progresso (resume sicuro)
         save_progress(symbol, day)
 
-        # Aggiorna schermo ogni giorno (sovrascrive la riga)
-        pct = day_idx / total_days * 100
+        # Stampa una riga per ogni giorno (compatibile con a-Shell, no \r)
+        pct   = day_idx / total_days * 100
         eta_h = (total_days - day_idx) * 24 * DELAY / 3600
+        bar   = "#" * int(pct // 5) + "." * (20 - int(pct // 5))
         print(
-            f"  {day.strftime('%Y-%m-%d')}  [{pct:5.1f}%]  "
-            f"bar_oggi={len(day_bars):3d}  tot={day_bars_total:,}  "
-            f"ETA≈{eta_h:.1f}h        ",
-            end="\r", flush=True
+            f"  [{bar}] {pct:5.1f}%  {day.strftime('%Y-%m-%d')}"
+            f"  +{len(day_bars):3d}bar  tot={day_bars_total:,}  ETA≈{eta_h:.1f}h"
         )
 
     print(f"\n  Completato! Candele totali: {day_bars_total:,} → {output_file}")
