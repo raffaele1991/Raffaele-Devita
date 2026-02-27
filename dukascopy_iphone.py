@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 """
-Dukascopy Downloader — iPhone Edition
-======================================
-Solo stdlib Python: urllib, lzma, struct, csv
-Compatibile con: a-Shell, iSH, Pythonista
+Dukascopy Downloader — Termux / Phone Edition
+==============================================
+Solo stdlib Python: urllib, lzma, struct, csv, os, time
+Compatibile con: Termux (Android), a-Shell (iOS), iSH, Pythonista
 
-Uso:
-    python3 dukascopy_iphone.py
+Uso base:
+    python3 dukascopy_iphone.py                 # scarica tutti i simboli
+    python3 dukascopy_iphone.py EURUSD          # solo un simbolo
+    python3 dukascopy_iphone.py EURUSD XAUUSD   # simboli specifici
 
-Output: XAUUSD_M5.csv  (stesso formato del sistema)
+Output:
+    ./duka_data/EURUSD_M5.csv
+    ./duka_data/EURUSD_progress.txt   ← file di resume automatico
 
-Resume automatico: se il file esiste, continua dall'ultima data.
+Resume automatico:
+    Se interrompi con Ctrl+C (o si scarica la batteria), riavvia lo stesso
+    comando. Il download riparte dall'ultimo giorno completato.
+
+Stima tempi per simbolo (20 anni):
+    ~4-6 ore in background su Termux (nohup python3 dukascopy_iphone.py EURUSD &)
 """
 
 import csv
@@ -20,33 +29,66 @@ import struct
 import sys
 import time
 import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
-# ─── CONFIGURAZIONE ────────────────────────────────────────────────────────────
+# ─── SIMBOLI E DIVISORI PREZZO ────────────────────────────────────────────────
+# Dukascopy codifica i prezzi come interi; bisogna dividere per:
+#   100000  → coppie forex a 5 decimali  (es. EURUSD: 112345 → 1.12345)
+#   1000    → JPY e Gold a 3 decimali    (es. USDJPY: 156789 → 156.789)
 
 SYMBOLS = {
-    "XAUUSD": 1000,     # oro: prezzo intero / 1000
-    "EURUSD": 100000,   # forex: prezzo intero / 100000
+    "EURUSD": 100000,
+    "GBPUSD": 100000,
+    "USDJPY": 1000,
+    "USDCHF": 100000,
+    "AUDUSD": 100000,
+    "NZDUSD": 100000,
+    "USDCAD": 100000,
+    "EURJPY": 1000,
+    "GBPJPY": 1000,
+    "XAUUSD": 1000,
 }
-DATE_START  = datetime(2020, 1, 1,  tzinfo=timezone.utc)
-DATE_END    = datetime(2025, 12, 31, tzinfo=timezone.utc)
-BAR_MINS    = 5         # aggregazione M5
-RETRY       = 3
-TIMEOUT     = 30
-DELAY       = 0.05      # pausa tra richieste (iPhone: no multi-thread)
 
-# ─── DOWNLOAD ──────────────────────────────────────────────────────────────────
+# Data inizio per simbolo (prima data disponibile su Dukascopy)
+SYMBOL_START = {
+    "EURUSD": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "GBPUSD": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "USDJPY": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "USDCHF": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "AUDUSD": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "NZDUSD": datetime(2004,  1,  4, tzinfo=timezone.utc),
+    "USDCAD": datetime(2004,  1,  4, tzinfo=timezone.utc),
+    "EURJPY": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "GBPJPY": datetime(2003,  5,  4, tzinfo=timezone.utc),
+    "XAUUSD": datetime(2003,  8,  4, tzinfo=timezone.utc),
+}
+
+DATE_END   = datetime(2025, 12, 31, tzinfo=timezone.utc)
+BAR_MINS   = 5          # aggregazione M5
+RETRY      = 3          # tentativi per richiesta fallita
+TIMEOUT    = 30         # secondi timeout HTTP
+DELAY      = 0.12       # pausa tra richieste (sec) — non scendere sotto 0.1
+OUTPUT_DIR = "duka_data"
+
+# ─── DOWNLOAD SINGOLA ORA ─────────────────────────────────────────────────────
 
 def download_hour(symbol: str, price_div: int, dt: datetime):
-    """Scarica 1 ora di tick. Ritorna lista di (timestamp_utc, mid_price)."""
+    """
+    Scarica 1 ora di tick da Dukascopy.
+    Ritorna lista di (datetime_utc, ask, bid, ask_vol, bid_vol) o [] se vuota.
+    """
+    # Nota: Dukascopy usa mesi 0-indexed (gennaio = 00)
     url = (
         f"https://datafeed.dukascopy.com/datafeed/{symbol}/"
         f"{dt.year}/{dt.month - 1:02d}/{dt.day:02d}/{dt.hour:02d}h_ticks.bi5"
     )
+    headers = {"User-Agent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36"}
+
     for attempt in range(RETRY):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
                 raw_gz = resp.read()
 
@@ -57,145 +99,215 @@ def download_hour(symbol: str, price_div: int, dt: datetime):
             n   = len(raw) // 20
             ticks = []
             for i in range(n):
-                ms, ask, bid, _, _ = struct.unpack(">IIIff", raw[i * 20: i * 20 + 20])
-                ts  = dt + timedelta(milliseconds=int(ms))
-                mid = (ask + bid) / 2 / price_div
-                ticks.append((ts, mid))
+                ms, ask_i, bid_i, ask_vol, bid_vol = struct.unpack(
+                    ">IIIff", raw[i * 20: i * 20 + 20]
+                )
+                ts      = dt + timedelta(milliseconds=int(ms))
+                ask     = ask_i   / price_div
+                bid     = bid_i   / price_div
+                ticks.append((ts, ask, bid, float(ask_vol), float(bid_vol)))
             return ticks
 
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return []
+                return []   # ora vuota: weekend, notte, festivo
             time.sleep(2 ** attempt)
+        except urllib.error.URLError:
+            time.sleep(2 ** attempt)
+        except lzma.LZMAError:
+            return []       # file corrotto
         except Exception:
             time.sleep(2 ** attempt)
+
     return []
 
-# ─── AGGREGAZIONE M5 ───────────────────────────────────────────────────────────
+
+# ─── AGGREGAZIONE M5 ──────────────────────────────────────────────────────────
 
 def ticks_to_m5(ticks):
-    """Aggrega tick in candele M5. Input: [(datetime, price), ...]"""
-    bars = defaultdict(list)
-    for ts, price in ticks:
-        # arrotonda al bar M5 precedente
+    """
+    Aggrega tick in candele M5.
+    Input:  [(datetime, ask, bid, ask_vol, bid_vol), ...]
+    Output: {bar_datetime: [open, high, low, close, volume], ...}
+    Volume = somma (ask_vol + bid_vol) / 2 per tick
+    """
+    bars = {}
+    for ts, ask, bid, ask_vol, bid_vol in ticks:
+        mid = (ask + bid) / 2
+        vol = (ask_vol + bid_vol) / 2
+
+        # Arrotonda al multiplo di BAR_MINS precedente
         floored = ts.replace(second=0, microsecond=0)
         mins    = floored.minute - (floored.minute % BAR_MINS)
         bar_ts  = floored.replace(minute=mins)
-        bars[bar_ts].append(price)
 
-    result = {}
-    for bar_ts, prices in bars.items():
-        result[bar_ts] = {
-            "open":   prices[0],
-            "high":   max(prices),
-            "low":    min(prices),
-            "close":  prices[-1],
-            "volume": len(prices),
-        }
-    return result
+        if bar_ts not in bars:
+            bars[bar_ts] = [mid, mid, mid, mid, vol]    # O H L C V
+        else:
+            if mid > bars[bar_ts][1]: bars[bar_ts][1] = mid   # H
+            if mid < bars[bar_ts][2]: bars[bar_ts][2] = mid   # L
+            bars[bar_ts][3] = mid                              # C
+            bars[bar_ts][4] += vol                             # V
 
-# ─── RESUME: legge ultima data dal CSV ─────────────────────────────────────────
+    return bars
 
-def get_last_date(filepath):
-    """Ritorna l'ultima datetime nel CSV, o None se il file non esiste."""
-    if not os.path.exists(filepath):
+
+# ─── RESUME: file di progresso separato (veloce anche su CSV grandi) ──────────
+
+def progress_file(symbol):
+    return os.path.join(OUTPUT_DIR, f"{symbol}_progress.txt")
+
+def load_progress(symbol):
+    """Ritorna l'ultimo giorno completato (datetime) o None."""
+    pf = progress_file(symbol)
+    if not os.path.exists(pf):
         return None
-    last = None
-    with open(filepath, "r") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if row and row[0] != "datetime":
-                try:
-                    last = datetime.fromisoformat(row[0]).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    pass
-    return last
+    try:
+        with open(pf) as f:
+            line = f.read().strip()
+        if line:
+            return datetime.strptime(line, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except Exception:
+        pass
+    return None
 
-# ─── SCRITTURA CSV ─────────────────────────────────────────────────────────────
+def save_progress(symbol, date: datetime):
+    with open(progress_file(symbol), "w") as f:
+        f.write(date.strftime("%Y-%m-%d"))
 
-def write_bars(bars, filepath, append=False):
+
+# ─── SCRITTURA CSV ────────────────────────────────────────────────────────────
+
+def write_bars(bars: dict, filepath: str, append: bool):
     mode = "a" if append else "w"
     with open(filepath, mode, newline="") as f:
         writer = csv.writer(f)
         if not append:
             writer.writerow(["datetime", "open", "high", "low", "close", "volume"])
         for ts in sorted(bars.keys()):
-            b = bars[ts]
+            o, h, l, c, v = bars[ts]
+            fmt = ".5f" if o < 100 else ".3f"    # 5 dec forex, 3 dec gold/JPY
             writer.writerow([
                 ts.strftime("%Y-%m-%d %H:%M:%S"),
-                f"{b['open']:.3f}",
-                f"{b['high']:.3f}",
-                f"{b['low']:.3f}",
-                f"{b['close']:.3f}",
-                b["volume"],
+                format(o, fmt),
+                format(h, fmt),
+                format(l, fmt),
+                format(c, fmt),
+                f"{v:.2f}",
             ])
 
-# ─── MAIN ──────────────────────────────────────────────────────────────────────
 
-def download_symbol(symbol: str, price_div: int):
-    output_file = f"{symbol}_M5.csv"
-    print(f"\n{'='*50}")
-    print(f"  {symbol} M{BAR_MINS}")
-    print(f"  Output: {output_file}")
+# ─── DOWNLOAD COMPLETO PER SIMBOLO ────────────────────────────────────────────
 
-    last = get_last_date(output_file)
-    if last:
-        start = last.replace(minute=0, second=0, microsecond=0)
-        print(f"  Resume da: {start}")
-        append_mode = True
+def download_symbol(symbol: str):
+    price_div   = SYMBOLS[symbol]
+    output_file = os.path.join(OUTPUT_DIR, f"{symbol}_M5.csv")
+
+    # Determina punto di partenza
+    last_done = load_progress(symbol)
+    if last_done:
+        start_date = last_done + timedelta(days=1)
+        append     = True
+        print(f"  RESUME da {start_date.date()}")
     else:
-        start = DATE_START
-        append_mode = False
+        start_date = SYMBOL_START.get(symbol, datetime(2003, 5, 4, tzinfo=timezone.utc))
+        append     = os.path.exists(output_file)
+        print(f"  Inizio da {start_date.date()}")
 
-    hours = []
-    dt = start
-    while dt <= DATE_END:
-        if dt.weekday() != 6:
-            hours.append(dt)
-        dt += timedelta(hours=1)
+    if start_date > DATE_END:
+        print(f"  Gia' completo fino a {DATE_END.date()}")
+        return
 
-    total = len(hours)
-    print(f"  Ore da scaricare: {total:,}")
+    # Lista giorni da scaricare (escludi domeniche)
+    days = []
+    d = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    while d <= DATE_END:
+        if d.weekday() != 6:   # 6 = domenica
+            days.append(d)
+        d += timedelta(days=1)
 
-    accumulated = {}
-    written     = 0
-    flush_every = 24
+    total_days = len(days)
+    print(f"  Giorni rimanenti: {total_days:,}  ({total_days // 252:.0f} anni)")
+    print(f"  Stima tempo: {total_days * 24 * DELAY / 3600:.1f}h (in background)")
+    print()
 
-    for i, hour_dt in enumerate(hours, 1):
-        ticks = download_hour(symbol, price_div, hour_dt)
-        if ticks:
-            bars = ticks_to_m5(ticks)
-            accumulated.update(bars)
+    # ── Loop principale: giorno per giorno ─────────────────────────────────────
+    day_bars_total = 0
 
-        if i % 100 == 0 or i == total:
-            pct = i / total * 100
-            print(f"  {i:,}/{total:,} ({pct:.1f}%) — {hour_dt.date()} — bars: {len(accumulated):,}")
+    for day_idx, day in enumerate(days, 1):
+        day_ticks = []
 
-        if len(accumulated) >= flush_every * 12:
-            write_bars(accumulated, output_file, append=append_mode)
-            written    += len(accumulated)
-            accumulated = {}
-            append_mode = True
+        for hour in range(24):
+            hour_dt = day.replace(hour=hour)
+            ticks   = download_hour(symbol, price_div, hour_dt)
+            day_ticks.extend(ticks)
+            time.sleep(DELAY)
 
-        time.sleep(DELAY)
+        # Aggrega e scrivi le candele del giorno
+        day_bars = ticks_to_m5(day_ticks)
+        if day_bars:
+            write_bars(day_bars, output_file, append=append)
+            append          = True
+            day_bars_total += len(day_bars)
 
-    if accumulated:
-        write_bars(accumulated, output_file, append=append_mode)
-        written += len(accumulated)
+        # Salva progresso (resume sicuro)
+        save_progress(symbol, day)
 
-    print(f"  Completato! Candele: {written:,} → {output_file}")
+        # Aggiorna schermo ogni giorno (sovrascrive la riga)
+        pct = day_idx / total_days * 100
+        eta_h = (total_days - day_idx) * 24 * DELAY / 3600
+        print(
+            f"  {day.strftime('%Y-%m-%d')}  [{pct:5.1f}%]  "
+            f"bar_oggi={len(day_bars):3d}  tot={day_bars_total:,}  "
+            f"ETA≈{eta_h:.1f}h        ",
+            end="\r", flush=True
+        )
 
+    print(f"\n  Completato! Candele totali: {day_bars_total:,} → {output_file}")
+
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print(f"Dukascopy iPhone Downloader — M{BAR_MINS}")
-    print(f"Periodo: {DATE_START.date()} → {DATE_END.date()}")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for symbol, price_div in SYMBOLS.items():
-        download_symbol(symbol, price_div)
+    # Simboli da riga di comando, o tutti se non specificato
+    if len(sys.argv) > 1:
+        requested = [s.upper() for s in sys.argv[1:]]
+        unknown   = [s for s in requested if s not in SYMBOLS]
+        if unknown:
+            print(f"Simboli non riconosciuti: {unknown}")
+            print(f"Simboli disponibili: {list(SYMBOLS.keys())}")
+            sys.exit(1)
+        to_download = {s: SYMBOLS[s] for s in requested}
+    else:
+        to_download = SYMBOLS
+
+    print("=" * 60)
+    print("  Dukascopy Downloader — Termux Edition")
+    print(f"  Periodo: 2003 → {DATE_END.date()}")
+    print(f"  Output:  {os.path.abspath(OUTPUT_DIR)}/")
+    print(f"  Simboli: {list(to_download.keys())}")
+    print("=" * 60)
+    print()
+    print("  Suggerimento per background:")
+    print("  nohup python3 dukascopy_iphone.py EURUSD > eurusd.log 2>&1 &")
+    print("  tail -f eurusd.log")
+    print()
+
+    for symbol in to_download:
+        print(f"\n{'─'*50}")
+        print(f"  Simbolo: {symbol}")
+        print(f"{'─'*50}")
+        download_symbol(symbol)
+
+    print("\nTutti i simboli completati.")
+    print(f"File CSV salvati in: {os.path.abspath(OUTPUT_DIR)}/")
+
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nInterrotto. Riavvia per continuare (resume automatico).")
+        print("\n\nInterrotto. Riavvia per continuare (resume automatico).")
         sys.exit(0)

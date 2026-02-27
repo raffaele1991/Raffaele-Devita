@@ -55,7 +55,7 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002, "GBPUSD": 0.0002, "USD
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
 USE_ML_FILTER           = True   # True = filtra segnali con ML | False = solo SMC
-ML_CONFIDENCE_THRESHOLD = 0.42   # soglia confidence calibrata
+ML_CONFIDENCE_THRESHOLD = 0.52   # soglia confidence (alzata da 0.42: precision ~55%, 0.42 era troppo permissiva)
 
 # ── FILTRI CONFLUENZA SMC ──────────────────────────────────────────────────────
 # Backtest out-of-sample (2026-01-01 → 2026-02-25, XAUUSD) ha dimostrato:
@@ -85,7 +85,8 @@ SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equ
 #   TOTALE COMBINATO              → 194 tr in 57 giorni (~3.4 trade/giorno)
 #
 # Training 2026-02-27 su dati completi (AUC-ROC): EURUSD=0.717, USDJPY=0.711, GBPUSD=0.706, XAUUSD=0.705
-# USDJPY ora ha 1.185.287 candele (2009-2025) e AUC=0.711 → soglia allineata agli altri simboli.
+# Soglia alzata 0.42→0.52: precision modelli ~55%, soglia 0.42 lasciava passare segnali borderline
+# (win rate storico ~37%, con 0.42 si approva quasi un coin-flip). 0.52 seleziona solo la fascia alta.
 SYMBOL_FILTER_CONFIGS: dict = {
     "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
     "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
@@ -97,10 +98,10 @@ SYMBOL_FILTER_CONFIGS: dict = {
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
 # Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
 ML_CONFIDENCE_BY_SYMBOL: dict = {
-    "XAUUSD": 0.42,
-    "EURUSD": 0.42,
-    "GBPUSD": 0.42,
-    "USDJPY": 0.42,
+    "XAUUSD": 0.52,
+    "EURUSD": 0.52,
+    "GBPUSD": 0.52,
+    "USDJPY": 0.52,
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
@@ -159,6 +160,9 @@ SL_MAX_MULTIPLIER    = 3.0   # se SL aggiustato > ATR * 3.0, il trade viene skip
 
 # Consecutive losses protection
 MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
+
+# Cooldown per simbolo dopo uno stop loss (minuti)
+SYMBOL_COOLDOWN_MINUTES  = 60     # non rientrare sullo stesso simbolo per 60 min dopo SL
 
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
