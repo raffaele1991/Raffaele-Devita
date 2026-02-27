@@ -1,12 +1,14 @@
 """
-Dukascopy Historical Data Downloader
-======================================
-Scarica dati tick da Dukascopy (gratuiti) per tutti i simboli configurati
-e li aggrega in candele M5 salvate come CSV compatibili col sistema.
-
-Copertura Dukascopy:
-  EURUSD / GBPUSD / USDJPY → dal 2003-05
-  XAUUSD                   → dal 2003-08
+Dukascopy Historical Data Downloader — TURBO
+=============================================
+Ottimizzazioni rispetto alla versione base:
+  1. Tutti i simboli scaricati in parallelo nello stesso pool (non sequenziali)
+  2. Aggregazione tick→M5 inline nel worker (zero pandas per ora, ~100x meno RAM)
+  3. WORKERS=60, HTTPAdapter pool_maxsize=80 (connessioni realmente parallele)
+  4. TIMEOUT=12 (fail veloce sulle ore vuote che tardano a rispondere)
+  5. struct.Struct cached + iter_unpack (no slicing per tick)
+  6. Bar bucket calcolato con aritmetica intera (no datetime.replace per tick)
+  7. Nessun pd.concat di milioni di tick — accumulo dict leggero
 
 Uso:
     python trading_system/data/dukascopy_downloader.py
@@ -23,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
@@ -33,167 +36,144 @@ logger = logging.getLogger(__name__)
 
 # ─── CONFIGURAZIONE ────────────────────────────────────────────────────────────
 
-# Divisore prezzi per simbolo (Dukascopy scala i prezzi come interi)
-# Forex a 5 decimali: divide per 100000 (es. EURUSD: 112345 → 1.12345)
-# JPY e Gold a 3 decimali: divide per 1000 (es. USDJPY: 156789 → 156.789)
 PRICE_DIVISOR = {
-    "XAUUSD": 1000,     # oro: 1518600 / 1000 = 1518.600
-    "EURUSD": 100000,   # forex 5 dec: 112000 / 100000 = 1.12000
+    "XAUUSD": 1000,
+    "EURUSD": 100000,
     "GBPUSD": 100000,
-    "USDJPY": 1000,     # JPY 3 dec: 156789 / 1000 = 156.789
+    "USDJPY": 1000,
 }
 
-# Data di inizio per-simbolo (Dukascopy non ha dati prima di queste date)
 SYMBOL_START = {
-    "EURUSD": datetime(2003,  5, 1, tzinfo=timezone.utc),
-    "GBPUSD": datetime(2003,  5, 1, tzinfo=timezone.utc),
-    "USDJPY": datetime(2003,  5, 1, tzinfo=timezone.utc),
-    "XAUUSD": datetime(2003,  8, 1, tzinfo=timezone.utc),
+    "EURUSD": datetime(2003, 5, 1, tzinfo=timezone.utc),
+    "GBPUSD": datetime(2003, 5, 1, tzinfo=timezone.utc),
+    "USDJPY": datetime(2003, 5, 1, tzinfo=timezone.utc),
+    "XAUUSD": datetime(2003, 8, 1, tzinfo=timezone.utc),
 }
 
-# Fine periodo = oggi (dinamico)
 DATE_END = datetime.now(tz=timezone.utc).replace(hour=23, minute=59, second=59)
 
-WORKERS    = 30    # thread paralleli (aumentati per dataset grande)
-RETRY      = 3     # tentativi per file
-TIMEOUT    = 30    # secondi timeout HTTP
+WORKERS = 60   # thread paralleli — tutti i simboli insieme
+RETRY   = 2    # tentativi per ora fallita
+TIMEOUT = 12   # secondi: fail veloce sulle ore vuote
+
+# ─── HTTP SESSION con pool grande ──────────────────────────────────────────────
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
+_adapter = HTTPAdapter(pool_connections=80, pool_maxsize=80, max_retries=0)
+SESSION.mount("https://", _adapter)
+
+# Struct pre-compilato: evita ri-parsing del formato ad ogni chiamata
+_TICK = struct.Struct(">IIIff")
+_5MIN_MS = 300_000  # 5 minuti in millisecondi
 
 
-# ─── DOWNLOAD SINGOLA ORA ──────────────────────────────────────────────────────
+# ─── WORKER: download + aggregazione M5 inline ─────────────────────────────────
 
-def download_hour(symbol: str, dt: datetime) -> pd.DataFrame | None:
+def download_hour(symbol: str, dt: datetime) -> dict:
     """
-    Scarica e decomprime 1 ora di tick data da Dukascopy.
-    Ritorna DataFrame con colonne [timestamp, price] o None se vuoto/assente.
+    Scarica 1 ora di tick e aggrega inline in barre M5.
+    Ritorna dict {bar_datetime: [O, H, L, C, tick_count]} — vuoto se nessun dato.
+    Non crea mai un DataFrame: usa solo dict e aritmetica intera.
     """
-    # Mesi 0-indexed in Dukascopy
     url = (
         f"https://datafeed.dukascopy.com/datafeed/{symbol}/"
         f"{dt.year}/{dt.month - 1:02d}/{dt.day:02d}/{dt.hour:02d}h_ticks.bi5"
     )
+    divisor = PRICE_DIVISOR.get(symbol, 100000)
 
     for attempt in range(RETRY):
         try:
             r = SESSION.get(url, timeout=TIMEOUT)
-            if r.status_code == 404 or len(r.content) == 0:
-                return None  # ora vuota (notte/weekend)
+            if r.status_code == 404 or not r.content:
+                return {}
             if r.status_code != 200:
                 time.sleep(1)
                 continue
 
             raw = lzma.decompress(r.content)
-            n   = len(raw) // 20
-            if n == 0:
-                return None
+            if not raw:
+                return {}
 
-            divisor = PRICE_DIVISOR.get(symbol, 100000)
-            records = []
-            for i in range(n):
-                ms, ask, bid, _, _ = struct.unpack(">IIIff", raw[i * 20: i * 20 + 20])
-                ts  = dt + timedelta(milliseconds=int(ms))
-                mid = (ask + bid) / 2 / divisor
-                records.append((ts, mid))
+            # Ora di inizio in ms epoch — per calcolare bar_ts senza datetime.replace
+            hour_epoch_ms = int(dt.timestamp() * 1000)
 
-            return pd.DataFrame(records, columns=["timestamp", "price"])
+            bars: dict = {}
+            for ms_raw, ask_i, bid_i, _, _ in _TICK.iter_unpack(raw):
+                mid = (ask_i + bid_i) / 2 / divisor
+                # Bar bucket: arrotonda ms al multiplo di 5 min precedente
+                bar_epoch_ms = (hour_epoch_ms + int(ms_raw)) // _5MIN_MS * _5MIN_MS
+                b = bars.get(bar_epoch_ms)
+                if b is None:
+                    bars[bar_epoch_ms] = [mid, mid, mid, mid, 1]
+                else:
+                    if mid > b[1]: b[1] = mid  # H
+                    if mid < b[2]: b[2] = mid  # L
+                    b[3] = mid                 # C
+                    b[4] += 1                  # volume (tick count)
 
+            return bars
+
+        except lzma.LZMAError:
+            return {}
         except Exception:
-            time.sleep(2 ** attempt)
+            if attempt < RETRY - 1:
+                time.sleep(2 ** attempt)
 
-    return None
-
-
-# ─── AGGREGAZIONE M5 ───────────────────────────────────────────────────────────
-
-def ticks_to_m5(ticks: pd.DataFrame) -> pd.DataFrame:
-    """Aggrega tick in candele M5 OHLCV."""
-    ticks = ticks.set_index("timestamp").sort_index()
-    ticks["volume"] = 1  # ogni tick = 1 unità di volume
-
-    ohlcv = ticks["price"].resample("5min").ohlc()
-    ohlcv["volume"] = ticks["volume"].resample("5min").sum()
-    ohlcv = ohlcv.dropna()
-    return ohlcv
+    return {}
 
 
-# ─── DOWNLOAD COMPLETO PER SIMBOLO ────────────────────────────────────────────
+# ─── MERGE BARRE IN MEMORIA ────────────────────────────────────────────────────
 
-def download_symbol(symbol: str):
-    date_start = SYMBOL_START.get(symbol, datetime(2003, 5, 1, tzinfo=timezone.utc))
+def _merge_into(target: dict, source: dict) -> None:
+    """Merges source bars into target in-place (chiamato dal main thread)."""
+    for key, (o, h, l, c, v) in source.items():
+        b = target.get(key)
+        if b is None:
+            target[key] = [o, h, l, c, v]
+        else:
+            if h > b[1]: b[1] = h
+            if l < b[2]: b[2] = l
+            b[3] = c
+            b[4] += v
 
-    logger.info(f"\n{'='*60}")
-    logger.info(f"  Dukascopy download: {symbol}")
-    logger.info(f"  Periodo: {date_start.date()} → {DATE_END.date()}")
-    logger.info(f"{'='*60}")
 
-    # Genera lista di tutte le ore nel periodo
-    hours = []
-    dt = date_start
-    while dt <= DATE_END:
-        # Salta domeniche (mercato chiuso)
-        if dt.weekday() != 6:
-            hours.append(dt)
-        dt += timedelta(hours=1)
+# ─── CONVERSIONE BARS DICT → DATAFRAME ─────────────────────────────────────────
 
-    total = len(hours)
-    logger.info(f"  Ore da scaricare: {total:,}")
+def _bars_to_df(bars: dict) -> pd.DataFrame:
+    rows = sorted(bars.items())
+    df = pd.DataFrame(
+        [(datetime.utcfromtimestamp(k / 1000).replace(tzinfo=timezone.utc),
+          o, h, l, c, v)
+         for k, (o, h, l, c, v) in rows],
+        columns=["datetime", "open", "high", "low", "close", "volume"],
+    ).set_index("datetime")
+    return df
 
-    # Download parallelo
-    all_ticks = []
-    done = 0
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        futures = {pool.submit(download_hour, symbol, h): h for h in hours}
-        for fut in as_completed(futures):
-            result = fut.result()
-            if result is not None and len(result) > 0:
-                all_ticks.append(result)
-            done += 1
-            if done % 500 == 0:
-                logger.info(f"  Progresso: {done:,}/{total:,} ore ({done/total*100:.1f}%)")
+# ─── SALVATAGGIO CSV ───────────────────────────────────────────────────────────
 
-    if not all_ticks:
-        logger.error(f"  Nessun dato ricevuto per {symbol}")
-        return
-
-    logger.info(f"  Aggregazione tick → M5...")
-    ticks = pd.concat(all_ticks).sort_values("timestamp").drop_duplicates("timestamp")
-    m5    = ticks_to_m5(ticks)
-
-    logger.info(f"  Candele M5 generate: {len(m5):,}")
-    logger.info(f"  Periodo: {m5.index[0]} → {m5.index[-1]}")
-
-    # Salva CSV
+def _save_dukascopy(symbol: str, bars: dict) -> str:
     out_path = os.path.join(ROOT, config.DATA_DIR, f"{symbol}_dukascopy.csv")
-    m5.index.name = "datetime"
-    m5.to_csv(out_path)
-    logger.info(f"  Salvato: {out_path}")
-
+    df = _bars_to_df(bars)
+    df.index.name = "datetime"
+    df.to_csv(out_path)
+    logger.info(f"  {symbol}: {len(df):,} candele M5 → {out_path}")
     return out_path
 
 
 # ─── MERGE CON DATI MT5 ESISTENTI ─────────────────────────────────────────────
 
-def merge_with_mt5(symbol: str):
-    """
-    Unisce dati Dukascopy (2020-2024) con dati MT5 (2024-2026)
-    e salva un CSV combinato pronto per il training.
-    """
-    data_dir = os.path.join(ROOT, config.DATA_DIR)
-
+def merge_with_mt5(symbol: str) -> None:
+    data_dir  = os.path.join(ROOT, config.DATA_DIR)
     duka_path = os.path.join(data_dir, f"{symbol}_dukascopy.csv")
     mt5_path  = os.path.join(data_dir, f"{symbol}_M5.csv")
 
     if not os.path.exists(duka_path):
         logger.error(f"File Dukascopy non trovato: {duka_path}")
         return
-    if not os.path.exists(mt5_path):
-        logger.warning(f"File MT5 non trovato: {mt5_path} — uso solo Dukascopy")
 
     dfs = []
-
     df_duka = pd.read_csv(duka_path, index_col="datetime", parse_dates=True)
     df_duka.columns = [c.lower() for c in df_duka.columns]
     dfs.append(df_duka)
@@ -201,32 +181,71 @@ def merge_with_mt5(symbol: str):
     if os.path.exists(mt5_path):
         df_mt5 = pd.read_csv(mt5_path, index_col="datetime", parse_dates=True)
         df_mt5.columns = [c.lower() for c in df_mt5.columns]
-        df_mt5 = df_mt5[["open", "high", "low", "close", "volume"]]
-        dfs.append(df_mt5)
+        dfs.append(df_mt5[["open", "high", "low", "close", "volume"]])
+    else:
+        logger.warning(f"File MT5 non trovato: {mt5_path} — uso solo Dukascopy")
 
     combined = pd.concat(dfs).sort_index()
     combined = combined[~combined.index.duplicated(keep="last")]
-    combined = combined[["open", "high", "low", "close", "volume"]]
-
-    out_path = os.path.join(data_dir, f"{symbol}_M5.csv")
-    combined.index.name = "datetime"
-    combined.to_csv(out_path)
-
-    logger.info(f"\n  MERGE {symbol} completato:")
-    logger.info(f"  Candele totali: {len(combined):,}")
-    logger.info(f"  Periodo: {combined.index[0]} → {combined.index[-1]}")
-    logger.info(f"  Salvato in: {out_path}")
+    combined[["open", "high", "low", "close", "volume"]].to_csv(
+        os.path.join(data_dir, f"{symbol}_M5.csv"), index_label="datetime"
+    )
+    logger.info(f"  MERGE {symbol}: {len(combined):,} candele → {mt5_path}")
 
 
 # ─── MAIN ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    start = time.time()
+    t0 = time.time()
 
-    for sym in config.SYMBOLS:
-        download_symbol(sym)
+    symbols = list(config.SYMBOLS)
+
+    # Costruisce lista (symbol, hour_dt) per tutti i simboli insieme
+    all_jobs: list[tuple[str, datetime]] = []
+    for sym in symbols:
+        start = SYMBOL_START.get(sym, datetime(2003, 5, 1, tzinfo=timezone.utc))
+        dt = start
+        while dt <= DATE_END:
+            if dt.weekday() != 6:   # salta domeniche
+                all_jobs.append((sym, dt))
+            dt += timedelta(hours=1)
+
+    total = len(all_jobs)
+    logger.info(f"\n{'='*60}")
+    logger.info(f"  TURBO Dukascopy — {len(symbols)} simboli in parallelo")
+    logger.info(f"  Ore totali da scaricare: {total:,}  |  Worker: {WORKERS}")
+    logger.info(f"  Stima: ~{total / WORKERS * 0.4 / 60:.0f} min")
+    logger.info(f"{'='*60}\n")
+
+    # Accumulatori M5 per simbolo (dict leggeri, niente DataFrame in volo)
+    bars_by_symbol: dict[str, dict] = {sym: {} for sym in symbols}
+    done = 0
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {
+            pool.submit(download_hour, sym, h): sym
+            for sym, h in all_jobs
+        }
+        for fut in as_completed(futures):
+            sym  = futures[fut]
+            data = fut.result()
+            if data:
+                _merge_into(bars_by_symbol[sym], data)
+            done += 1
+            if done % 5_000 == 0:
+                pct = done / total * 100
+                eta = (total - done) / WORKERS * 0.4 / 60
+                logger.info(f"  {done:,}/{total:,}  ({pct:.1f}%)  ETA≈{eta:.0f}min")
+
+    logger.info("\nDownload completato — salvataggio CSV...")
+
+    for sym in symbols:
+        if not bars_by_symbol[sym]:
+            logger.error(f"  Nessun dato per {sym}")
+            continue
+        _save_dukascopy(sym, bars_by_symbol[sym])
         merge_with_mt5(sym)
 
-    elapsed = time.time() - start
-    logger.info(f"\nCompletato in {elapsed/60:.1f} minuti")
+    elapsed = (time.time() - t0) / 60
+    logger.info(f"\nCompletato in {elapsed:.1f} minuti")
     logger.info("Aggiorna TRAIN_CUTOFF_DATE in config.py se necessario, poi ri-esegui train.py")
