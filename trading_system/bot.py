@@ -99,8 +99,9 @@ def initialize():
 # ─── STATE FILE ───────────────────────────────────────────────────────────────
 
 # Stato per la dashboard (aggiornato ad ogni ciclo)
-_symbol_signals: dict = {}
-_block_reasons:  list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
+_symbol_signals:    dict = {}
+_block_reasons:     list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
+_symbol_last_loss:  dict = {}   # {symbol: datetime_dell_ultimo_SL}
 
 
 def _reason(level: str, msg: str):
@@ -184,6 +185,41 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
         logger.debug(f"[Dashboard] Errore scrittura state.json: {e}")
 
 
+def _sync_risk_from_mt5(risk_manager, connector):
+    """
+    Sincronizza consecutive_losses e trades_today dal reale storico MT5.
+    Aggiorna anche _symbol_last_loss con l'ultimo SL per simbolo.
+    Chiamata all'inizio di ogni ciclo — necessaria perché register_trade_close()
+    non viene chiamato automaticamente quando MT5 chiude un trade per SL/TP.
+    """
+    global _symbol_last_loss
+    try:
+        closed_today = connector.get_closed_deals_today()
+
+        # trades_today = solo i deal di chiusura
+        risk_manager.trades_today = len(closed_today)
+
+        # consecutive_losses: conta le perdite consecutive partendo dall'ultima
+        consecutive = 0
+        for t in reversed(closed_today):
+            if t["result"] == "loss":
+                consecutive += 1
+            else:
+                break
+        risk_manager.consecutive_losses = consecutive
+
+        # Registra l'ultimo SL per simbolo (per cooldown)
+        for t in closed_today:
+            if t["result"] == "loss":
+                sym = t["symbol"].upper()
+                close_dt = datetime.fromisoformat(t["close_time"])
+                if sym not in _symbol_last_loss or close_dt > _symbol_last_loss[sym]:
+                    _symbol_last_loss[sym] = close_dt
+
+    except Exception as e:
+        logger.debug(f"[Sync] Errore sincronizzazione MT5: {e}")
+
+
 def check_control() -> str:
     """
     Legge control.json scritto dalla dashboard.
@@ -216,6 +252,9 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
         equity  = connector.get_account_equity()
         risk_manager.update_balance(balance)
         risk_manager.update_equity(equity)
+
+        # Sincronizza consecutive_losses e last_loss per simbolo dal vero storico MT5
+        _sync_risk_from_mt5(risk_manager, connector)
 
         # ── 1. CHIUSURA EOD ───────────────────────────────────────────────────────
         if now.hour >= config.PROP_CLOSE_EOD_HOUR:
@@ -286,6 +325,17 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     # Asian KZ: opera solo sui simboli abilitati (es. USDJPY)
     if session == "ASIAN" and symbol.upper() not in [s.upper() for s in config.ASIAN_SESSION_SYMBOLS]:
         return
+
+    # Cooldown per simbolo dopo uno SL
+    cooldown_mins = getattr(config, "SYMBOL_COOLDOWN_MINUTES", 60)
+    last_loss_dt  = _symbol_last_loss.get(symbol.upper())
+    if last_loss_dt:
+        elapsed = (datetime.now() - last_loss_dt).total_seconds() / 60
+        if elapsed < cooldown_mins:
+            remaining = int(cooldown_mins - elapsed)
+            logger.info(f"[BOT] {symbol}: cooldown SL attivo – {remaining} min rimasti")
+            _reason("info", f"{symbol}: cooldown SL – riprende tra {remaining} min")
+            return
 
     # Recupera ultime 200 candele M5
     df = connector.get_ohlcv(symbol, timeframe=config.TIMEFRAME, n_candles=200)

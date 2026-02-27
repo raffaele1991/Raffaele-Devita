@@ -160,6 +160,9 @@ SL_MAX_MULTIPLIER    = 3.0   # se SL aggiustato > ATR * 3.0, il trade viene skip
 # Consecutive losses protection
 MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
 
+# Cooldown per simbolo dopo uno stop loss (minuti)
+SYMBOL_COOLDOWN_MINUTES  = 60     # non rientrare sullo stesso simbolo per 60 min dopo SL
+
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
 MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo
