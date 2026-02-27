@@ -26,6 +26,7 @@ API:
 """
 
 import os
+import re
 import sys
 import json
 import glob
@@ -368,7 +369,7 @@ _SETTINGS_DEFAULTS = {
     "max_daily_dd_pct":          3.0,
     "max_total_dd_pct":          7.0,
     "min_rr":                    2.0,
-    "ml_confidence_threshold":   0.65,
+    "ml_confidence_threshold":   0.42,
     "ml_enabled":                True,
     "telegram_token":            "",
     "telegram_chat_id":          "",
@@ -426,8 +427,18 @@ def _patch_config(data: dict) -> None:
         if not written:
             new_lines.append(line)
 
+    # Aggiorna anche ML_CONFIDENCE_BY_SYMBOL (ha priorità sul valore globale nel bot)
+    ml_val = str(float(data.get("ml_confidence_threshold", 0.42)))
+    content = "".join(new_lines)
+    content = re.sub(
+        r'(ML_CONFIDENCE_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{)([^}]*?)(\})',
+        lambda m: m.group(1) + re.sub(r'(:\s*)[\d.]+', r'\g<1>' + ml_val, m.group(2)) + m.group(3),
+        content,
+        flags=re.DOTALL,
+    )
+
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
+        f.write(content)
 
 
 def _save_settings(data: dict) -> None:

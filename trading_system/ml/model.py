@@ -40,6 +40,8 @@ class SMCMLModel:
             _n_jobs = os.cpu_count() or 4
         else:
             _n_jobs = n_threads
+        # Su Windows LightGBM ignora n_jobs — forza OpenMP esplicitamente
+        os.environ["OMP_NUM_THREADS"] = str(_n_jobs)
         self.model     = LGBMClassifier(
             n_estimators      = config.ML_N_ESTIMATORS,
             num_leaves        = config.ML_NUM_LEAVES,

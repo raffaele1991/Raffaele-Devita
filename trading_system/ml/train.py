@@ -15,9 +15,18 @@ oppure:
 
 import os
 import sys
+
+# DEVE essere prima di qualsiasi import che carichi LightGBM/OpenMP
+_cpu = str(os.cpu_count() or 4)
+os.environ["OMP_NUM_THREADS"]        = _cpu
+os.environ["OPENBLAS_NUM_THREADS"]   = _cpu
+os.environ["MKL_NUM_THREADS"]        = _cpu
+os.environ["LIGHTGBM_NUM_THREADS"]   = _cpu
+
 import glob
 import pandas as pd
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 # Aggiungi root al path
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -200,16 +209,12 @@ if __name__ == "__main__":
     print(f"CSV trovati: {[os.path.basename(f) for f in csv_files]}")
     os.makedirs(MODELS_DIR_ABS, exist_ok=True)
 
-    cpu_count  = os.cpu_count() or 4
-    n_workers  = min(len(config.SYMBOLS), cpu_count)
-    n_threads  = max(1, cpu_count // n_workers)
-    print(f"CPU disponibili: {cpu_count} — simboli in parallelo: {n_workers} — thread/simbolo: {n_threads}")
-
-    def _train(symbol):
-        train_symbol(symbol, n_threads=n_threads)
+    cpu_count = os.cpu_count() or 4
+    n_workers = min(len(config.SYMBOLS), cpu_count)
+    print(f"CPU disponibili: {cpu_count} — {n_workers} simboli in parallelo (1 core ciascuno)")
 
     with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        list(executor.map(_train, config.SYMBOLS))
+        list(executor.map(partial(train_symbol, n_threads=1), config.SYMBOLS))
 
     print("\n\nTraining completato!")
     print("Ora puoi avviare il bot con: python trading_system/bot.py")

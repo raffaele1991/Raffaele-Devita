@@ -75,17 +75,17 @@ SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equ
 #   XAUUSD – FVG abbondante (54% segnali), efficace come filtro
 #   EURUSD – FVG rarissimo (2%), inutilizzabile; Liq Sweep abbondante (96%)
 #   GBPUSD – volatile, alta liquidità; configurazione analoga a EURUSD
-#   USDJPY – trend follower, reattivo a macro; dati limitati (14 mesi M5) → soglia ML alta
+#   USDJPY – trend follower, reattivo a macro; 1.185.287 candele (2009-2025)
 #
-# Backtest out-of-sample 2026-01-01→2026-02-26:
+# Backtest out-of-sample 2026-01-01→2026-02-26 (modello precedente, dati ridotti):
 #   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Net=+3.37%  Sharpe=1.48
 #   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Net=+4.19%  Sharpe=2.94
 #   GBPUSD: ML + LiqSweep + HTF  → 49 tr  WR=44.9%  PF=1.07  Net=+0.77%  Sharpe=0.48
-#   USDJPY: ML + LiqSweep + HTF  → 55 tr  WR=38.2%  PF=0.87  Net=-2.00%  (dati insufficienti)
+#   USDJPY: ML + LiqSweep + HTF  → da rivalutare con nuovo modello (dati ora completi)
 #   TOTALE COMBINATO              → 194 tr in 57 giorni (~3.4 trade/giorno)
 #
-# NOTA USDJPY: modello addestrato su soli 14 mesi M5. Necessari >2 anni per WR stabile.
-# Mantenuto in config ma soglia ML elevata (0.58) per ridurre i segnali al minimo.
+# Training 2026-02-27 su dati completi (AUC-ROC): EURUSD=0.717, USDJPY=0.711, GBPUSD=0.706, XAUUSD=0.705
+# USDJPY ora ha 1.185.287 candele (2009-2025) e AUC=0.711 → soglia allineata agli altri simboli.
 SYMBOL_FILTER_CONFIGS: dict = {
     "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
     "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
@@ -95,12 +95,12 @@ SYMBOL_FILTER_CONFIGS: dict = {
 
 # ── SOGLIA ML PER-SIMBOLO ──────────────────────────────────────────────────────
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
-# USDJPY usa 0.58 per ridurre i falsi positivi (dati training limitati).
+# Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
 ML_CONFIDENCE_BY_SYMBOL: dict = {
     "XAUUSD": 0.42,
     "EURUSD": 0.42,
     "GBPUSD": 0.42,
-    "USDJPY": 0.58,
+    "USDJPY": 0.42,
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
