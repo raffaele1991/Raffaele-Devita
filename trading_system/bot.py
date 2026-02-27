@@ -102,6 +102,7 @@ def initialize():
 _symbol_signals:    dict = {}
 _block_reasons:     list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
 _symbol_last_loss:  dict = {}   # {symbol: datetime_dell_ultimo_SL}
+_prev_open_symbols: set  = set()  # simboli con posizioni bot aperte nel ciclo precedente
 
 
 def _reason(level: str, msg: str):
@@ -192,14 +193,30 @@ def _sync_risk_from_mt5(risk_manager, connector):
     Chiamata all'inizio di ogni ciclo — necessaria perché register_trade_close()
     non viene chiamato automaticamente quando MT5 chiude un trade per SL/TP.
     """
-    global _symbol_last_loss
+    global _symbol_last_loss, _prev_open_symbols
     try:
         closed_today = connector.get_closed_deals_today()
 
         # trades_today = deal chiusi + posizioni ancora aperte del bot
         open_pos = connector.get_open_positions() or []
-        bot_open = sum(1 for p in open_pos if getattr(p, "magic", None) == 20250101)
-        risk_manager.trades_today = len(closed_today) + bot_open
+        bot_pos  = [p for p in open_pos if getattr(p, "magic", None) == 20250101]
+        current_open = {getattr(p, "symbol", "").upper() for p in bot_pos}
+        risk_manager.trades_today = len(closed_today) + len(bot_pos)
+
+        # ── Cooldown preventivo ────────────────────────────────────────────────
+        # Se una posizione del bot scompare da open_positions ma il deal non è
+        # ancora visibile in closed_today (ritardo history MT5), il cooldown
+        # normale non scatta e il bot può riaprire immediatamente lo stesso simbolo.
+        # Soluzione: appena rileva la sparizione, imposta _symbol_last_loss = now.
+        # Quando la deal history si aggiorna: se era un WIN rimuove l'entry,
+        # se era un LOSS aggiorna al timestamp preciso.
+        confirmed_symbols = {t["symbol"].upper() for t in closed_today}
+        for sym in _prev_open_symbols - current_open:
+            if sym not in confirmed_symbols:
+                # deal non ancora in history → cooldown preventivo
+                _symbol_last_loss.setdefault(sym, datetime.now())
+                logger.info(f"[Sync] {sym}: posizione chiusa, deal in attesa → cooldown preventivo")
+        _prev_open_symbols = current_open
 
         # consecutive_losses: conta le perdite consecutive partendo dall'ultima
         consecutive = 0
@@ -210,13 +227,16 @@ def _sync_risk_from_mt5(risk_manager, connector):
                 break
         risk_manager.consecutive_losses = consecutive
 
-        # Registra l'ultimo SL per simbolo (per cooldown)
+        # Registra l'ultimo SL per simbolo (cooldown da deal history)
         for t in closed_today:
+            sym = t["symbol"].upper()
             if t["result"] == "loss":
-                sym = t["symbol"].upper()
                 close_dt = datetime.fromisoformat(t["close_time"])
                 if sym not in _symbol_last_loss or close_dt > _symbol_last_loss[sym]:
                     _symbol_last_loss[sym] = close_dt
+            elif t["result"] == "win":
+                # Rimuove cooldown preventivo se la chiusura era un win
+                _symbol_last_loss.pop(sym, None)
 
     except Exception as e:
         logger.debug(f"[Sync] Errore sincronizzazione MT5: {e}")
