@@ -196,8 +196,10 @@ def _sync_risk_from_mt5(risk_manager, connector):
     try:
         closed_today = connector.get_closed_deals_today()
 
-        # trades_today = solo i deal di chiusura
-        risk_manager.trades_today = len(closed_today)
+        # trades_today = deal chiusi + posizioni ancora aperte del bot
+        open_pos = connector.get_open_positions() or []
+        bot_open = sum(1 for p in open_pos if getattr(p, "magic", None) == 20250101)
+        risk_manager.trades_today = len(closed_today) + bot_open
 
         # consecutive_losses: conta le perdite consecutive partendo dall'ultima
         consecutive = 0

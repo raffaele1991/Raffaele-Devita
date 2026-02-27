@@ -86,7 +86,7 @@ class OrderExecutor:
         trade = TradeRecord(
             symbol=symbol,
             direction=direction,
-            entry=result.price,
+            entry=result.price if result.price else price,
             sl=sl_price,
             tp=tp_price,
             lot_size=lot_size,
@@ -95,7 +95,7 @@ class OrderExecutor:
 
         logger.info(
             f"[Exec] ORDINE APERTO: {symbol} {direction.upper()} "
-            f"lot={lot_size} entry={result.price:.5f} "
+            f"lot={lot_size} entry={result.price if result.price else price:.5f} "
             f"sl={sl_price:.5f} tp={tp_price:.5f}"
         )
         return trade
