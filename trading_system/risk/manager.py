@@ -140,13 +140,20 @@ class RiskManager:
                 # Gold: 1 lotto = 100 oz, 1 pip = $0.01 = $1 per lotto
                 pip_value = 1.0
                 sl_pips   = sl_distance / 0.01   # 1 pip Gold = $0.01
+            elif "JPY" in symbol:
+                # Coppie JPY: 1 pip = 0.01; pip value in USD = (0.01 × 100.000) / prezzo
+                pip_size  = 0.01
+                pip_value = (pip_size * 100_000) / entry_price  # ~6.4 USD/lotto a ~156
+                sl_pips   = sl_distance / pip_size
             else:
-                # Forex: 1 lotto standard = 100,000 unità
+                # Forex USD-quoted (EURUSD, GBPUSD…): 1 pip = 0.0001 = $10/lotto
                 pip_value = 10.0
-                sl_pips   = sl_distance / 0.0001  # 1 pip Forex = 0.0001
+                sl_pips   = sl_distance / 0.0001
 
         else:
-            sl_pips = sl_distance / 0.0001
+            # pip_value fornito dall'esterno: adatta pip_size al simbolo
+            pip_size = 0.01 if "JPY" in symbol else 0.0001
+            sl_pips  = sl_distance / pip_size
 
         if sl_pips <= 0:
             return 0.01  # minimo sicuro
