@@ -55,7 +55,7 @@ LIQ_TOLERANCE_PIPS    = {"XAUUSD": 0.5, "EURUSD": 0.0002, "GBPUSD": 0.0002, "USD
 # ─── ML – MACHINE LEARNING ────────────────────────────────────────────────────
 
 USE_ML_FILTER           = True   # True = filtra segnali con ML | False = solo SMC
-ML_CONFIDENCE_THRESHOLD = 0.52   # soglia confidence (alzata da 0.42: precision ~55%, 0.42 era troppo permissiva)
+ML_CONFIDENCE_THRESHOLD = 0.58   # soglia confidence: 0.58 → precision target 50-60%
 
 # ── FILTRI CONFLUENZA SMC ──────────────────────────────────────────────────────
 # Backtest out-of-sample (2026-01-01 → 2026-02-25, XAUUSD) ha dimostrato:
@@ -98,10 +98,10 @@ SYMBOL_FILTER_CONFIGS: dict = {
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
 # Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
 ML_CONFIDENCE_BY_SYMBOL: dict = {
-    "XAUUSD": 0.52,
-    "EURUSD": 0.52,
-    "GBPUSD": 0.52,
-    "USDJPY": 0.52,
+    "XAUUSD": 0.58,
+    "EURUSD": 0.58,
+    "GBPUSD": 0.58,
+    "USDJPY": 0.58,
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
@@ -135,6 +135,13 @@ ML_EARLY_STOPPING_ROUNDS = 150    # più pazienza — con LR bassa servono più 
 # NOTA: richiede LightGBM con GPU support (su Windows: pip install lightgbm lo include già)
 ML_DEVICE                = 'cpu'
 
+# Optuna: ricerca automatica degli iperparametri ottimali
+# True = attiva la ricerca (più lenta ma trova parametri migliori per AUC 0.75)
+# False = usa i parametri fissi sopra
+# NOTA: richiede: pip install optuna
+ML_USE_OPTUNA            = True
+ML_OPTUNA_TRIALS         = 40   # numero di configurazioni da provare (più alto = migliore ma più lento)
+
 # ─── RISK MANAGEMENT – PROP FIRM COMPLIANT ────────────────────────────────────
 
 # Regole prop firm standard (compatibile FTMO / MyFundedFX / The5ers)
@@ -145,7 +152,7 @@ PROP_CLOSE_EOD_HOUR      = 21     # chiude tutto alle 21:00 CET (no overnight)
 
 # Sizing
 RISK_PER_TRADE_PCT       = 0.005  # rischia 0.5% del capitale per trade
-MIN_RISK_REWARD          = 2.0    # minimo R:R 1:2 per entrare
+MIN_RISK_REWARD          = 1.0    # R:R 1:1 — label più bilanciate → AUC più alto
 
 # Stop Loss via ATR
 ATR_PERIOD               = 14

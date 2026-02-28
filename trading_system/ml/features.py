@@ -764,8 +764,6 @@ FEATURE_COLUMNS = [
     "htf_h1_trend",     # trend H1: 1=bull, -1=bear
     "htf_h4_trend",     # trend H4: 1=bull, -1=bear
     "htf_score",        # score pesato M30+H1+H4 (max ±3.0; +3=tutto allineato bull)
-    # ── SIGNAL STRENGTH COMPOSITO (v2) ───────────────────────────────────────
-    "signal_strength",  # punteggio 0-100 (tutte le confluenze combinate)
     # ── STOP HUNT RISK ────────────────────────────────────────────────────────
     "sl_in_liq_zone",   # 1 se SL grezzo cade dentro una liq zone (stop hunt risk)
     "dist_sl_to_liq",   # distanza SL → liq zone più vicina (ATR; bassa = rischio alto)

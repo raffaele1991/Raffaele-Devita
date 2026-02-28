@@ -15,9 +15,16 @@ from lightgbm import LGBMClassifier
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.isotonic import IsotonicRegression
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import classification_report, roc_auc_score, precision_score
 from trading_system import config
 from .features import FEATURE_COLUMNS
+
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    _OPTUNA_AVAILABLE = True
+except ImportError:
+    _OPTUNA_AVAILABLE = False
 
 # Percorso assoluto alla cartella modelli
 _ROOT       = Path(__file__).parent.parent.parent
@@ -65,6 +72,43 @@ class SMCMLModel:
 
     # ── TRAINING ──────────────────────────────────────────────────────────────
 
+    def _optuna_tune(self, X_train_s, y_train, X_val_s, y_val, sample_weights, n_trials=40):
+        """Cerca i migliori iperparametri LightGBM tramite Optuna (ottimizza AUC-ROC)."""
+        import optuna
+
+        def objective(trial):
+            params = {
+                "n_estimators":       trial.suggest_int("n_estimators", 500, 3000),
+                "num_leaves":         trial.suggest_int("num_leaves", 31, 255),
+                "learning_rate":      trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+                "subsample":          trial.suggest_float("subsample", 0.6, 1.0),
+                "colsample_bytree":   trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                "min_child_samples":  trial.suggest_int("min_child_samples", 10, 100),
+                "reg_alpha":          trial.suggest_float("reg_alpha", 1e-3, 1.0, log=True),
+                "reg_lambda":         trial.suggest_float("reg_lambda", 1e-3, 5.0, log=True),
+                "subsample_freq":     1,
+                "random_state":       config.ML_RANDOM_SEED,
+                "n_jobs":             1,
+                "verbose":            -1,
+            }
+            clf = LGBMClassifier(**params)
+            callbacks = [
+                lgb.early_stopping(50, verbose=False),
+                lgb.log_evaluation(period=-1),
+            ]
+            clf.fit(
+                X_train_s, y_train,
+                sample_weight=sample_weights,
+                eval_set=[(X_val_s, y_val)],
+                callbacks=callbacks,
+            )
+            proba = clf.predict_proba(X_val_s)[:, 1]
+            return roc_auc_score(y_val, proba)
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        return study.best_params
+
     def fit(self, X: pd.DataFrame, y: pd.Series) -> dict:
         # Split temporale: 75% train | 10% validation (early stopping) | 15% test
         n = len(X)
@@ -78,10 +122,6 @@ class SMCMLModel:
         y_val   = y.iloc[split_train:split_val]
         y_test  = y.iloc[split_val:]
 
-        # LightGBM non richiede normalizzazione ma la manteniamo per coerenza
-        # con il predict_proba usato live (stesso scaler).
-        # Convertiamo in DataFrame per preservare i nomi delle feature ed eliminare
-        # il warning "X does not have valid feature names".
         X_train_s = pd.DataFrame(
             self.scaler.fit_transform(X_train[FEATURE_COLUMNS]),
             columns=FEATURE_COLUMNS,
@@ -100,6 +140,18 @@ class SMCMLModel:
         n_pos = (y_train == 1).sum()
         weight_pos = n_neg / n_pos if n_pos > 0 else 1.0
         sample_weights = y_train.map({0: 1.0, 1: weight_pos}).values
+
+        # ── Optuna: ricerca iperparametri ottimali ─────────────────────────────
+        if _OPTUNA_AVAILABLE and getattr(config, "ML_USE_OPTUNA", False):
+            n_trials = getattr(config, "ML_OPTUNA_TRIALS", 40)
+            print(f"  [Optuna] Ricerca iperparametri ({n_trials} trials)...")
+            best_params = self._optuna_tune(
+                X_train_s, y_train, X_val_s, y_val, sample_weights, n_trials=n_trials
+            )
+            print(f"  [Optuna] Migliori params: {best_params}")
+            self.model.set_params(**best_params)
+        elif getattr(config, "ML_USE_OPTUNA", False) and not _OPTUNA_AVAILABLE:
+            print("  [WARN] Optuna non installato. Esegui: pip install optuna")
 
         # Callbacks: early stopping + log ogni 100 round
         callbacks = [
@@ -134,6 +186,20 @@ class SMCMLModel:
 
         report = classification_report(y_test, y_pred, output_dict=True)
         auc    = roc_auc_score(y_test, y_proba)
+
+        # ── Analisi precision per soglia di confidenza ─────────────────────────
+        print(f"\n  ── ANALISI SOGLIA CONFIDENZA ───────────────────────────")
+        print(f"  {'Soglia':>7}  {'Segnali':>8}  {'Win Rate':>9}  {'Precision':>10}")
+        for thr in [0.50, 0.52, 0.55, 0.58, 0.60, 0.63, 0.65]:
+            mask = y_proba >= thr
+            n_sig = mask.sum()
+            if n_sig >= 30:
+                wr  = y_test.values[mask].mean()
+                prec = precision_score(y_test.values[mask], np.ones(n_sig, dtype=int), zero_division=0)
+                # precision reale = win rate a questa soglia
+                print(f"  {thr:>7.2f}  {n_sig:>8,}  {wr:>8.1%}  {wr:>9.1%}")
+            else:
+                print(f"  {thr:>7.2f}  {n_sig:>8,}  {'< 30 camp':>9}")
 
         metrics = {
             "accuracy":   report["accuracy"],
