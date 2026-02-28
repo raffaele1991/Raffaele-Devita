@@ -370,11 +370,24 @@ _SETTINGS_DEFAULTS = {
     "max_total_dd_pct":          7.0,
     "min_rr":                    2.0,
     "ml_confidence_threshold":   0.65,
-    "ml_confidence_eurusd":      0.65,
-    "ml_confidence_gbpusd":      0.65,
-    "ml_confidence_usdjpy":      0.65,
-    "ml_confidence_xauusd":      0.70,
+    "ml_confidence_xauusd":      0.65,
+    "ml_confidence_eurusd":      0.62,
+    "ml_confidence_gbpusd":      0.72,
+    "ml_confidence_usdjpy":      0.72,
     "ml_enabled":                True,
+    # Filtri confluenza SMC per-simbolo
+    "require_fvg_xauusd":        False,
+    "require_liq_xauusd":        True,
+    "htf_align_xauusd":          True,
+    "require_fvg_eurusd":        False,
+    "require_liq_eurusd":        True,
+    "htf_align_eurusd":          True,
+    "require_fvg_gbpusd":        False,
+    "require_liq_gbpusd":        True,
+    "htf_align_gbpusd":          True,
+    "require_fvg_usdjpy":        False,
+    "require_liq_usdjpy":        True,
+    "htf_align_usdjpy":          True,
     "telegram_token":            "",
     "telegram_chat_id":          "",
     "notify_trades":             True,
@@ -432,10 +445,10 @@ def _patch_config(data: dict) -> None:
             new_lines.append(line)
 
     # Aggiorna ML_CONFIDENCE_BY_SYMBOL con valori per-simbolo
-    xau = float(data.get("ml_confidence_xauusd", 0.70))
-    eur = float(data.get("ml_confidence_eurusd", 0.65))
-    gbp = float(data.get("ml_confidence_gbpusd", 0.65))
-    jpy = float(data.get("ml_confidence_usdjpy", 0.65))
+    xau = float(data.get("ml_confidence_xauusd", 0.65))
+    eur = float(data.get("ml_confidence_eurusd", 0.62))
+    gbp = float(data.get("ml_confidence_gbpusd", 0.72))
+    jpy = float(data.get("ml_confidence_usdjpy", 0.72))
     new_by_symbol = (
         f'{{\n'
         f'    "XAUUSD": {xau},\n'
@@ -448,6 +461,25 @@ def _patch_config(data: dict) -> None:
     content = re.sub(
         r'ML_CONFIDENCE_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{[^}]*?\}',
         f'ML_CONFIDENCE_BY_SYMBOL: dict = {new_by_symbol}',
+        content,
+        flags=re.DOTALL,
+    )
+
+    # Aggiorna SYMBOL_FILTER_CONFIGS con filtri FVG/Liq/HTF per-simbolo
+    def _b(val: object) -> str:
+        return "True" if val else "False"
+
+    new_sym_filter = (
+        f'{{\n'
+        f'    "XAUUSD": {{"require_fvg": {_b(data.get("require_fvg_xauusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_xauusd", True))},  "htf_align": {_b(data.get("htf_align_xauusd", True))}}},\n'
+        f'    "EURUSD": {{"require_fvg": {_b(data.get("require_fvg_eurusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_eurusd", True))},  "htf_align": {_b(data.get("htf_align_eurusd", True))}}},\n'
+        f'    "GBPUSD": {{"require_fvg": {_b(data.get("require_fvg_gbpusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_gbpusd", True))},  "htf_align": {_b(data.get("htf_align_gbpusd", True))}}},\n'
+        f'    "USDJPY": {{"require_fvg": {_b(data.get("require_fvg_usdjpy", False))}, "require_liq_sweep": {_b(data.get("require_liq_usdjpy", True))},  "htf_align": {_b(data.get("htf_align_usdjpy", True))}}},\n'
+        f'}}'
+    )
+    content = re.sub(
+        r'SYMBOL_FILTER_CONFIGS(?:\s*:\s*dict)?\s*=\s*\{(?:[^{}]|\{[^{}]*\})*\}',
+        f'SYMBOL_FILTER_CONFIGS: dict = {new_sym_filter}',
         content,
         flags=re.DOTALL,
     )
