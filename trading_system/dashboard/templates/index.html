@@ -717,8 +717,66 @@
             <input id="cfg_ml_enabled" class="settings-checkbox" type="checkbox" checked />
           </div>
           <div class="settings-row">
-            <span class="settings-label">Confidence minima</span>
-            <input id="cfg_ml_confidence_threshold" class="settings-input" type="number" min="0.5" max="0.99" step="0.01" style="max-width:90px;" />
+            <span class="settings-label">Confidence – EURUSD</span>
+            <input id="cfg_ml_confidence_eurusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – GBPUSD</span>
+            <input id="cfg_ml_confidence_gbpusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – USDJPY</span>
+            <input id="cfg_ml_confidence_usdjpy" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – XAUUSD</span>
+            <input id="cfg_ml_confidence_xauusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+        </div>
+
+        <!-- Filtri SMC per simbolo -->
+        <div class="card settings-section">
+          <div class="settings-section-title">Filtri Confluenza SMC</div>
+          <table style="width:100%; border-collapse:collapse; margin-top:4px;">
+            <thead>
+              <tr>
+                <th style="text-align:left; color:var(--muted); font-size:11px; font-weight:600; padding:4px 0; letter-spacing:.04em;">SIMBOLO</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">FVG</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">LIQ SWEEP</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">HTF ALIGN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--yellow);">XAUUSD</td>
+                <td style="text-align:center;"><input id="cfg_require_fvg_xauusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_require_liq_xauusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_htf_align_xauusd"   class="settings-checkbox" type="checkbox" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--blue);">EURUSD</td>
+                <td style="text-align:center;"><input id="cfg_require_fvg_eurusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_require_liq_eurusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_htf_align_eurusd"   class="settings-checkbox" type="checkbox" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--green);">GBPUSD</td>
+                <td style="text-align:center;"><input id="cfg_require_fvg_gbpusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_require_liq_gbpusd" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_htf_align_gbpusd"   class="settings-checkbox" type="checkbox" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--accent);">USDJPY</td>
+                <td style="text-align:center;"><input id="cfg_require_fvg_usdjpy" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_require_liq_usdjpy" class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_htf_align_usdjpy"   class="settings-checkbox" type="checkbox" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top:8px; font-size:11px; color:var(--muted); line-height:1.6;">
+            <b>FVG</b> = Fair Value Gap obbligatorio &nbsp;|&nbsp;
+            <b>Liq Sweep</b> = solo dopo sweep liquidità &nbsp;|&nbsp;
+            <b>HTF Align</b> = trend M30 allineato
           </div>
         </div>
 
@@ -1431,7 +1489,20 @@ async function loadSettings() {
 
     // ML
     document.getElementById('cfg_ml_enabled').checked                = !!s.ml_enabled;
-    document.getElementById('cfg_ml_confidence_threshold').value     = s.ml_confidence_threshold ?? 0.65;
+    document.getElementById('cfg_ml_confidence_xauusd').value        = s.ml_confidence_xauusd ?? 0.65;
+    document.getElementById('cfg_ml_confidence_eurusd').value        = s.ml_confidence_eurusd ?? 0.62;
+    document.getElementById('cfg_ml_confidence_gbpusd').value        = s.ml_confidence_gbpusd ?? 0.72;
+    document.getElementById('cfg_ml_confidence_usdjpy').value        = s.ml_confidence_usdjpy ?? 0.72;
+
+    // Filtri SMC per-simbolo
+    ['xauusd', 'eurusd', 'gbpusd', 'usdjpy'].forEach(sym => {
+      const el_fvg = document.getElementById('cfg_require_fvg_' + sym);
+      const el_liq = document.getElementById('cfg_require_liq_' + sym);
+      const el_htf = document.getElementById('cfg_htf_align_'   + sym);
+      if (el_fvg) el_fvg.checked = !!s['require_fvg_' + sym];
+      if (el_liq) el_liq.checked = s['require_liq_' + sym] !== false;
+      if (el_htf) el_htf.checked = s['htf_align_'   + sym] !== false;
+    });
 
     // Telegram
     document.getElementById('cfg_telegram_token').value    = s.telegram_token   || '';
@@ -1463,7 +1534,23 @@ async function saveSettings() {
     max_total_dd_pct:          parseFloat(document.getElementById('cfg_max_total_dd_pct').value)  || 7.0,
     min_rr:                    parseFloat(document.getElementById('cfg_min_rr').value)             || 2.0,
     ml_enabled:                document.getElementById('cfg_ml_enabled').checked,
-    ml_confidence_threshold:   parseFloat(document.getElementById('cfg_ml_confidence_threshold').value) || 0.65,
+    ml_confidence_xauusd:      parseFloat(document.getElementById('cfg_ml_confidence_xauusd').value) || 0.65,
+    ml_confidence_eurusd:      parseFloat(document.getElementById('cfg_ml_confidence_eurusd').value) || 0.62,
+    ml_confidence_gbpusd:      parseFloat(document.getElementById('cfg_ml_confidence_gbpusd').value) || 0.72,
+    ml_confidence_usdjpy:      parseFloat(document.getElementById('cfg_ml_confidence_usdjpy').value) || 0.72,
+    // Filtri SMC per-simbolo
+    require_fvg_xauusd:        document.getElementById('cfg_require_fvg_xauusd').checked,
+    require_liq_xauusd:        document.getElementById('cfg_require_liq_xauusd').checked,
+    htf_align_xauusd:          document.getElementById('cfg_htf_align_xauusd').checked,
+    require_fvg_eurusd:        document.getElementById('cfg_require_fvg_eurusd').checked,
+    require_liq_eurusd:        document.getElementById('cfg_require_liq_eurusd').checked,
+    htf_align_eurusd:          document.getElementById('cfg_htf_align_eurusd').checked,
+    require_fvg_gbpusd:        document.getElementById('cfg_require_fvg_gbpusd').checked,
+    require_liq_gbpusd:        document.getElementById('cfg_require_liq_gbpusd').checked,
+    htf_align_gbpusd:          document.getElementById('cfg_htf_align_gbpusd').checked,
+    require_fvg_usdjpy:        document.getElementById('cfg_require_fvg_usdjpy').checked,
+    require_liq_usdjpy:        document.getElementById('cfg_require_liq_usdjpy').checked,
+    htf_align_usdjpy:          document.getElementById('cfg_htf_align_usdjpy').checked,
     telegram_token:            document.getElementById('cfg_telegram_token').value,
     telegram_chat_id:          document.getElementById('cfg_telegram_chat_id').value.trim(),
     notify_trades:             document.getElementById('cfg_notify_trades').checked,

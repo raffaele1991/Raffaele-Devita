@@ -16,6 +16,7 @@ Stato in tempo reale → GET  /api/backtest/status
 import os
 import sys
 import copy
+import importlib
 import threading
 import numpy as np
 import pandas as pd
@@ -244,7 +245,7 @@ def run_backtest(
             try:
                 ml_model = SMCMLModel(symbol)
                 ml_model.load()
-                _log(f"Modello ML caricato ✓  (soglia={config.ML_CONFIDENCE_THRESHOLD})")
+                _log(f"Modello ML caricato ✓  (soglia={threshold})")
             except Exception as e:
                 _log(f"Avviso ML: {e} → procedo solo con SMC")
                 ml_model = None
@@ -254,7 +255,6 @@ def run_backtest(
     # 3. Parametri
     detector = SMCDetector(symbol)
     MIN_LB   = 80    # candele di lookback minimo prima di iniziare
-    MAX_HOLD = 40    # candele massime per tenere una posizione aperta
     CONTEXT  = 200   # dimensione finestra scorrevole
 
     trades     = []
@@ -272,6 +272,7 @@ def run_backtest(
         "fvg_blocked":     0,
         "liq_blocked":     0,
         "ml_blocked":      0,
+        "ml_errors":       0,
         "rr_rejected":     0,
         "signals":         0,
         "signals_with_fvg": 0,
@@ -361,17 +362,19 @@ def run_backtest(
                     ctx_for_ml = ctx_for_ml.set_index('time')
                 feat_df = build_features(ctx_for_ml, symbol=symbol)
                 if len(feat_df) == 0:
-                    _diag["ml_blocked"] += 1
+                    _diag["ml_errors"] += 1
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
-                _log(f"  [ML] conf={conf:.3f} soglia={threshold} dir={signal.direction}")
                 if conf < threshold:
                     _diag["ml_blocked"] += 1
                     i += 1
                     continue
-            except Exception:
-                pass  # se ML fallisce, usa solo segnale SMC
+            except Exception as e:
+                _diag["ml_errors"] += 1
+                if _diag["ml_errors"] <= 3:
+                    _log(f"  [ML] Errore (trade {len(trades)+1}): {e}")
+
 
         # Parametri del trade
         entry   = float(candle['close'])
@@ -385,7 +388,8 @@ def run_backtest(
             _diag["rr_rejected"] += 1
             i += 1
             continue
-        if tp_dist / sl_dist < 1.5:   # R:R minimo 1.5
+        rr = tp_dist / sl_dist
+        if rr < config.MIN_RISK_REWARD * 0.98:   # R:R minimo = quello configurato (tolleranza 2%)
             _diag["rr_rejected"] += 1
             i += 1
             continue
@@ -396,7 +400,7 @@ def run_backtest(
         exit_time  = None
         exit_bar   = i
 
-        for j in range(i + 1, min(i + MAX_HOLD + 1, len(df))):
+        for j in range(i + 1, len(df)):
             fut = df.iloc[j]
             if dirn == 'long':
                 sl_hit = fut['low']  <= sl
@@ -432,15 +436,10 @@ def run_backtest(
                     outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
                     break
 
-        # Posizione ancora aperta a MAX_HOLD → chiudi al close
+        # Trade ancora aperto a fine dati → skip (posizione non chiusa)
         if outcome is None:
-            exit_bar   = min(i + MAX_HOLD, len(df) - 1)
-            exit_price = float(df.iloc[exit_bar]['close'])
-            exit_time  = df.iloc[exit_bar]['time']
-            outcome    = 'WIN' if (
-                (dirn == 'long'  and exit_price > entry) or
-                (dirn == 'short' and exit_price < entry)
-            ) else 'LOSS'
+            i += 1
+            continue
 
         # R multiplo del trade
         if dirn == 'long':
@@ -495,6 +494,7 @@ def run_backtest(
     _log(f"  Bloccati (no FVG)    : {_diag['fvg_blocked']}")
     _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
+    _log(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
     _log(f"  Trade aperti         : {len(trades)}")
     _log(f"{'─' * 50}")
@@ -565,7 +565,7 @@ def run_backtest(
 
 # ── PUBLIC API ────────────────────────────────────────────────────────────────
 
-def start_backtest(symbol: str, start_date: str, end_date: str) -> bool:
+def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None) -> bool:
     """Avvia il backtest in un thread separato. Ritorna False se già in corso."""
     with _lock:
         if _state["running"]:
@@ -577,7 +577,9 @@ def start_backtest(symbol: str, start_date: str, end_date: str) -> bool:
 
     def _run():
         try:
-            results = run_backtest(symbol, start_date, end_date)
+            # Ricarica config da disco (l'utente può aver cambiato le impostazioni dalla dashboard)
+            importlib.reload(config)
+            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold)
             with _lock:
                 _state["results"]  = results
                 _state["status"]   = "done"
