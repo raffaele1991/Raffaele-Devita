@@ -169,6 +169,15 @@ SYMBOL_COOLDOWN_MINUTES  = 60     # non rientrare sullo stesso simbolo per 60 mi
 # Sotto questa soglia il mercato è laterale e gli OB vengono violati avanti/indietro
 MIN_ADX_FILTER           = 0.20
 
+# ── SIGNAL STRENGTH FILTER (v2) ───────────────────────────────────────────────
+# Punteggio composito 0-100 calcolato in features.add_signal_strength().
+# Il bot accetta il segnale solo se signal_strength >= questa soglia.
+# 0  = disattivato (solo ML decide)
+# 40 = filtro leggero (elimina segnali SKIP e parte WEAK)
+# 55 = filtro moderato (solo GOOD, STRONG, A+) — consigliato
+# 65 = filtro aggressivo (solo STRONG e A+) — meno trade, precisione max
+MIN_SIGNAL_STRENGTH      = 55
+
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
 MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo
