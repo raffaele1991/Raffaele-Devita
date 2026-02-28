@@ -149,7 +149,8 @@ PROP_CLOSE_EOD_HOUR      = 21     # chiude tutto alle 21:00 CET (no overnight)
 
 # Sizing
 RISK_PER_TRADE_PCT       = 0.005  # rischia 0.5% del capitale per trade
-MIN_RISK_REWARD          = 1.0    # R:R 1:1 — label più bilanciate → AUC più alto
+MIN_RISK_REWARD          = 1.0    # R:R minimo accettato (filtro qualità, non cambiare)
+TP_RR_MULTIPLIER         = 1.5    # TP = entry ± SL_dist × questo valore (1.0=1:1, 1.5=1.5:1, 2.0=2:1)
 
 # Stop Loss via ATR
 ATR_PERIOD               = 14

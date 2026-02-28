@@ -379,9 +379,15 @@ def run_backtest(
         # Parametri del trade
         entry   = float(candle['close'])
         sl      = float(signal.sl_price)
-        tp      = float(signal.tp_price)
         dirn    = signal.direction   # "long" | "short"
         sl_dist = abs(entry - sl)
+
+        # TP asimmetrico: entry ± sl_dist × TP_RR_MULTIPLIER (default 1.5R)
+        tp_rr = getattr(config, 'TP_RR_MULTIPLIER', 1.0)
+        if dirn == 'long':
+            tp = entry + sl_dist * tp_rr
+        else:
+            tp = entry - sl_dist * tp_rr
         tp_dist = abs(tp - entry)
 
         if sl_dist <= 0 or tp_dist <= 0:

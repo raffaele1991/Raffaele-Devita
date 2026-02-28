@@ -470,13 +470,21 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         f"lot={lot} | {signal.reason} | ML={confidence:.3f}"
     )
 
+    # TP asimmetrico: entry ± sl_dist × TP_RR_MULTIPLIER (default 1.5R)
+    tp_rr   = getattr(config, 'TP_RR_MULTIPLIER', 1.0)
+    sl_dist = abs(signal.entry_price - signal.sl_price)
+    if signal.direction == 'long':
+        tp_price = signal.entry_price + sl_dist * tp_rr
+    else:
+        tp_price = signal.entry_price - sl_dist * tp_rr
+
     # Esegui ordine
     trade = executor.open_trade(
         symbol=symbol,
         direction=signal.direction,
         lot_size=lot,
         sl_price=signal.sl_price,
-        tp_price=signal.tp_price,
+        tp_price=tp_price,
         comment=f"SMC+ML {session}",
     )
 
