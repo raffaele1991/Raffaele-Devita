@@ -382,15 +382,11 @@ def run_backtest(
         tp_dist = abs(tp - entry)
 
         if sl_dist <= 0 or tp_dist <= 0:
-            if _diag["rr_rejected"] < 3:
-                _log(f"  [RR-DEBUG] sl_dist={sl_dist:.6f} tp_dist={tp_dist:.6f} entry={entry:.5f} sl={sl:.5f} tp={tp:.5f} dir={dirn}")
             _diag["rr_rejected"] += 1
             i += 1
             continue
         rr = tp_dist / sl_dist
-        if rr < 1.5:   # R:R minimo 1.5
-            if _diag["rr_rejected"] < 3:
-                _log(f"  [RR-DEBUG] RR={rr:.3f}<1.5 entry={entry:.5f} sl={sl:.5f} tp={tp:.5f} dir={dirn}")
+        if rr < config.MIN_RISK_REWARD * 0.98:   # R:R minimo = quello configurato (tolleranza 2%)
             _diag["rr_rejected"] += 1
             i += 1
             continue
