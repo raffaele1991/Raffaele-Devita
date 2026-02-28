@@ -108,12 +108,6 @@ ML_RANDOM_SEED          = 42
 # Il backtest out-of-sample va eseguito da questa data in poi.
 TRAIN_CUTOFF_DATE       = "2026-01-01"  # train su tutto il 2025, backtest out-of-sample su gen-feb 2026
 
-# Data di inizio training: esclude dati storici con volume non affidabile.
-# Nei CSV 20+ anni il tick volume pre-2018 è sistematicamente ~10x più basso
-# rispetto ai dati post-2018 (meno broker/connessioni riportavano tick).
-# Feature volume-based (MFI, CMF, OBV, VWAP) sarebbero sbagliate su quel periodo.
-TRAIN_START_DATE        = "2018-01-01"  # usa solo dati con volume affidabile
-
 # Lookahead etichette (candele M5 future per valutare TP/SL)
 # 50 candele M5 = ~4 ore — dà più tempo al trade di raggiungere il TP prima di expirare
 # Aumentato da 30 per migliorare la qualità delle label (meno falsi negativi per trade
