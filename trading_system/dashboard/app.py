@@ -369,7 +369,11 @@ _SETTINGS_DEFAULTS = {
     "max_daily_dd_pct":          3.0,
     "max_total_dd_pct":          7.0,
     "min_rr":                    2.0,
-    "ml_confidence_threshold":   0.42,
+    "ml_confidence_threshold":   0.65,
+    "ml_confidence_eurusd":      0.65,
+    "ml_confidence_gbpusd":      0.65,
+    "ml_confidence_usdjpy":      0.65,
+    "ml_confidence_xauusd":      0.70,
     "ml_enabled":                True,
     "telegram_token":            "",
     "telegram_chat_id":          "",
@@ -427,12 +431,23 @@ def _patch_config(data: dict) -> None:
         if not written:
             new_lines.append(line)
 
-    # Aggiorna anche ML_CONFIDENCE_BY_SYMBOL (ha priorità sul valore globale nel bot)
-    ml_val = str(float(data.get("ml_confidence_threshold", 0.42)))
+    # Aggiorna ML_CONFIDENCE_BY_SYMBOL con valori per-simbolo
+    xau = float(data.get("ml_confidence_xauusd", 0.70))
+    eur = float(data.get("ml_confidence_eurusd", 0.65))
+    gbp = float(data.get("ml_confidence_gbpusd", 0.65))
+    jpy = float(data.get("ml_confidence_usdjpy", 0.65))
+    new_by_symbol = (
+        f'{{\n'
+        f'    "XAUUSD": {xau},\n'
+        f'    "EURUSD": {eur},\n'
+        f'    "GBPUSD": {gbp},\n'
+        f'    "USDJPY": {jpy},\n'
+        f'}}'
+    )
     content = "".join(new_lines)
     content = re.sub(
-        r'(ML_CONFIDENCE_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{)([^}]*?)(\})',
-        lambda m: m.group(1) + re.sub(r'(:\s*)[\d.]+', r'\g<1>' + ml_val, m.group(2)) + m.group(3),
+        r'ML_CONFIDENCE_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{[^}]*?\}',
+        f'ML_CONFIDENCE_BY_SYMBOL: dict = {new_by_symbol}',
         content,
         flags=re.DOTALL,
     )

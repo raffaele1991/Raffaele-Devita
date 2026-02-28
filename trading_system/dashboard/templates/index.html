@@ -717,8 +717,20 @@
             <input id="cfg_ml_enabled" class="settings-checkbox" type="checkbox" checked />
           </div>
           <div class="settings-row">
-            <span class="settings-label">Confidence minima</span>
-            <input id="cfg_ml_confidence_threshold" class="settings-input" type="number" min="0.5" max="0.99" step="0.01" style="max-width:90px;" />
+            <span class="settings-label">Confidence – EURUSD</span>
+            <input id="cfg_ml_confidence_eurusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – GBPUSD</span>
+            <input id="cfg_ml_confidence_gbpusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – USDJPY</span>
+            <input id="cfg_ml_confidence_usdjpy" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Confidence – XAUUSD</span>
+            <input id="cfg_ml_confidence_xauusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
           </div>
         </div>
 
@@ -1431,7 +1443,10 @@ async function loadSettings() {
 
     // ML
     document.getElementById('cfg_ml_enabled').checked                = !!s.ml_enabled;
-    document.getElementById('cfg_ml_confidence_threshold').value     = s.ml_confidence_threshold ?? 0.65;
+    document.getElementById('cfg_ml_confidence_eurusd').value        = s.ml_confidence_eurusd ?? 0.65;
+    document.getElementById('cfg_ml_confidence_gbpusd').value        = s.ml_confidence_gbpusd ?? 0.65;
+    document.getElementById('cfg_ml_confidence_usdjpy').value        = s.ml_confidence_usdjpy ?? 0.65;
+    document.getElementById('cfg_ml_confidence_xauusd').value        = s.ml_confidence_xauusd ?? 0.70;
 
     // Telegram
     document.getElementById('cfg_telegram_token').value    = s.telegram_token   || '';
@@ -1463,7 +1478,10 @@ async function saveSettings() {
     max_total_dd_pct:          parseFloat(document.getElementById('cfg_max_total_dd_pct').value)  || 7.0,
     min_rr:                    parseFloat(document.getElementById('cfg_min_rr').value)             || 2.0,
     ml_enabled:                document.getElementById('cfg_ml_enabled').checked,
-    ml_confidence_threshold:   parseFloat(document.getElementById('cfg_ml_confidence_threshold').value) || 0.65,
+    ml_confidence_eurusd:      parseFloat(document.getElementById('cfg_ml_confidence_eurusd').value) || 0.65,
+    ml_confidence_gbpusd:      parseFloat(document.getElementById('cfg_ml_confidence_gbpusd').value) || 0.65,
+    ml_confidence_usdjpy:      parseFloat(document.getElementById('cfg_ml_confidence_usdjpy').value) || 0.65,
+    ml_confidence_xauusd:      parseFloat(document.getElementById('cfg_ml_confidence_xauusd').value) || 0.70,
     telegram_token:            document.getElementById('cfg_telegram_token').value,
     telegram_chat_id:          document.getElementById('cfg_telegram_chat_id').value.trim(),
     notify_trades:             document.getElementById('cfg_notify_trades').checked,

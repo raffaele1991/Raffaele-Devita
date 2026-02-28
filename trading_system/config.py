@@ -98,10 +98,10 @@ SYMBOL_FILTER_CONFIGS: dict = {
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
 # Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
 ML_CONFIDENCE_BY_SYMBOL: dict = {
-    "XAUUSD": 0.58,
-    "EURUSD": 0.58,
-    "GBPUSD": 0.58,
-    "USDJPY": 0.58,
+    "XAUUSD": 0.70,
+    "EURUSD": 0.65,
+    "GBPUSD": 0.65,
+    "USDJPY": 0.65,
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
