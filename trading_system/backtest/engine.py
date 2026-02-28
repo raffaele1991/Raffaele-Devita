@@ -254,7 +254,7 @@ def run_backtest(
     # 3. Parametri
     detector = SMCDetector(symbol)
     MIN_LB   = 80    # candele di lookback minimo prima di iniziare
-    MAX_HOLD = 40    # candele massime per tenere una posizione aperta
+    MAX_HOLD = 500   # candele massime (~41h su M5) — quasi tutti i trade raggiungono TP/SL
     CONTEXT  = 200   # dimensione finestra scorrevole
 
     trades     = []
@@ -433,15 +433,12 @@ def run_backtest(
                     outcome, exit_price, exit_time, exit_bar = 'TP', tp, fut['time'], j
                     break
 
-        # Posizione ancora aperta a MAX_HOLD → chiudi al close
+        # Posizione ancora aperta a MAX_HOLD → chiudi a SL (worst case)
         if outcome is None:
             exit_bar   = min(i + MAX_HOLD, len(df) - 1)
-            exit_price = float(df.iloc[exit_bar]['close'])
             exit_time  = df.iloc[exit_bar]['time']
-            outcome    = 'WIN' if (
-                (dirn == 'long'  and exit_price > entry) or
-                (dirn == 'short' and exit_price < entry)
-            ) else 'LOSS'
+            exit_price = sl
+            outcome    = 'LOSS'
 
         # R multiplo del trade
         if dirn == 'long':
