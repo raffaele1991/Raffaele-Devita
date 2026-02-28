@@ -16,6 +16,7 @@ Stato in tempo reale → GET  /api/backtest/status
 import os
 import sys
 import copy
+import importlib
 import threading
 import numpy as np
 import pandas as pd
@@ -572,6 +573,8 @@ def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Op
 
     def _run():
         try:
+            # Ricarica config da disco (l'utente può aver cambiato le impostazioni dalla dashboard)
+            importlib.reload(config)
             results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold)
             with _lock:
                 _state["results"]  = results
