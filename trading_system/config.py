@@ -164,6 +164,20 @@ MAX_CONSECUTIVE_LOSSES   = 2      # dopo 2 stop consecutivi, stop per oggi
 # Cooldown per simbolo dopo uno stop loss (minuti)
 SYMBOL_COOLDOWN_MINUTES  = 60     # non rientrare sullo stesso simbolo per 60 min dopo SL
 
+# Filtro trend minimo prima di valutare segnali SMC
+# ADX normalizzato (features.py lo divide per 100): 0.20 = ADX 20 standard
+# Sotto questa soglia il mercato è laterale e gli OB vengono violati avanti/indietro
+MIN_ADX_FILTER           = 0.20
+
+# ── SIGNAL STRENGTH FILTER (v2) ───────────────────────────────────────────────
+# Punteggio composito 0-100 calcolato in features.add_signal_strength().
+# Il bot accetta il segnale solo se signal_strength >= questa soglia.
+# 0  = disattivato (solo ML decide)
+# 40 = filtro leggero (elimina segnali SKIP e parte WEAK)
+# 55 = filtro moderato (solo GOOD, STRONG, A+) — consigliato
+# 65 = filtro aggressivo (solo STRONG e A+) — meno trade, precisione max
+MIN_SIGNAL_STRENGTH      = 55
+
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
 MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo

@@ -30,6 +30,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
@@ -67,9 +68,9 @@ SYMBOL_START = {
 
 DATE_END   = datetime(2025, 12, 31, tzinfo=timezone.utc)
 BAR_MINS   = 5          # aggregazione M5
-RETRY      = 3          # tentativi per richiesta fallita
-TIMEOUT    = 30         # secondi timeout HTTP
-DELAY      = 0.12       # pausa tra richieste (sec) — non scendere sotto 0.1
+RETRY      = 2          # tentativi per richiesta fallita
+TIMEOUT    = 10         # secondi timeout HTTP
+WORKERS    = 8          # ore scaricate in parallelo per giorno
 OUTPUT_DIR = "duka_data"
 
 # ─── DOWNLOAD SINGOLA ORA ─────────────────────────────────────────────────────
@@ -228,7 +229,8 @@ def download_symbol(symbol: str):
 
     total_days = len(days)
     print(f"  Giorni rimanenti: {total_days:,}  ({total_days // 252:.0f} anni)")
-    print(f"  Stima tempo: {total_days * 24 * DELAY / 3600:.1f}h (in background)")
+    # stima: ~1s per giorno con 8 worker (ottimistica ma realistica)
+    print(f"  Stima tempo: ~{total_days * 1.5 / 60:.0f} min ({WORKERS} worker paralleli)")
     print()
 
     # ── Loop principale: giorno per giorno ─────────────────────────────────────
@@ -237,11 +239,13 @@ def download_symbol(symbol: str):
     for day_idx, day in enumerate(days, 1):
         day_ticks = []
 
-        for hour in range(24):
-            hour_dt = day.replace(hour=hour)
-            ticks   = download_hour(symbol, price_div, hour_dt)
-            day_ticks.extend(ticks)
-            time.sleep(DELAY)
+        # Scarica le 24 ore del giorno in parallelo
+        hour_dts = [day.replace(hour=h) for h in range(24)]
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            futures = {pool.submit(download_hour, symbol, price_div, hdt): hdt
+                       for hdt in hour_dts}
+            for fut in as_completed(futures):
+                day_ticks.extend(fut.result())
 
         # Aggrega e scrivi le candele del giorno
         day_bars = ticks_to_m5(day_ticks)
@@ -253,14 +257,13 @@ def download_symbol(symbol: str):
         # Salva progresso (resume sicuro)
         save_progress(symbol, day)
 
-        # Aggiorna schermo ogni giorno (sovrascrive la riga)
-        pct = day_idx / total_days * 100
-        eta_h = (total_days - day_idx) * 24 * DELAY / 3600
+        # Stampa una riga per ogni giorno (compatibile con a-Shell, no \r)
+        pct    = day_idx / total_days * 100
+        eta_m  = (total_days - day_idx) * 1.5 / 60
+        bar    = "#" * int(pct // 5) + "." * (20 - int(pct // 5))
         print(
-            f"  {day.strftime('%Y-%m-%d')}  [{pct:5.1f}%]  "
-            f"bar_oggi={len(day_bars):3d}  tot={day_bars_total:,}  "
-            f"ETA≈{eta_h:.1f}h        ",
-            end="\r", flush=True
+            f"  [{bar}] {pct:5.1f}%  {day.strftime('%Y-%m-%d')}"
+            f"  +{len(day_bars):3d}bar  tot={day_bars_total:,}  ETA≈{eta_m:.0f}min"
         )
 
     print(f"\n  Completato! Candele totali: {day_bars_total:,} → {output_file}")

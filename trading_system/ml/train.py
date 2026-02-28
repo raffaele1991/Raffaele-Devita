@@ -78,6 +78,13 @@ def load_mt5_csv(filepath: str) -> pd.DataFrame:
             df["datetime"] = pd.to_datetime(df["date"].astype(str) + " " + df["time"].astype(str))
         elif "datetime" in df.columns:
             df["datetime"] = pd.to_datetime(df["datetime"])
+        elif "local time" in df.columns:
+            # Formato Dukascopy JForex: "02.02.2026 00:00:00.000 GMT+0100"
+            # Rimuove la parte " GMT+xxxx" prima del parsing
+            raw = df["local time"].str.replace(r"\s*GMT[+-]\d{4}$", "", regex=True)
+            df["datetime"] = pd.to_datetime(raw, format="%d.%m.%Y %H:%M:%S.%f")
+        else:
+            raise ValueError(f"Formato non riconosciuto: colonne={list(df.columns)}")
 
     df = df.set_index("datetime").sort_index()
     df = df[["open", "high", "low", "close", "volume"]].dropna()

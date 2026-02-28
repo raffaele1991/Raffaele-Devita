@@ -102,6 +102,7 @@ def initialize():
 _symbol_signals:    dict = {}
 _block_reasons:     list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
 _symbol_last_loss:  dict = {}   # {symbol: datetime_dell_ultimo_SL}
+_prev_open_symbols: set  = set()  # simboli con posizioni bot aperte nel ciclo precedente
 
 
 def _reason(level: str, msg: str):
@@ -192,12 +193,30 @@ def _sync_risk_from_mt5(risk_manager, connector):
     Chiamata all'inizio di ogni ciclo — necessaria perché register_trade_close()
     non viene chiamato automaticamente quando MT5 chiude un trade per SL/TP.
     """
-    global _symbol_last_loss
+    global _symbol_last_loss, _prev_open_symbols
     try:
         closed_today = connector.get_closed_deals_today()
 
-        # trades_today = solo i deal di chiusura
-        risk_manager.trades_today = len(closed_today)
+        # trades_today = deal chiusi + posizioni ancora aperte del bot
+        open_pos = connector.get_open_positions() or []
+        bot_pos  = [p for p in open_pos if getattr(p, "magic", None) == 20250101]
+        current_open = {getattr(p, "symbol", "").upper() for p in bot_pos}
+        risk_manager.trades_today = len(closed_today) + len(bot_pos)
+
+        # ── Cooldown preventivo ────────────────────────────────────────────────
+        # Se una posizione del bot scompare da open_positions ma il deal non è
+        # ancora visibile in closed_today (ritardo history MT5), il cooldown
+        # normale non scatta e il bot può riaprire immediatamente lo stesso simbolo.
+        # Soluzione: appena rileva la sparizione, imposta _symbol_last_loss = now.
+        # Quando la deal history si aggiorna: se era un WIN rimuove l'entry,
+        # se era un LOSS aggiorna al timestamp preciso.
+        confirmed_symbols = {t["symbol"].upper() for t in closed_today}
+        for sym in _prev_open_symbols - current_open:
+            if sym not in confirmed_symbols:
+                # deal non ancora in history → cooldown preventivo
+                _symbol_last_loss.setdefault(sym, datetime.now())
+                logger.info(f"[Sync] {sym}: posizione chiusa, deal in attesa → cooldown preventivo")
+        _prev_open_symbols = current_open
 
         # consecutive_losses: conta le perdite consecutive partendo dall'ultima
         consecutive = 0
@@ -208,13 +227,16 @@ def _sync_risk_from_mt5(risk_manager, connector):
                 break
         risk_manager.consecutive_losses = consecutive
 
-        # Registra l'ultimo SL per simbolo (per cooldown)
+        # Registra l'ultimo SL per simbolo (cooldown da deal history)
         for t in closed_today:
+            sym = t["symbol"].upper()
             if t["result"] == "loss":
-                sym = t["symbol"].upper()
                 close_dt = datetime.fromisoformat(t["close_time"])
                 if sym not in _symbol_last_loss or close_dt > _symbol_last_loss[sym]:
                     _symbol_last_loss[sym] = close_dt
+            elif t["result"] == "win":
+                # Rimuove cooldown preventivo se la chiusura era un win
+                _symbol_last_loss.pop(sym, None)
 
     except Exception as e:
         logger.debug(f"[Sync] Errore sincronizzazione MT5: {e}")
@@ -360,6 +382,46 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
 
     if len(df_feat) < 10:
         _reason("info", f"{symbol}: feature insufficienti per ML")
+        return
+
+    # ── Filtri qualità setup (hard rules, prima del ML) ──────────────────────
+    # Legge la configurazione per-simbolo da SYMBOL_FILTER_CONFIGS, con fallback
+    # ai flag globali. Questi parametri erano nel config ma non venivano applicati.
+    _sym_cfg     = getattr(config, "SYMBOL_FILTER_CONFIGS", {}).get(symbol.upper(), {})
+    _require_htf = _sym_cfg.get("htf_align",        getattr(config, "SMC_REQUIRE_HTF_ALIGN",  True))
+    _require_fvg = _sym_cfg.get("require_fvg",       getattr(config, "SMC_REQUIRE_FVG",        False))
+    _require_liq = _sym_cfg.get("require_liq_sweep", getattr(config, "SMC_REQUIRE_LIQ_SWEEP",  False))
+    _min_adx     = getattr(config, "MIN_ADX_FILTER", 0.20)
+
+    last_feat = df_feat.iloc[-1]
+
+    # 1) HTF (M30) deve confermare il trend M5
+    if _require_htf and float(last_feat.get("htf_aligned", 0)) < 1.0:
+        logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
+        _reason("info", f"{symbol}: M30 contro-trend – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+
+    # 2) ADX normalizzato ≥ MIN_ADX_FILTER (0.20 = ADX 20): evita ranging
+    adx_val = float(last_feat.get("adx", 0))
+    if adx_val < _min_adx:
+        logger.info(f"[FILTER] {symbol}: ADX={adx_val:.3f} sotto soglia {_min_adx} (ranging) – skip")
+        _reason("info", f"{symbol}: mercato laterale (ADX {adx_val:.2f}) – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+
+    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep secondo SYMBOL_FILTER_CONFIGS
+    has_fvg   = float(last_feat.get("ob_has_fvg",    0)) >= 1.0
+    liq_swept = float(last_feat.get("liq_swept_smc", 0)) >= 1.0
+    if _require_fvg and not has_fvg:
+        logger.info(f"[FILTER] {symbol}: FVG richiesto ma assente – skip")
+        _reason("info", f"{symbol}: nessun FVG confluente – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+        return
+    if _require_liq and not liq_swept:
+        logger.info(f"[FILTER] {symbol}: liq sweep richiesto ma assente – skip")
+        _reason("info", f"{symbol}: nessun sweep di liquidità – skip")
+        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
         return
 
     # ML confidence check (soglia per-simbolo se disponibile, altrimenti globale)

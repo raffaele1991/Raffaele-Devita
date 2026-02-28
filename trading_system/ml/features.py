@@ -7,6 +7,15 @@ Ottimizzato per 416k+ candele:
 - add_smc_signal_features: OB/FVG/Liq pre-convertiti in array NumPy; inner loop
   sostituiti con operazioni vettorizzate → ~10x speedup
 - build_labels: matrice NumPy 2D per lookahead → ~20x speedup
+
+v2 – Indicatore potenziato:
+- VWAP giornaliero + bande (riferimento istituzionale)
+- MFI – Money Flow Index (RSI pesato per volume)
+- CMF – Chaikin Money Flow (pressione compratori/venditori)
+- OBV + trend OBV
+- Trend H1 e H4 (allineamento multi-timeframe completo)
+- Volume alla formazione dell'OB (conferma istituzionale)
+- Signal Strength Score 0–100 composito
 """
 
 import pandas as pd
@@ -129,6 +138,218 @@ def add_volume_features(df: pd.DataFrame) -> pd.DataFrame:
     df["vol_norm"]  = (vol / safe_ma20).clip(0, 10).fillna(1.0)
     df["vol_spike"] = (df["vol_norm"] > 2.0).astype(float)
     df["vol_trend"] = (vol.rolling(5).mean() > vol_ma20).fillna(False).astype(float)
+
+    return df
+
+
+def add_vwap_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    VWAP giornaliero + bande dinamiche (±1 ATR).
+    Istituti usano il VWAP come riferimento primario:
+      - sopra VWAP = zona premium (short favoriti)
+      - sotto VWAP = zona discount (long favoriti)
+    """
+    df = df.copy()
+    typical = (df["high"] + df["low"] + df["close"]) / 3
+    vol     = df["volume"].replace(0, np.nan).fillna(1.0)  # neutro se vol=0
+
+    # Calcola VWAP giornaliero con groupby data
+    tp_vol  = typical * vol
+    date_idx = df.index.date
+    cumtp   = pd.Series(tp_vol.values, index=df.index).groupby(date_idx).cumsum()
+    cumvol  = pd.Series(vol.values, index=df.index).groupby(date_idx).cumsum()
+    vwap    = cumtp / cumvol
+
+    df["vwap"]          = vwap
+    df["vwap_dist"]     = (df["close"] - vwap) / df["close"]   # distanza % dal VWAP
+    # Posizione normalizzata: 0=esatto VWAP, >0=sopra (premium), <0=sotto (discount)
+    atr_safe            = df["atr"].replace(0, np.nan)
+    df["vwap_dist_atr"] = (df["close"] - vwap) / atr_safe       # in unità ATR
+    # Banda ±2 ATR: 1 se price sopra VWAP+ATR (premium forte), -1 se sotto VWAP-ATR
+    df["vwap_zone"] = np.where(
+        df["close"] > vwap + atr_safe, 1.0,
+        np.where(df["close"] < vwap - atr_safe, -1.0, 0.0),
+    )
+    # Crossover VWAP (segnale forte)
+    above = (df["close"] > vwap).astype(int)
+    df["vwap_cross_bull"] = ((above == 1) & (above.shift(1) == 0)).astype(float)
+    df["vwap_cross_bear"] = ((above == 0) & (above.shift(1) == 1)).astype(float)
+
+    return df
+
+
+def add_mfi_cmf_obv(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Money Flow Index (RSI con volume), Chaikin Money Flow, On Balance Volume.
+    Queste feature rilevano la pressione istituzionale BUY/SELL meglio del volume grezzo.
+    """
+    df = df.copy()
+    vol     = df["volume"].replace(0, 1.0)  # evita divisione per zero
+    typical = (df["high"] + df["low"] + df["close"]) / 3
+
+    # ── MFI (Money Flow Index) ────────────────────────────────────────────────
+    mf     = typical * vol
+    delta_t = typical.diff()
+    pos_mf = mf.where(delta_t > 0, 0.0).rolling(14).sum()
+    neg_mf = mf.where(delta_t < 0, 0.0).rolling(14).sum()
+    mfr    = pos_mf / neg_mf.replace(0, np.nan)
+    df["mfi"] = 100 - 100 / (1 + mfr)
+    df["mfi_norm"] = (df["mfi"] - 50) / 50   # normalizzato -1..+1
+
+    # ── CMF (Chaikin Money Flow) – 20 periodi ──────────────────────────────────
+    hl_range  = (df["high"] - df["low"]).replace(0, np.nan)
+    clv       = ((df["close"] - df["low"]) - (df["high"] - df["close"])) / hl_range
+    money_vol = clv * vol
+    df["cmf"] = money_vol.rolling(20).sum() / vol.rolling(20).sum()   # range -1..+1
+
+    # ── OBV (On Balance Volume) ───────────────────────────────────────────────
+    direction = np.sign(df["close"].diff()).fillna(0)
+    obv       = (direction * vol).cumsum()
+    df["obv"] = obv
+    # OBV trend: EMA3 vs EMA10 (short-term vs medio-term)
+    obv_ema3  = obv.ewm(span=3,  adjust=False).mean()
+    obv_ema10 = obv.ewm(span=10, adjust=False).mean()
+    df["obv_trend"] = np.where(obv_ema3 > obv_ema10, 1.0, -1.0)
+    # OBV normalizzato (z-score su finestra 50)
+    obv_roll_std = obv.rolling(50).std().replace(0, np.nan)
+    obv_roll_mean = obv.rolling(50).mean()
+    df["obv_zscore"] = ((obv - obv_roll_mean) / obv_roll_std).clip(-3, 3)
+
+    return df
+
+
+def add_htf_h1_h4_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Trend H1 e H4 tramite resample da M5.
+    Più alto è il timeframe concordante, più forte è il segnale.
+
+    htf_h1_trend  : 1=H1 bullish, -1=H1 bearish
+    htf_h4_trend  : 1=H4 bullish, -1=H4 bearish
+    htf_score     : somma pesata M30+H1+H4 (max 3.0 = tutto allineato)
+    """
+    df = df.copy()
+
+    def resample_trend(df_: pd.DataFrame, rule: str, fast: int, slow: int) -> pd.Series:
+        htf = df_[["open", "high", "low", "close", "volume"]].resample(rule).agg({
+            "open": "first", "high": "max", "low": "min",
+            "close": "last",  "volume": "sum",
+        }).dropna()
+        htf["ema_f"] = htf["close"].ewm(span=fast, adjust=False).mean()
+        htf["ema_s"] = htf["close"].ewm(span=slow, adjust=False).mean()
+        trend = np.where(htf["ema_f"] > htf["ema_s"],  1.0,
+                np.where(htf["ema_f"] < htf["ema_s"], -1.0, 0.0))
+        return pd.Series(trend, index=htf.index).reindex(df_.index, method="ffill").fillna(0.0)
+
+    df["htf_h1_trend"] = resample_trend(df, "1h",  fast=20, slow=50)
+    df["htf_h4_trend"] = resample_trend(df, "4h",  fast=20, slow=50)
+
+    # Recupera htf_trend (M30) già calcolato o ricalcola
+    m30_trend = df.get("htf_trend", pd.Series(0.0, index=df.index))
+
+    # Score pesato: M30=0.5pt, H1=1pt, H4=1.5pt (più alto TF = più peso)
+    df["htf_score"] = (
+        m30_trend * 0.5 +
+        df["htf_h1_trend"] * 1.0 +
+        df["htf_h4_trend"] * 1.5
+    )  # range -3.0 .. +3.0
+
+    return df
+
+
+def add_ob_volume_feature(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Volume normalizzato alla candela che ha formato l'OB.
+    Un OB formato su volume istituzionale (>2x media) è molto più affidabile.
+    Richiede che add_smc_signal_features sia già stata chiamata (ob_age_norm presente).
+    """
+    df = df.copy()
+    vol      = df["volume"].replace(0, np.nan).fillna(1.0)
+    vol_ma20 = vol.rolling(20).mean().replace(0, np.nan)
+    vol_norm = (vol / vol_ma20).clip(0, 10).fillna(1.0)
+
+    # Stima: se l'OB è stato formato ~age bar fa, prendi il volume di quella candela
+    ob_age_norm = df.get("ob_age_norm", pd.Series(0.0, index=df.index)).values
+    n = len(df)
+    vol_at_ob = np.ones(n)
+
+    for i in range(n):
+        if ob_age_norm[i] > 0:
+            age_bars = int(round(ob_age_norm[i] * 80))   # OB_MAX_AGE=80
+            ob_bar   = max(0, i - age_bars)
+            vol_at_ob[i] = vol_norm.iloc[ob_bar]
+
+    df["ob_vol_ratio"] = vol_at_ob   # >2 = OB istituzionale, <1 = debole
+    return df
+
+
+def add_signal_strength(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Signal Strength Score 0–100: combina tutte le confluenze in un punteggio unico.
+    Più alto = setup migliore = maggiore probabilità di win.
+
+    Componenti (pesi calibrati su backtest):
+      HTF alignment  (htf_score)         → max 25 pt
+      OB quality     (age + size + FVG)  → max 20 pt
+      Momentum       (MFI + CMF + OBV)   → max 20 pt
+      VWAP position                      → max 15 pt
+      Liq sweep                          → max 10 pt
+      Volume OB      (ob_vol_ratio)      → max 10 pt
+    """
+    df = df.copy()
+    n = len(df)
+    score = np.zeros(n)
+
+    trend = df.get("trend_num", df.get("trend", pd.Series(0, index=df.index))).values
+
+    # 1. HTF alignment (25 pt)
+    htf_score = df.get("htf_score", pd.Series(0.0, index=df.index)).values
+    # htf_score range -3..+3; per long vogliamo >0, per short <0
+    htf_component = np.where(
+        trend == 1,  np.clip( htf_score / 3.0, 0, 1) * 25,
+        np.where(
+        trend == -1, np.clip(-htf_score / 3.0, 0, 1) * 25,
+        0.0)
+    )
+    score += htf_component
+
+    # 2. OB quality (20 pt): freschezza + FVG + penetrazione ideale
+    ob_fresh = np.clip(1 - df.get("ob_age_norm", pd.Series(0.0, index=df.index)).values, 0, 1)
+    ob_fvg   = df.get("ob_has_fvg", pd.Series(0.0, index=df.index)).values
+    ob_pen   = np.clip(1 - df.get("ob_penetration", pd.Series(0.5, index=df.index)).values, 0, 1)
+    score += (ob_fresh * 10 + ob_fvg * 7 + ob_pen * 3)
+
+    # 3. Momentum (20 pt): MFI + CMF + OBV trend
+    mfi_norm = df.get("mfi_norm", pd.Series(0.0, index=df.index)).values
+    cmf      = df.get("cmf", pd.Series(0.0, index=df.index)).values
+    obv_tr   = df.get("obv_trend", pd.Series(0.0, index=df.index)).values
+    # per long: MFI>0 e CMF>0 e OBV bull; per short: opposto
+    mom_long  = np.clip(mfi_norm, 0, 1) * 7 + np.clip(cmf, 0, 1) * 7 + (obv_tr == 1).astype(float) * 6
+    mom_short = np.clip(-mfi_norm, 0, 1) * 7 + np.clip(-cmf, 0, 1) * 7 + (obv_tr == -1).astype(float) * 6
+    score += np.where(trend == 1, mom_long, np.where(trend == -1, mom_short, 0.0))
+
+    # 4. VWAP position (15 pt)
+    vwap_dist_atr = df.get("vwap_dist_atr", pd.Series(0.0, index=df.index)).values
+    # long: price sotto VWAP (discount) = ideale per buy; short: price sopra (premium)
+    vwap_long  = np.clip(-vwap_dist_atr / 2.0, 0, 1) * 15  # sotto VWAP = buono per long
+    vwap_short = np.clip( vwap_dist_atr / 2.0, 0, 1) * 15  # sopra VWAP = buono per short
+    score += np.where(trend == 1, vwap_long, np.where(trend == -1, vwap_short, 0.0))
+
+    # 5. Liquidity sweep (10 pt)
+    liq_swept = df.get("liq_swept_smc", pd.Series(0.0, index=df.index)).values
+    score += liq_swept * 10
+
+    # 6. Volume at OB (10 pt)
+    ob_vol = df.get("ob_vol_ratio", pd.Series(1.0, index=df.index)).values
+    score += np.clip((ob_vol - 1.0) / 2.0, 0, 1) * 10   # 0pt se ratio=1 (normale), 10pt se ratio≥3
+
+    df["signal_strength"] = np.clip(score, 0, 100).round(1)
+
+    # Label qualitativa (per il dashboard e il bot)
+    df["signal_grade"] = pd.cut(
+        df["signal_strength"],
+        bins=[-1, 30, 50, 65, 80, 101],
+        labels=["SKIP", "WEAK", "GOOD", "STRONG", "A+"],
+    ).astype(str)
 
     return df
 
@@ -474,17 +695,22 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
 
 
 def build_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.DataFrame:
-    """Pipeline completa di feature engineering."""
+    """Pipeline completa di feature engineering (v2 – indicatore potenziato)."""
     df = add_candle_features(df)
     df = add_moving_averages(df)
-    df = add_volatility(df)
+    df = add_volatility(df)               # richiede: nulla
     df = add_momentum(df)
     df = add_time_features(df)
     df = add_volume_features(df)
+    df = add_mfi_cmf_obv(df)             # MFI, CMF, OBV (richiede volume)
     df = add_smc_features(df)
-    df = add_trend_strength(df)           # richiede atr (da add_volatility)
+    df = add_trend_strength(df)           # ADX + BB (richiede atr)
     df = add_htf_features(df)             # trend M30 (resample da M5)
-    df = add_smc_signal_features(df, symbol=symbol)   # include SL stop-hunt features
+    df = add_htf_h1_h4_features(df)      # trend H1 + H4 + htf_score
+    df = add_vwap_features(df)            # VWAP giornaliero (richiede atr)
+    df = add_smc_signal_features(df, symbol=symbol)   # OB/FVG/Liq + SL stop-hunt
+    df = add_ob_volume_feature(df)        # volume all'OB (richiede ob_age_norm)
+    df = add_signal_strength(df)          # score 0-100 composito
     df = df.dropna()
     return df
 
@@ -498,13 +724,24 @@ FEATURE_COLUMNS = [
     "close_vs_ema_100", "close_vs_ema_200",
     # ── VOLATILITÀ ────────────────────────────────────────────────────────────
     "atr_pct", "vol_5", "vol_20",
-    # ── MOMENTUM (contesto) ───────────────────────────────────────────────────
+    # ── MOMENTUM CLASSICO ────────────────────────────────────────────────────
     "rsi_norm", "macd_norm", "macd_hist", "stoch_k", "stoch_d",
     # ── TEMPO & SESSIONE (kill zone — cruciale per XAUUSD) ───────────────────
     "hour_sin", "hour_cos", "dow_sin", "dow_cos",
     "is_london", "is_ny", "is_asia",
-    # ── VOLUME (tickvol MT5 / proxy M30÷6) ───────────────────────────────────
+    # ── VOLUME BASE ───────────────────────────────────────────────────────────
     "vol_norm", "vol_spike", "vol_trend",
+    # ── VOLUME AVANZATO (v2) ──────────────────────────────────────────────────
+    "mfi_norm",         # Money Flow Index norm -1..+1 (RSI pesato per volume)
+    "cmf",              # Chaikin Money Flow -1..+1 (pressione buy/sell)
+    "obv_trend",        # OBV trend: 1=bullish, -1=bearish
+    "obv_zscore",       # OBV z-score normalizzato (momentum cumulativo volume)
+    # ── VWAP ISTITUZIONALE (v2) ───────────────────────────────────────────────
+    "vwap_dist",        # distanza % dal VWAP giornaliero
+    "vwap_dist_atr",    # distanza dal VWAP in unità ATR
+    "vwap_zone",        # 1=premium (sopra VWAP+ATR), -1=discount, 0=neutro
+    "vwap_cross_bull",  # 1 se cross VWAP rialzista in questa candela
+    "vwap_cross_bear",  # 1 se cross VWAP ribassista in questa candela
     # ── FORZA TREND & BANDA ──────────────────────────────────────────────────
     "adx", "bb_position", "bb_width",
     # ── SMC STRUTTURA (generali) ─────────────────────────────────────────────
@@ -520,9 +757,15 @@ FEATURE_COLUMNS = [
     "dist_to_liq_atr",  # distanza alla prossima liquidità obiettivo (ATR)
     "ob_count_zone",    # OB sovrapposti nella zona (0-5)
     "is_choch",         # 1=CHoCH (inversione), 0=BOS (continuazione)
-    # ── TREND TIMEFRAME SUPERIORE (M30) ──────────────────────────────────────
+    "ob_vol_ratio",     # volume alla candela OB / media (v2 — conferma istituzionale)
+    # ── TREND MULTI-TIMEFRAME (v2 – M30 + H1 + H4) ───────────────────────────
     "htf_trend",        # trend M30: 1=bull, -1=bear, 0=neutro
-    "htf_aligned",      # 1 se M5 e M30 concordano (setup più forte)
+    "htf_aligned",      # 1 se M5 e M30 concordano
+    "htf_h1_trend",     # trend H1: 1=bull, -1=bear
+    "htf_h4_trend",     # trend H4: 1=bull, -1=bear
+    "htf_score",        # score pesato M30+H1+H4 (max ±3.0; +3=tutto allineato bull)
+    # ── SIGNAL STRENGTH COMPOSITO (v2) ───────────────────────────────────────
+    "signal_strength",  # punteggio 0-100 (tutte le confluenze combinate)
     # ── STOP HUNT RISK ────────────────────────────────────────────────────────
     "sl_in_liq_zone",   # 1 se SL grezzo cade dentro una liq zone (stop hunt risk)
     "dist_sl_to_liq",   # distanza SL → liq zone più vicina (ATR; bassa = rischio alto)
@@ -553,13 +796,28 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
     rr         = config.MIN_RISK_REWARD
     valid_mask = ~np.isnan(atr) & (atr > 0)
 
+    # ── SL distance: usa sl_dist_adjusted se disponibile ─────────────────────
+    # sl_dist_adjusted riflette lo SL reale usato in live (aggiustato oltre le
+    # liquidity zones). Usarlo nelle label allinea training e live trading,
+    # riducendo la distorsione della calibrazione ML.
+    if "sl_dist_adjusted" in df.columns:
+        sl_dist_col = df["sl_dist_adjusted"].values
+    else:
+        sl_dist_col = None
+
     # ── LONG ──────────────────────────────────────────────────────────────────
     long_idx = np.where((trend == 1) & valid_mask)[0]
     long_idx = long_idx[long_idx < n - lookahead]
 
     if len(long_idx) > 0:
-        sl = close[long_idx] - atr[long_idx] * sl_mult
-        tp = close[long_idx] + atr[long_idx] * sl_mult * rr
+        if sl_dist_col is not None:
+            sl_d = sl_dist_col[long_idx]
+            # sl_dist_adjusted = 0 quando nessuna liq zone in range → fallback su raw ATR
+            sl_d = np.where(sl_d > 0, sl_d, atr[long_idx] * sl_mult)
+        else:
+            sl_d = atr[long_idx] * sl_mult
+        sl = close[long_idx] - sl_d
+        tp = close[long_idx] + sl_d * rr
 
         # Matrici (n_long, lookahead): future_low[j, k] = low[long_idx[j] + k + 1]
         future_low   = np.stack([low  [long_idx + k + 1] for k in range(lookahead)], axis=1)
@@ -590,8 +848,13 @@ def build_labels(df: pd.DataFrame, lookahead: int = 10, min_move_atr: float = 1.
     short_idx = short_idx[short_idx < n - lookahead]
 
     if len(short_idx) > 0:
-        sl = close[short_idx] + atr[short_idx] * sl_mult
-        tp = close[short_idx] - atr[short_idx] * sl_mult * rr
+        if sl_dist_col is not None:
+            sl_d = sl_dist_col[short_idx]
+            sl_d = np.where(sl_d > 0, sl_d, atr[short_idx] * sl_mult)
+        else:
+            sl_d = atr[short_idx] * sl_mult
+        sl = close[short_idx] + sl_d
+        tp = close[short_idx] - sl_d * rr
 
         future_low   = np.stack([low  [short_idx + k + 1] for k in range(lookahead)], axis=1)
         future_high  = np.stack([high [short_idx + k + 1] for k in range(lookahead)], axis=1)
