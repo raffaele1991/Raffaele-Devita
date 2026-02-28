@@ -245,7 +245,7 @@ def run_backtest(
             try:
                 ml_model = SMCMLModel(symbol)
                 ml_model.load()
-                _log(f"Modello ML caricato ✓  (soglia={config.ML_CONFIDENCE_THRESHOLD})")
+                _log(f"Modello ML caricato ✓  (soglia={threshold})")
             except Exception as e:
                 _log(f"Avviso ML: {e} → procedo solo con SMC")
                 ml_model = None
@@ -272,6 +272,7 @@ def run_backtest(
         "fvg_blocked":     0,
         "liq_blocked":     0,
         "ml_blocked":      0,
+        "ml_errors":       0,
         "rr_rejected":     0,
         "signals":         0,
         "signals_with_fvg": 0,
@@ -361,17 +362,19 @@ def run_backtest(
                     ctx_for_ml = ctx_for_ml.set_index('time')
                 feat_df = build_features(ctx_for_ml, symbol=symbol)
                 if len(feat_df) == 0:
-                    _diag["ml_blocked"] += 1
+                    _diag["ml_errors"] += 1
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
-                _log(f"  [ML] conf={conf:.3f} soglia={threshold} dir={signal.direction}")
                 if conf < threshold:
                     _diag["ml_blocked"] += 1
                     i += 1
                     continue
-            except Exception:
-                pass  # se ML fallisce, usa solo segnale SMC
+            except Exception as e:
+                _diag["ml_errors"] += 1
+                if _diag["ml_errors"] <= 3:
+                    _log(f"  [ML] Errore (trade {len(trades)+1}): {e}")
+
 
         # Parametri del trade
         entry   = float(candle['close'])
@@ -491,6 +494,7 @@ def run_backtest(
     _log(f"  Bloccati (no FVG)    : {_diag['fvg_blocked']}")
     _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
+    _log(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
     _log(f"  Trade aperti         : {len(trades)}")
     _log(f"{'─' * 50}")
