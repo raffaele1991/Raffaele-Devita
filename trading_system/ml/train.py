@@ -126,6 +126,13 @@ def train_symbol(symbol: str, n_threads: int = -1):
     print(f"  Candele totali caricate: {len(df):,}")
     print(f"  Periodo: {df.index[0]} → {df.index[-1]}")
 
+    # Applica start date: esclude dati storici con volume non affidabile
+    start_date = getattr(config, "TRAIN_START_DATE", None)
+    if start_date:
+        start_ts = pd.Timestamp(start_date)
+        df = df[df.index >= start_ts]
+        print(f"  [SPLIT] Training da {start_date} (volume affidabile)")
+
     # Applica cutoff: allena SOLO su dati precedenti a TRAIN_CUTOFF_DATE
     cutoff = pd.Timestamp(config.TRAIN_CUTOFF_DATE)
     df = df[df.index < cutoff]
