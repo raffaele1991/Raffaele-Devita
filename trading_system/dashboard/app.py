@@ -498,7 +498,12 @@ def api_backtest():
     if start_date >= end_date:
         return jsonify({"ok": False, "error": "start_date deve essere precedente a end_date"}), 400
 
-    started = start_backtest(symbol, start_date, end_date)
+    # Legge la soglia per-simbolo dai settings salvati (priorità rispetto a config.py)
+    _s = _load_settings()
+    _sym_key = f"ml_confidence_{symbol.lower()}"
+    _threshold = float(_s.get(_sym_key, _s.get("ml_confidence_threshold", 0.65)))
+
+    started = start_backtest(symbol, start_date, end_date, ml_threshold=_threshold)
     if not started:
         return jsonify({"ok": False, "error": "Backtest già in corso — attendi il completamento"}), 409
 

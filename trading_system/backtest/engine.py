@@ -382,10 +382,15 @@ def run_backtest(
         tp_dist = abs(tp - entry)
 
         if sl_dist <= 0 or tp_dist <= 0:
+            if _diag["rr_rejected"] < 3:
+                _log(f"  [RR-DEBUG] sl_dist={sl_dist:.6f} tp_dist={tp_dist:.6f} entry={entry:.5f} sl={sl:.5f} tp={tp:.5f} dir={dirn}")
             _diag["rr_rejected"] += 1
             i += 1
             continue
-        if tp_dist / sl_dist < 1.5:   # R:R minimo 1.5
+        rr = tp_dist / sl_dist
+        if rr < 1.5:   # R:R minimo 1.5
+            if _diag["rr_rejected"] < 3:
+                _log(f"  [RR-DEBUG] RR={rr:.3f}<1.5 entry={entry:.5f} sl={sl:.5f} tp={tp:.5f} dir={dirn}")
             _diag["rr_rejected"] += 1
             i += 1
             continue
@@ -565,7 +570,7 @@ def run_backtest(
 
 # ── PUBLIC API ────────────────────────────────────────────────────────────────
 
-def start_backtest(symbol: str, start_date: str, end_date: str) -> bool:
+def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None) -> bool:
     """Avvia il backtest in un thread separato. Ritorna False se già in corso."""
     with _lock:
         if _state["running"]:
@@ -577,7 +582,7 @@ def start_backtest(symbol: str, start_date: str, end_date: str) -> bool:
 
     def _run():
         try:
-            results = run_backtest(symbol, start_date, end_date)
+            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold)
             with _lock:
                 _state["results"]  = results
                 _state["status"]   = "done"
