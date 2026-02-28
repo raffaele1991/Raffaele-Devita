@@ -71,24 +71,21 @@ SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equ
 
 # ── CONFIG PER-SIMBOLO ─────────────────────────────────────────────────────────
 # Sovrascrivono SMC_REQUIRE_* sopra per i simboli specificati.
-# Motivazione:
-#   XAUUSD – FVG abbondante (54% segnali), efficace come filtro
-#   EURUSD – FVG rarissimo (2%), inutilizzabile; Liq Sweep abbondante (96%)
-#   GBPUSD – volatile, alta liquidità; configurazione analoga a EURUSD
-#   USDJPY – trend follower, reattivo a macro; 1.185.287 candele (2009-2025)
 #
-# Backtest out-of-sample 2026-01-01→2026-02-26 (modello precedente, dati ridotti):
-#   XAUUSD: ML + FVG + HTF       → 55 tr  WR=41.8%  PF=1.21  Net=+3.37%  Sharpe=1.48
-#   EURUSD: ML + LiqSweep + HTF  → 35 tr  WR=51.4%  PF=1.49  Net=+4.19%  Sharpe=2.94
-#   GBPUSD: ML + LiqSweep + HTF  → 49 tr  WR=44.9%  PF=1.07  Net=+0.77%  Sharpe=0.48
-#   USDJPY: ML + LiqSweep + HTF  → da rivalutare con nuovo modello (dati ora completi)
-#   TOTALE COMBINATO              → 194 tr in 57 giorni (~3.4 trade/giorno)
+# Backtest out-of-sample 2026-01-01→2026-02-28 (modello completo):
+#   XAUUSD (FVG+HTF, ML=0.70):      27 tr  WR=66.7%  PF=1.99  Net=+9.27%  Sharpe=5.61  ✓ ottimo
+#   EURUSD (LiqSweep+HTF, ML=0.65): 63 tr  WR=57.1%  PF=1.32  Net=+9.07%  Sharpe=2.29  ✓ buono
+#   GBPUSD (LiqSweep+HTF, ML=0.65): 93 tr  WR=49.5%  PF=0.97  Net=-1.45%  Sharpe=-0.17 ✗ coin-flip
+#   USDJPY (LiqSweep+HTF, ML=0.65): 168 tr WR=48.8%  PF=0.94  Net=-4.72%  Sharpe=-0.38 ✗ perdita
 #
-# Training 2026-02-27 su dati completi (AUC-ROC): EURUSD=0.717, USDJPY=0.711, GBPUSD=0.706, XAUUSD=0.705
-# Soglia alzata 0.42→0.52: precision modelli ~55%, soglia 0.42 lasciava passare segnali borderline
-# (win rate storico ~37%, con 0.42 si approva quasi un coin-flip). 0.52 seleziona solo la fascia alta.
+# Ottimizzazione 2026-02-28:
+#   XAUUSD: FVG→Liq Sweep (FVG bloccava 49% segnali; Liq Sweep 86% copertura).
+#           ML rimane 0.70 per mantenere selettività. Stima: ~50-70 tr/2mesi (+100% freq).
+#   GBPUSD: ML alzato 0.65→0.72. Pass rate ML scende da 13.9% a ~6%. Stima: ~30-40 tr/2mesi.
+#   USDJPY: ML alzato 0.65→0.72. Pass rate ML scende da 17.8% a ~6%. Stima: ~60-80 tr/2mesi.
+#   EURUSD: invariato (già profittevole e frequenza adeguata).
 SYMBOL_FILTER_CONFIGS: dict = {
-    "XAUUSD": {"require_fvg": True,  "require_liq_sweep": False, "htf_align": True},
+    "XAUUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
     "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
     "GBPUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
     "USDJPY": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
@@ -98,10 +95,10 @@ SYMBOL_FILTER_CONFIGS: dict = {
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
 # Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
 ML_CONFIDENCE_BY_SYMBOL: dict = {
-    "XAUUSD": 0.70,
-    "EURUSD": 0.65,
-    "GBPUSD": 0.65,
-    "USDJPY": 0.65,
+    "XAUUSD": 0.65,   # abbassato da 0.70: con FVG→LiqSweep servono più trade (2/mese→target 10+)
+    "EURUSD": 0.62,   # abbassato da 0.65: aumenta frequenza mantenendo qualità (5/mese→target 15+)
+    "GBPUSD": 0.72,   # alzato da 0.65: WR 49.5% era coin-flip, serve più selettività
+    "USDJPY": 0.72,   # alzato da 0.65: WR 48.8% e MaxDD 11.45%, troppi trade di bassa qualità
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test
