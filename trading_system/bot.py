@@ -413,6 +413,7 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     _require_htf = _sym_cfg.get("htf_align",        getattr(config, "SMC_REQUIRE_HTF_ALIGN",  True))
     _require_fvg = _sym_cfg.get("require_fvg",       getattr(config, "SMC_REQUIRE_FVG",        False))
     _require_liq = _sym_cfg.get("require_liq_sweep", getattr(config, "SMC_REQUIRE_LIQ_SWEEP",  False))
+    _require_pa  = _sym_cfg.get("pa_filter",         False)
     _min_adx     = getattr(config, "MIN_ADX_FILTER", 0.20)
 
     last_feat = df_feat.iloc[-1]
@@ -475,6 +476,14 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
             f"ML {confidence:.2f} < soglia {ml_thresh}",
         )
         return
+
+    # 5) PA filter per-simbolo: richiede pattern candlestick confermato
+    if _require_pa:
+        has_pa = bool(getattr(signal, 'pa_pattern', ""))
+        if not has_pa:
+            logger.info(f"[FILTER] {symbol}: PA filter attivo ma nessun pattern PA – skip")
+            _reason("info", f"{symbol}: nessun pattern Price Action confermato – skip")
+            return
 
     # Verifica che non ci siano già posizioni aperte per questo simbolo
     open_pos = connector.get_open_positions(symbol=symbol)
