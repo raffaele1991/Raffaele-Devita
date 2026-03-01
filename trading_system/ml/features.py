@@ -767,7 +767,7 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
         df["pa_inside_bar"] = ((h < ph) & (l > pl)).astype(float)
         # Prima riga non ha contesto: azzera
         for col in ["pa_engulfing_bull", "pa_engulfing_bear", "pa_inside_bar"]:
-            df[col].iloc[0] = 0.0
+            df.loc[df.index[0], col] = 0.0
     else:
         df["pa_engulfing_bull"] = 0.0
         df["pa_engulfing_bear"] = 0.0
