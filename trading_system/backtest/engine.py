@@ -303,6 +303,7 @@ def run_backtest(
 
         candle = df.iloc[i]
         ts     = candle['time']
+        _trade_ml_conf = None  # confidence ML per questo specifico trade
 
         # Filtro sessione (London / NY / Asian per USDJPY)
         if not _in_session(ts, symbol):
@@ -384,7 +385,8 @@ def run_backtest(
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
-                _ml_scores.append(round(float(conf), 3))
+                _trade_ml_conf = round(float(conf), 3)
+                _ml_scores.append(_trade_ml_conf)
                 if conf < threshold:
                     _diag["ml_blocked"] += 1
                     i += 1
@@ -503,6 +505,7 @@ def run_backtest(
             "outcome":   "WIN" if is_win else "LOSS",
             "r":         round(raw_r, 2),
             "pnl":       round(pnl, 2),
+            "ml_conf":   _trade_ml_conf,
         })
 
         if len(trades) % 20 == 0:
@@ -583,6 +586,25 @@ def run_backtest(
     _log(f"  Net P&L       : ${net_pnl:+,.2f}  ({net_pnl_pct:+.2f}%)")
     _log(f"  Balance fin.  : ${balance:,.2f}")
     _log(f"{'─' * 50}")
+
+    # ── WIN/LOSS PER BUCKET ML ─────────────────────────────────────────────────
+    _trades_with_ml = [t for t in trades if t.get('ml_conf') is not None]
+    if _trades_with_ml:
+        _log(f"  WIN/LOSS per bucket ML confidence:")
+        _log(f"  {'Bucket':<14} {'Tot':>4} {'W':>4} {'L':>4} {'WR%':>6}  {'NetR':>6}")
+        _log(f"  {'─'*14} {'─'*4} {'─'*4} {'─'*4} {'─'*6}  {'─'*6}")
+        for _lo, _hi in [(0.50,0.60),(0.60,0.65),(0.65,0.70),(0.70,0.75),(0.75,0.80),(0.80,0.85),(0.85,0.90),(0.90,1.01)]:
+            _bucket = [t for t in _trades_with_ml if _lo <= t['ml_conf'] < _hi]
+            if not _bucket:
+                continue
+            _bw = [t for t in _bucket if t['outcome'] == 'WIN']
+            _bl = [t for t in _bucket if t['outcome'] == 'LOSS']
+            _wr = len(_bw) / len(_bucket) * 100
+            _nr = sum(t['r'] for t in _bucket)
+            _label = f"[{_lo:.2f}-{_hi:.2f})" if _hi < 1.01 else f"[{_lo:.2f}-1.00]"
+            _flag  = " ✓" if _wr >= 55 else ("  " if _wr >= 45 else " ✗")
+            _log(f"  {_label:<14} {len(_bucket):>4} {len(_bw):>4} {len(_bl):>4} {_wr:>5.1f}%{_flag}  {_nr:>+.2f}R")
+        _log(f"{'─' * 50}")
 
     return {
         "symbol":          symbol,
