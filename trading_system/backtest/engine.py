@@ -217,8 +217,12 @@ def run_backtest(
     _log(f"  HTF hard filter : {htf_hard_filter}")
     _log(f"  Require FVG     : {require_fvg}")
     _log(f"  Require Liq Sweep: {require_liq_sweep}")
-    _log(f"  Require PA       : {require_pa}")
-    _log(f"  PA filter (score): {'ON (min score=' + str(pa_min_score) + ')' if pa_enabled and pa_min_score > 0 else 'OFF'}")
+    _pa_parts = []
+    if require_pa:
+        _pa_parts.append("pattern richiesto")
+    if pa_enabled and pa_min_score > 0:
+        _pa_parts.append(f"score≥{pa_min_score}")
+    _log(f"  PA filter        : {'ON (' + ', '.join(_pa_parts) + ')' if _pa_parts else 'OFF'}")
     _log(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
