@@ -292,6 +292,7 @@ def run_backtest(
         "signals_with_liq": 0,
         "signals_with_pa":  0,
     }
+    _ml_scores: list = []   # raccoglie tutti i valori di confidence per la distribuzione
 
     _log(f"Avvio simulazione...")
 
@@ -383,6 +384,7 @@ def run_backtest(
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
+                _ml_scores.append(round(float(conf), 3))
                 if conf < threshold:
                     _diag["ml_blocked"] += 1
                     i += 1
@@ -524,6 +526,17 @@ def run_backtest(
     _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
     _log(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
+    if _ml_scores:
+        import numpy as _np
+        _sc = _np.array(_ml_scores)
+        _log(f"  Distribuzione ML confidence ({len(_sc)} segnali valutati):")
+        for _lo, _hi in [(0.50,0.60),(0.60,0.65),(0.65,0.70),(0.70,0.75),(0.75,0.80),(0.80,0.85),(0.85,0.90),(0.90,1.01)]:
+            _cnt = int(((_sc >= _lo) & (_sc < _hi)).sum())
+            _bar = "█" * min(_cnt, 30)
+            _label = f"[{_lo:.2f}-{_hi:.2f})" if _hi < 1.01 else f"[{_lo:.2f}-1.00]"
+            _log(f"    {_label}: {_cnt:>4}  {_bar}")
+        _log(f"  Mediana confidence   : {float(_np.median(_sc)):.3f}")
+        _log(f"  Superano soglia {threshold:.2f}  : {int((_sc >= threshold).sum())}")
     _log(f"  Bloccati da PA       : {_diag['pa_blocked']}")
     _log(f"  di cui con PA pattern: {_diag['signals_with_pa']}  ({_diag['signals_with_pa']/max(_diag['signals'],1)*100:.0f}%)")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
