@@ -453,10 +453,12 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         return
 
     # ML confidence check (soglia per-simbolo se disponibile, altrimenti globale)
-    _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
-    ml_thresh = _by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD
+    _by_sym    = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
+    ml_thresh  = _by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD
+    ml_thresh_max = getattr(config, 'ML_CONFIDENCE_MAX_BY_SYMBOL', {}).get(symbol.upper(), None)
     confidence = ml_model.predict_proba(df_feat)
-    logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {ml_thresh})")
+    _range_str = f"[{ml_thresh}, {ml_thresh_max if ml_thresh_max is not None else '∞'})"
+    logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (range: {_range_str})")
 
     # Aggiorna segnale per la dashboard (include info PA)
     _symbol_signals[symbol] = {
@@ -473,7 +475,16 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason(
             "info",
             f"{symbol}: segnale {signal.direction.upper()} scartato – "
-            f"ML {confidence:.2f} < soglia {ml_thresh}",
+            f"ML {confidence:.2f} < {ml_thresh}",
+        )
+        return
+
+    if ml_thresh_max is not None and confidence >= ml_thresh_max:
+        logger.info(f"[ML]  {symbol} segnale scartato (confidence troppo alta)")
+        _reason(
+            "info",
+            f"{symbol}: segnale {signal.direction.upper()} scartato – "
+            f"ML {confidence:.2f} >= {ml_thresh_max} (tetto superiore)",
         )
         return
 

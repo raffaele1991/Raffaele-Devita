@@ -93,12 +93,25 @@ SYMBOL_FILTER_CONFIGS: dict = {
 
 # ── SOGLIA ML PER-SIMBOLO ──────────────────────────────────────────────────────
 # Sovrascrive ML_CONFIDENCE_THRESHOLD per i simboli specificati.
-# Tutti i simboli a 0.42: soglia calibrata su dati completi (1M+ candele ciascuno).
+# Ottimizzazione grid search 2026-03-01 (backtest out-of-sample):
+#   XAUUSD: [0.62, 0.85)  60 tr  WR=63.3%  NetR=+16R  PF=1.70  Sharpe=4.39
+#   EURUSD: [0.62, 0.85)  17 tr  WR=70.6%  NetR= +7R  PF=2.38  Sharpe=7.17
+#   GBPUSD: [0.70, ∞)     14 tr  WR=71.4%  NetR= +6R  PF=2.48  Sharpe=7.53
+#   USDJPY: [0.62, ∞)    102 tr  WR=55.9%  NetR=+12R  PF=1.27  Sharpe=1.88
 ML_CONFIDENCE_BY_SYMBOL: dict = {
-    "XAUUSD": 0.65,   # abbassato da 0.70: con FVG→LiqSweep servono più trade (2/mese→target 10+)
-    "EURUSD": 0.62,   # abbassato da 0.65: aumenta frequenza mantenendo qualità (5/mese→target 15+)
-    "GBPUSD": 0.72,   # alzato da 0.65: WR 49.5% era coin-flip, serve più selettività
-    "USDJPY": 0.72,   # alzato da 0.65: WR 48.8% e MaxDD 11.45%, troppi trade di bassa qualità
+    "XAUUSD": 0.62,
+    "EURUSD": 0.62,
+    "GBPUSD": 0.70,
+    "USDJPY": 0.62,
+}
+
+# Limite SUPERIORE di confidenza ML per-simbolo (None = nessun tetto).
+# Trade con ML >= questo valore vengono scartati (setup "troppo ovvi" o overfit).
+ML_CONFIDENCE_MAX_BY_SYMBOL: dict = {
+    "XAUUSD": 0.85,   # scarta trade con ML ≥ 0.85
+    "EURUSD": 0.85,   # scarta trade con ML ≥ 0.85
+    "GBPUSD": None,   # nessun limite superiore
+    "USDJPY": None,   # nessun limite superiore
 }
 ML_LOOKBACK_CANDLES     = 50     # candele di contesto passato come feature
 ML_TRAIN_TEST_SPLIT     = 0.85   # 85% train, 15% test

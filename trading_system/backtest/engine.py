@@ -186,15 +186,24 @@ def run_backtest(
     end_date: str,
     initial_balance: float = 10_000.0,
     ml_threshold: Optional[float] = None,
+    ml_confidence_max: Optional[float] = None,
     htf_hard_filter: Optional[bool] = None,
     require_fvg: Optional[bool] = None,
     require_liq_sweep: Optional[bool] = None,
     require_pa: Optional[bool] = None,
+    quiet: bool = False,
 ) -> Dict[str, Any]:
+
+    # Quiet mode: sopprime tutto l'output durante optimize grid-search
+    _log_fn = (lambda m: None) if quiet else _log
 
     # Parametri: None = usa config per-simbolo (se disponibile) o default globale
     _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
     threshold = ml_threshold if ml_threshold is not None else (_by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD)
+
+    # Limite superiore ML per-simbolo (se non passato esplicitamente dal grid search)
+    if ml_confidence_max is None:
+        ml_confidence_max = getattr(config, 'ML_CONFIDENCE_MAX_BY_SYMBOL', {}).get(symbol.upper(), None)
 
     # Leggi config per-simbolo (es. EURUSD usa Liq Sweep, XAUUSD usa FVG)
     _sym_cfg = getattr(config, 'SYMBOL_FILTER_CONFIGS', {}).get(symbol.upper(), {})
@@ -210,23 +219,23 @@ def run_backtest(
     pa_enabled  = getattr(config, 'PA_ENABLED', True)
     pa_min_score = getattr(config, 'PA_MIN_SCORE', 0)
 
-    _log(f"{'=' * 50}")
-    _log(f"  BACKTEST {symbol}")
-    _log(f"  Periodo: {start_date} → {end_date}")
-    _log(f"  ML threshold  : {threshold}")
-    _log(f"  HTF hard filter : {htf_hard_filter}")
-    _log(f"  Require FVG     : {require_fvg}")
-    _log(f"  Require Liq Sweep: {require_liq_sweep}")
+    _log_fn(f"{'=' * 50}")
+    _log_fn(f"  BACKTEST {symbol}")
+    _log_fn(f"  Periodo: {start_date} → {end_date}")
+    _log_fn(f"  ML threshold  : {threshold}")
+    _log_fn(f"  HTF hard filter : {htf_hard_filter}")
+    _log_fn(f"  Require FVG     : {require_fvg}")
+    _log_fn(f"  Require Liq Sweep: {require_liq_sweep}")
     _pa_parts = []
     if require_pa:
         _pa_parts.append("pattern richiesto")
     if pa_enabled and pa_min_score > 0:
         _pa_parts.append(f"score≥{pa_min_score}")
-    _log(f"  PA filter        : {'ON (' + ', '.join(_pa_parts) + ')' if _pa_parts else 'OFF'}")
-    _log(f"{'=' * 50}")
+    _log_fn(f"  PA filter        : {'ON (' + ', '.join(_pa_parts) + ')' if _pa_parts else 'OFF'}")
+    _log_fn(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
-    _log("Caricamento dati CSV...")
+    _log_fn("Caricamento dati CSV...")
     df = _load_csv(symbol)
 
     start_dt = pd.to_datetime(start_date)
@@ -240,14 +249,14 @@ def run_backtest(
             f"Allarga l'intervallo o scarica più storico."
         )
 
-    _log(f"Candele caricate : {len(df):,}")
-    _log(f"Da               : {df['time'].iloc[0]}")
-    _log(f"A                : {df['time'].iloc[-1]}")
+    _log_fn(f"Candele caricate : {len(df):,}")
+    _log_fn(f"Da               : {df['time'].iloc[0]}")
+    _log_fn(f"A                : {df['time'].iloc[-1]}")
 
     # 2. Carica modello ML (opzionale, controllato da config.USE_ML_FILTER)
     ml_model: Optional[SMCMLModel] = None
     if not config.USE_ML_FILTER:
-        _log("Filtro ML disabilitato (USE_ML_FILTER=False) → backtest solo SMC")
+        _log_fn("Filtro ML disabilitato (USE_ML_FILTER=False) → backtest solo SMC")
     else:
         model_path = os.path.join(
             os.path.dirname(__file__), '..', 'models',
@@ -257,12 +266,12 @@ def run_backtest(
             try:
                 ml_model = SMCMLModel(symbol)
                 ml_model.load()
-                _log(f"Modello ML caricato ✓  (soglia={threshold})")
+                _log_fn(f"Modello ML caricato ✓  (soglia={threshold})")
             except Exception as e:
-                _log(f"Avviso ML: {e} → procedo solo con SMC")
+                _log_fn(f"Avviso ML: {e} → procedo solo con SMC")
                 ml_model = None
         else:
-            _log("Modello ML non trovato → backtest solo SMC (senza filtro ML)")
+            _log_fn("Modello ML non trovato → backtest solo SMC (senza filtro ML)")
 
     # 3. Parametri
     detector = SMCDetector(symbol)
@@ -292,8 +301,9 @@ def run_backtest(
         "signals_with_liq": 0,
         "signals_with_pa":  0,
     }
+    _ml_scores: list = []   # raccoglie tutti i valori di confidence per la distribuzione
 
-    _log(f"Avvio simulazione...")
+    _log_fn(f"Avvio simulazione...")
 
     while i < len(df):
         # Aggiorna progresso globale
@@ -302,6 +312,7 @@ def run_backtest(
 
         candle = df.iloc[i]
         ts     = candle['time']
+        _trade_ml_conf = None  # confidence ML per questo specifico trade
 
         # Filtro sessione (London / NY / Asian per USDJPY)
         if not _in_session(ts, symbol):
@@ -383,14 +394,20 @@ def run_backtest(
                     i += 1
                     continue
                 conf = ml_model.predict_proba(feat_df)
+                _trade_ml_conf = round(float(conf), 3)
+                _ml_scores.append(_trade_ml_conf)
                 if conf < threshold:
+                    _diag["ml_blocked"] += 1
+                    i += 1
+                    continue
+                if ml_confidence_max is not None and conf >= ml_confidence_max:
                     _diag["ml_blocked"] += 1
                     i += 1
                     continue
             except Exception as e:
                 _diag["ml_errors"] += 1
                 if _diag["ml_errors"] <= 3:
-                    _log(f"  [ML] Errore (trade {len(trades)+1}): {e}")
+                    _log_fn(f"  [ML] Errore (trade {len(trades)+1}): {e}")
 
 
         # Hard filter PA: entra solo se c'è un pattern Price Action confermato
@@ -501,34 +518,46 @@ def run_backtest(
             "outcome":   "WIN" if is_win else "LOSS",
             "r":         round(raw_r, 2),
             "pnl":       round(pnl, 2),
+            "ml_conf":   _trade_ml_conf,
         })
 
         if len(trades) % 20 == 0:
-            _log(f"Trade simulati: {len(trades):3d} | Balance: ${balance:,.2f}")
+            _log_fn(f"Trade simulati: {len(trades):3d} | Balance: ${balance:,.2f}")
 
         # Salta alla candela dopo la chiusura del trade
         i = exit_bar + 1
 
     # ── DIAGNOSTICA ───────────────────────────────────────────────────────────
 
-    _log(f"{'─' * 50}")
-    _log(f"  DIAGNOSTICA FILTRI")
-    _log(f"  Candele in sessione  : {_diag['session_bars']}")
-    _log(f"  Scartate (no trend)  : {_diag['no_trend']}")
-    _log(f"  Scartate (no OB hit) : {_diag['no_ob']}")
-    _log(f"  Segnali SMC trovati  : {_diag['signals']}")
-    _log(f"  di cui con FVG       : {_diag['signals_with_fvg']}  ({_diag['signals_with_fvg']/max(_diag['signals'],1)*100:.0f}%)")
-    _log(f"  di cui con Liq Sweep : {_diag['signals_with_liq']}  ({_diag['signals_with_liq']/max(_diag['signals'],1)*100:.0f}%)")
-    _log(f"  Bloccati da HTF      : {_diag['htf_blocked']}")
-    _log(f"  Bloccati (no FVG)    : {_diag['fvg_blocked']}")
-    _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
-    _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
-    _log(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
-    _log(f"  Bloccati da PA       : {_diag['pa_blocked']}")
-    _log(f"  di cui con PA pattern: {_diag['signals_with_pa']}  ({_diag['signals_with_pa']/max(_diag['signals'],1)*100:.0f}%)")
-    _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
-    _log(f"  Trade aperti         : {len(trades)}")
-    _log(f"{'─' * 50}")
+    _log_fn(f"{'─' * 50}")
+    _log_fn(f"  DIAGNOSTICA FILTRI")
+    _log_fn(f"  Candele in sessione  : {_diag['session_bars']}")
+    _log_fn(f"  Scartate (no trend)  : {_diag['no_trend']}")
+    _log_fn(f"  Scartate (no OB hit) : {_diag['no_ob']}")
+    _log_fn(f"  Segnali SMC trovati  : {_diag['signals']}")
+    _log_fn(f"  di cui con FVG       : {_diag['signals_with_fvg']}  ({_diag['signals_with_fvg']/max(_diag['signals'],1)*100:.0f}%)")
+    _log_fn(f"  di cui con Liq Sweep : {_diag['signals_with_liq']}  ({_diag['signals_with_liq']/max(_diag['signals'],1)*100:.0f}%)")
+    _log_fn(f"  Bloccati da HTF      : {_diag['htf_blocked']}")
+    _log_fn(f"  Bloccati (no FVG)    : {_diag['fvg_blocked']}")
+    _log_fn(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
+    _log_fn(f"  Bloccati da ML       : {_diag['ml_blocked']}")
+    _log_fn(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
+    if _ml_scores:
+        import numpy as _np
+        _sc = _np.array(_ml_scores)
+        _log_fn(f"  Distribuzione ML confidence ({len(_sc)} segnali valutati):")
+        for _lo, _hi in [(0.50,0.60),(0.60,0.65),(0.65,0.70),(0.70,0.75),(0.75,0.80),(0.80,0.85),(0.85,0.90),(0.90,1.01)]:
+            _cnt = int(((_sc >= _lo) & (_sc < _hi)).sum())
+            _bar = "█" * min(_cnt, 30)
+            _label = f"[{_lo:.2f}-{_hi:.2f})" if _hi < 1.01 else f"[{_lo:.2f}-1.00]"
+            _log_fn(f"    {_label}: {_cnt:>4}  {_bar}")
+        _log_fn(f"  Mediana confidence   : {float(_np.median(_sc)):.3f}")
+        _log_fn(f"  Superano soglia {threshold:.2f}  : {int((_sc >= threshold).sum())}")
+    _log_fn(f"  Bloccati da PA       : {_diag['pa_blocked']}")
+    _log_fn(f"  di cui con PA pattern: {_diag['signals_with_pa']}  ({_diag['signals_with_pa']/max(_diag['signals'],1)*100:.0f}%)")
+    _log_fn(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
+    _log_fn(f"  Trade aperti         : {len(trades)}")
+    _log_fn(f"{'─' * 50}")
 
     # ── METRICHE ──────────────────────────────────────────────────────────────
 
@@ -553,23 +582,42 @@ def run_backtest(
     net_pnl     = balance - initial_balance
     net_pnl_pct = net_pnl / initial_balance * 100
 
-    _log(f"{'─' * 50}")
-    _log(f"  RISULTATI FINALI")
-    _log(f"{'─' * 50}")
+    _log_fn(f"{'─' * 50}")
+    _log_fn(f"  RISULTATI FINALI")
+    _log_fn(f"{'─' * 50}")
     avg_win_r  = float(np.mean([t['r'] for t in wins]))   if wins   else 0.0
     avg_loss_r = float(np.mean([t['r'] for t in losses])) if losses else 0.0
 
-    _log(f"  Trade totali  : {n}")
-    _log(f"  Win Rate      : {len(wins)/n*100:.1f}%  ({len(wins)}W / {len(losses)}L)")
-    _log(f"  Avg Win R     : {avg_win_r:+.2f}R")
-    _log(f"  Avg Loss R    : {avg_loss_r:+.2f}R")
-    _log(f"  Profit Factor : {gross_profit/gross_loss:.2f}")
-    _log(f"  Net R         : {sum(r_series):+.2f}R")
-    _log(f"  Max Drawdown  : {max_dd_pct:.2f}%")
-    _log(f"  Sharpe        : {sharpe:.2f}")
-    _log(f"  Net P&L       : ${net_pnl:+,.2f}  ({net_pnl_pct:+.2f}%)")
-    _log(f"  Balance fin.  : ${balance:,.2f}")
-    _log(f"{'─' * 50}")
+    _log_fn(f"  Trade totali  : {n}")
+    _log_fn(f"  Win Rate      : {len(wins)/n*100:.1f}%  ({len(wins)}W / {len(losses)}L)")
+    _log_fn(f"  Avg Win R     : {avg_win_r:+.2f}R")
+    _log_fn(f"  Avg Loss R    : {avg_loss_r:+.2f}R")
+    _log_fn(f"  Profit Factor : {gross_profit/gross_loss:.2f}")
+    _log_fn(f"  Net R         : {sum(r_series):+.2f}R")
+    _log_fn(f"  Max Drawdown  : {max_dd_pct:.2f}%")
+    _log_fn(f"  Sharpe        : {sharpe:.2f}")
+    _log_fn(f"  Net P&L       : ${net_pnl:+,.2f}  ({net_pnl_pct:+.2f}%)")
+    _log_fn(f"  Balance fin.  : ${balance:,.2f}")
+    _log_fn(f"{'─' * 50}")
+
+    # ── WIN/LOSS PER BUCKET ML ─────────────────────────────────────────────────
+    _trades_with_ml = [t for t in trades if t.get('ml_conf') is not None]
+    if _trades_with_ml:
+        _log_fn(f"  WIN/LOSS per bucket ML confidence:")
+        _log_fn(f"  {'Bucket':<14} {'Tot':>4} {'W':>4} {'L':>4} {'WR%':>6}  {'NetR':>6}")
+        _log_fn(f"  {'─'*14} {'─'*4} {'─'*4} {'─'*4} {'─'*6}  {'─'*6}")
+        for _lo, _hi in [(0.50,0.60),(0.60,0.65),(0.65,0.70),(0.70,0.75),(0.75,0.80),(0.80,0.85),(0.85,0.90),(0.90,1.01)]:
+            _bucket = [t for t in _trades_with_ml if _lo <= t['ml_conf'] < _hi]
+            if not _bucket:
+                continue
+            _bw = [t for t in _bucket if t['outcome'] == 'WIN']
+            _bl = [t for t in _bucket if t['outcome'] == 'LOSS']
+            _wr = len(_bw) / len(_bucket) * 100
+            _nr = sum(t['r'] for t in _bucket)
+            _label = f"[{_lo:.2f}-{_hi:.2f})" if _hi < 1.01 else f"[{_lo:.2f}-1.00]"
+            _flag  = " ✓" if _wr >= 55 else ("  " if _wr >= 45 else " ✗")
+            _log_fn(f"  {_label:<14} {len(_bucket):>4} {len(_bw):>4} {len(_bl):>4} {_wr:>5.1f}%{_flag}  {_nr:>+.2f}R")
+        _log_fn(f"{'─' * 50}")
 
     return {
         "symbol":          symbol,

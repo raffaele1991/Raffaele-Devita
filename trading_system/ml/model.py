@@ -189,17 +189,25 @@ class SMCMLModel:
 
         # ── Analisi precision per soglia di confidenza ─────────────────────────
         print(f"\n  ── ANALISI SOGLIA CONFIDENZA ───────────────────────────")
-        print(f"  {'Soglia':>7}  {'Segnali':>8}  {'Win Rate':>9}  {'Precision':>10}")
-        for thr in [0.50, 0.52, 0.55, 0.58, 0.60, 0.63, 0.65]:
+        print(f"  {'Soglia':>7}  {'Segnali':>8}  {'Win Rate':>9}  {'Usabile':>8}")
+        for thr in [0.50, 0.52, 0.55, 0.58, 0.60, 0.63, 0.65, 0.68, 0.70, 0.73, 0.75, 0.80, 0.85, 0.90]:
             mask = y_proba >= thr
             n_sig = mask.sum()
-            if n_sig >= 30:
-                wr  = y_test.values[mask].mean()
-                prec = precision_score(y_test.values[mask], np.ones(n_sig, dtype=int), zero_division=0)
-                # precision reale = win rate a questa soglia
-                print(f"  {thr:>7.2f}  {n_sig:>8,}  {wr:>8.1%}  {wr:>9.1%}")
+            if n_sig >= 10:
+                wr     = y_test.values[mask].mean()
+                usable = "✓" if n_sig >= 30 else "⚠ pochi camp"
+                print(f"  {thr:>7.2f}  {n_sig:>8,}  {wr:>8.1%}  {usable}")
             else:
-                print(f"  {thr:>7.2f}  {n_sig:>8,}  {'< 30 camp':>9}")
+                print(f"  {thr:>7.2f}  {n_sig:>8,}  {'—':>9}  ✗ insufficiente")
+        # Soglia consigliata: massima con ≥ 30 campioni e win rate > 55%
+        best_thr = None
+        for thr in [0.90, 0.85, 0.80, 0.75, 0.73, 0.70, 0.68, 0.65, 0.63, 0.60]:
+            mask = y_proba >= thr
+            if mask.sum() >= 30 and y_test.values[mask].mean() > 0.55:
+                best_thr = thr
+                break
+        if best_thr:
+            print(f"\n  ★ Soglia consigliata: {best_thr:.2f}  (≥30 campioni, win rate >55%)")
 
         metrics = {
             "accuracy":   report["accuracy"],
