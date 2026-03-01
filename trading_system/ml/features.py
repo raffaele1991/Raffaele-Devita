@@ -703,19 +703,20 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
       pa_rejection         — wick dominante normalizzato (pin bar quality, 0-1)
 
     Feature rolling (somma pattern nelle ultime N candele — continue, usabili da LGBM):
-      pa_pin_bull_5/10     — pin bar bullish nelle ultime 5/10 candele
-      pa_pin_bear_5/10     — pin bar bearish nelle ultime 5/10 candele
-      pa_engulf_bull_5/10  — bullish engulfing nelle ultime 5/10 candele
-      pa_engulf_bear_5/10  — bearish engulfing nelle ultime 5/10 candele
-      pa_doji_5/10         — doji nelle ultime 5/10 candele (zona di indecisione)
-      pa_inside_5/10       — inside bar nelle ultime 5/10 candele (compressione)
-      pa_maru_bull_5/10    — marubozu bullish nelle ultime 5/10 candele
-      pa_maru_bear_5/10    — marubozu bearish nelle ultime 5/10 candele
-      pa_bull_score_5/10/20 — score bullish aggregato (pin+engulf+maru) ultime N candele
-      pa_bear_score_5/10/20 — score bearish aggregato (pin+engulf+maru) ultime N candele
-      pa_net_score_5/10/20  — pressione direzionale netta (bull_score - bear_score)
+      pa_pin_bull_10/20/30     — pin bar bullish nelle ultime 10/20/30 candele
+      pa_pin_bear_10/20/30     — pin bar bearish nelle ultime 10/20/30 candele
+      pa_engulf_bull_10/20/30  — bullish engulfing nelle ultime 10/20/30 candele
+      pa_engulf_bear_10/20/30  — bearish engulfing nelle ultime 10/20/30 candele
+      pa_doji_10/20/30         — doji nelle ultime 10/20/30 candele (zona di indecisione)
+      pa_inside_10/20/30       — inside bar nelle ultime 10/20/30 candele (compressione)
+      pa_maru_bull_10/20/30    — marubozu bullish nelle ultime 10/20/30 candele
+      pa_maru_bear_10/20/30    — marubozu bearish nelle ultime 10/20/30 candele
+      pa_bull_score_10/20/30   — score bullish aggregato (pin+engulf+maru) ultime N candele
+      pa_bear_score_10/20/30   — score bearish aggregato (pin+engulf+maru) ultime N candele
+      pa_net_score_10/20/30    — pressione direzionale netta (bull_score - bear_score)
 
-    Completamente vettorizzate: nessun loop Python, zero overhead.
+    Finestre: 10 (50 min), 20 (100 min), 30 (150 min = 2.5h) su M5.
+    La finestra 5 è stata rimossa: importanza sistematicamente vicina a 0 su tutti i simboli.
     """
     df = df.copy()
     n = len(df)
@@ -782,7 +783,7 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
     s_maru_bull   = pd.Series(maru_bull,   index=df.index)
     s_maru_bear   = pd.Series(maru_bear,   index=df.index)
 
-    for w in [5, 10, 20]:
+    for w in [10, 20, 30]:
         df[f"pa_pin_bull_{w}"]    = s_pin_bull.rolling(w, min_periods=1).sum()
         df[f"pa_pin_bear_{w}"]    = s_pin_bear.rolling(w, min_periods=1).sum()
         df[f"pa_engulf_bull_{w}"] = s_engulf_bull.rolling(w, min_periods=1).sum()
@@ -880,42 +881,24 @@ FEATURE_COLUMNS = [
     # ── PRICE ACTION (PA) — continue ──────────────────────────────────────────
     "pa_wick_ratio",        # upper/lower wick ratio (>1=pressione bear; <1=bullish)
     "pa_rejection",         # qualità pin bar: wick dominante / range (0-1)
-    # ── PRICE ACTION (PA) — rolling 5 candele ─────────────────────────────────
-    "pa_pin_bull_5",        # pin bar bullish nelle ultime 5 candele
-    "pa_pin_bear_5",        # pin bar bearish nelle ultime 5 candele
-    "pa_engulf_bull_5",     # bullish engulfing nelle ultime 5 candele
-    "pa_engulf_bear_5",     # bearish engulfing nelle ultime 5 candele
-    "pa_doji_5",            # doji nelle ultime 5 candele (indecisione)
-    "pa_inside_5",          # inside bar nelle ultime 5 candele (compressione)
-    "pa_maru_bull_5",       # marubozu bullish nelle ultime 5 candele
-    "pa_maru_bear_5",       # marubozu bearish nelle ultime 5 candele
-    "pa_bull_score_5",      # score bullish aggregato (pin+engulf+maru) ultime 5
-    "pa_bear_score_5",      # score bearish aggregato (pin+engulf+maru) ultime 5
-    "pa_net_score_5",       # pressione direzionale netta ultime 5
-    # ── PRICE ACTION (PA) — rolling 10 candele ────────────────────────────────
-    "pa_pin_bull_10",       # pin bar bullish nelle ultime 10 candele
-    "pa_pin_bear_10",       # pin bar bearish nelle ultime 10 candele
-    "pa_engulf_bull_10",    # bullish engulfing nelle ultime 10 candele
-    "pa_engulf_bear_10",    # bearish engulfing nelle ultime 10 candele
-    "pa_doji_10",           # doji nelle ultime 10 candele
-    "pa_inside_10",         # inside bar nelle ultime 10 candele
-    "pa_maru_bull_10",      # marubozu bullish nelle ultime 10 candele
-    "pa_maru_bear_10",      # marubozu bearish nelle ultime 10 candele
-    "pa_bull_score_10",     # score bullish aggregato (pin+engulf+maru) ultime 10
-    "pa_bear_score_10",     # score bearish aggregato (pin+engulf+maru) ultime 10
-    "pa_net_score_10",      # pressione direzionale netta ultime 10
-    # ── PRICE ACTION (PA) — rolling 20 candele ────────────────────────────────
-    "pa_pin_bull_20",       # pin bar bullish nelle ultime 20 candele
-    "pa_pin_bear_20",       # pin bar bearish nelle ultime 20 candele
-    "pa_engulf_bull_20",    # bullish engulfing nelle ultime 20 candele
-    "pa_engulf_bear_20",    # bearish engulfing nelle ultime 20 candele
-    "pa_doji_20",           # doji nelle ultime 20 candele
-    "pa_inside_20",         # inside bar nelle ultime 20 candele
-    "pa_maru_bull_20",      # marubozu bullish nelle ultime 20 candele
-    "pa_maru_bear_20",      # marubozu bearish nelle ultime 20 candele
-    "pa_bull_score_20",     # score bullish aggregato (pin+engulf+maru) ultime 20
-    "pa_bear_score_20",     # score bearish aggregato (pin+engulf+maru) ultime 20
-    "pa_net_score_20",      # pressione direzionale netta ultime 20
+    # ── PRICE ACTION (PA) — rolling 10 candele (50 min) ──────────────────────
+    "pa_pin_bull_10",       "pa_pin_bear_10",
+    "pa_engulf_bull_10",    "pa_engulf_bear_10",
+    "pa_doji_10",           "pa_inside_10",
+    "pa_maru_bull_10",      "pa_maru_bear_10",
+    "pa_bull_score_10",     "pa_bear_score_10",  "pa_net_score_10",
+    # ── PRICE ACTION (PA) — rolling 20 candele (100 min) ─────────────────────
+    "pa_pin_bull_20",       "pa_pin_bear_20",
+    "pa_engulf_bull_20",    "pa_engulf_bear_20",
+    "pa_doji_20",           "pa_inside_20",
+    "pa_maru_bull_20",      "pa_maru_bear_20",
+    "pa_bull_score_20",     "pa_bear_score_20",  "pa_net_score_20",
+    # ── PRICE ACTION (PA) — rolling 30 candele (150 min = 2.5h) ──────────────
+    "pa_pin_bull_30",       "pa_pin_bear_30",
+    "pa_engulf_bull_30",    "pa_engulf_bear_30",
+    "pa_doji_30",           "pa_inside_30",
+    "pa_maru_bull_30",      "pa_maru_bear_30",
+    "pa_bull_score_30",     "pa_bear_score_30",  "pa_net_score_30",
 ]
 
 
