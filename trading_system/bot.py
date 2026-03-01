@@ -340,6 +340,21 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
         write_state(risk_manager, session_f, connector=connector)
 
 
+def _htf_trend(df: pd.DataFrame) -> int:
+    """EMA120/EMA300 su M5 ≈ EMA20/EMA50 su M30. Identica al backtest engine."""
+    try:
+        close = df['close']
+        if len(close) < 30:
+            return 0
+        ema_fast = close.ewm(span=min(120, len(close) - 1), adjust=False).mean().iloc[-1]
+        ema_slow = close.ewm(span=min(300, len(close) - 1), adjust=False).mean().iloc[-1]
+        if ema_fast > ema_slow:   return  1
+        if ema_fast < ema_slow:   return -1
+        return 0
+    except Exception:
+        return 0
+
+
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
     """Analizza un singolo simbolo e apre un trade se il setup è valido."""
     global _symbol_signals
@@ -372,11 +387,18 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("info", f"{symbol}: nessun setup SMC valido (struttura non confermata)")
         return
 
+    # Log segnale SMC + PA (identico al backtest: reason include già PA pattern e livelli)
+    pa_info = ""
+    if getattr(signal, 'pa_pattern', ""):
+        pa_info = f" | PA: {signal.pa_pattern} (score={signal.pa_score})"
+        if signal.pa_near_level:
+            pa_info += f" @ {signal.pa_near_level}"
     logger.info(
-        f"[SMC] {symbol} segnale {signal.direction.upper()}: {signal.reason}"
+        f"[SMC] {symbol} segnale {signal.direction.upper()}: {signal.reason}{pa_info}"
     )
 
     # Feature engineering per ML
+    # Nota: build_features include add_pa_features() — stessa pipeline del backtest
     df_struct = detect_structure(df)
     df_feat   = build_features(df_struct, symbol=symbol)
 
@@ -396,11 +418,16 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     last_feat = df_feat.iloc[-1]
 
     # 1) HTF (M30) deve confermare il trend M5
-    if _require_htf and float(last_feat.get("htf_aligned", 0)) < 1.0:
-        logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
-        _reason("info", f"{symbol}: M30 contro-trend – skip")
-        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
-        return
+    # Usa EMA120/EMA300 su M5 — identico al backtest engine (non features ML)
+    if _require_htf:
+        ht = _htf_trend(df)
+        if ht != 0:
+            sig_dir = 1 if signal.direction == 'long' else -1
+            if sig_dir != ht:
+                logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
+                _reason("info", f"{symbol}: M30 contro-trend – skip")
+                _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+                return
 
     # 2) ADX normalizzato ≥ MIN_ADX_FILTER (0.20 = ADX 20): evita ranging
     adx_val = float(last_feat.get("adx", 0))
@@ -410,9 +437,9 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
         return
 
-    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep secondo SYMBOL_FILTER_CONFIGS
-    has_fvg   = float(last_feat.get("ob_has_fvg",    0)) >= 1.0
-    liq_swept = float(last_feat.get("liq_swept_smc", 0)) >= 1.0
+    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep da signal (identico al backtest)
+    has_fvg   = signal.fvg_top > 0
+    liq_swept = signal.liquidity_swept
     if _require_fvg and not has_fvg:
         logger.info(f"[FILTER] {symbol}: FVG richiesto ma assente – skip")
         _reason("info", f"{symbol}: nessun FVG confluente – skip")
@@ -430,11 +457,14 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     confidence = ml_model.predict_proba(df_feat)
     logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {ml_thresh})")
 
-    # Aggiorna segnale per la dashboard
+    # Aggiorna segnale per la dashboard (include info PA)
     _symbol_signals[symbol] = {
         "last_signal": signal.direction.upper(),
         "confidence":  round(float(confidence), 3),
         "reason":      signal.reason,
+        "pa_pattern":  getattr(signal, 'pa_pattern', ""),
+        "pa_score":    getattr(signal, 'pa_score', 0),
+        "pa_level":    getattr(signal, 'pa_near_level', ""),
     }
 
     if confidence < ml_thresh:
@@ -465,10 +495,19 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("warn", f"{symbol}: lot size non calcolabile (SL troppo vicino all'entry?)")
         return
 
+    pa_log = f" | PA={signal.pa_score}" if getattr(signal, 'pa_score', 0) > 0 else ""
     logger.info(
         f"[BOT] APERTURA TRADE: {symbol} {signal.direction.upper()} "
-        f"lot={lot} | {signal.reason} | ML={confidence:.3f}"
+        f"lot={lot} | {signal.reason} | ML={confidence:.3f}{pa_log}"
     )
+
+    # TP asimmetrico: entry ± sl_dist × TP_RR_MULTIPLIER (default 1.5R)
+    tp_rr   = getattr(config, 'TP_RR_MULTIPLIER', 1.0)
+    sl_dist = abs(signal.entry_price - signal.sl_price)
+    if signal.direction == 'long':
+        tp_price = signal.entry_price + sl_dist * tp_rr
+    else:
+        tp_price = signal.entry_price - sl_dist * tp_rr
 
     # Esegui ordine
     trade = executor.open_trade(
@@ -476,13 +515,14 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         direction=signal.direction,
         lot_size=lot,
         sl_price=signal.sl_price,
-        tp_price=signal.tp_price,
-        comment=f"SMC+ML {session}",
+        tp_price=tp_price,
+        comment=f"SMC+ML+PA {session}",
     )
 
     if trade:
         risk_manager.register_trade_open(trade)
-        _reason("ok", f"{symbol}: trade {signal.direction.upper()} aperto – lot={lot} | {signal.reason} | ML={confidence:.2f}")
+        pa_reason = f" | PA: {signal.pa_pattern} ({signal.pa_score})" if getattr(signal, 'pa_pattern', "") else ""
+        _reason("ok", f"{symbol}: trade {signal.direction.upper()} aperto – lot={lot} | {signal.reason} | ML={confidence:.2f}{pa_reason}")
     else:
         _reason("warn", f"{symbol}: ordine rifiutato da MT5")
 

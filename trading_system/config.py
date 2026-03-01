@@ -149,7 +149,8 @@ PROP_CLOSE_EOD_HOUR      = 21     # chiude tutto alle 21:00 CET (no overnight)
 
 # Sizing
 RISK_PER_TRADE_PCT       = 0.005  # rischia 0.5% del capitale per trade
-MIN_RISK_REWARD          = 1.0    # R:R 1:1 — label più bilanciate → AUC più alto
+MIN_RISK_REWARD          = 1.0    # R:R minimo accettato (filtro qualità, non cambiare)
+TP_RR_MULTIPLIER         = 1.0    # TP = entry ± SL_dist × questo valore (1.0=1:1, 1.5=1.5:1, 2.0=2:1)
 
 # Stop Loss via ATR
 ATR_PERIOD               = 14
@@ -181,6 +182,53 @@ MIN_ADX_FILTER           = 0.20
 # 55 = filtro moderato (solo GOOD, STRONG, A+) — consigliato
 # 65 = filtro aggressivo (solo STRONG e A+) — meno trade, precisione max
 MIN_SIGNAL_STRENGTH      = 55
+
+# ─── PRICE ACTION ─────────────────────────────────────────────────────────────
+# Modulo PA: pattern candlestick + livelli S&R integrati con SMC.
+#
+# Strategia raccomandata:
+#   PA_MIN_SCORE = 0 → PA NON filtra, ma popola pa_pattern/pa_score nel segnale
+#                      e aggiunge 10 feature al modello ML (riaddestra per usarle).
+#                      L'ML impara da solo quali pattern sono predittivi.
+#
+# Score 0–100 composito:
+#   Pin Bar forte        → +40  |  Engulfing forte  → +35  |  Morning Star → +28
+#   Marubozu            → +18  |  Inside Bar       → +15  |  Doji         → +12
+#   PDH / PDL vicino    → +20  |  PWH / PWL        → +15  |  Round level  → +8-12
+#   Allineamento SMC    → +10  |  Multi-pattern     → +8
+#
+PA_ENABLED               = True   # False = disabilita tutto il modulo PA
+
+# Soglia minima score PA per accettare il segnale
+# 0  → PA informa l'ML ma non filtra mai (RACCOMANDATO — max frequenza)
+# 30 → filtro leggero (almeno un pattern o livello chiave)
+# 45 → filtro moderato (pattern solido o pattern + livello)
+# 60 → filtro aggressivo (pochi trade, alta precisione)
+PA_MIN_SCORE             = 0
+
+# Pin Bar: corpo piccolo + wick di rigetto lungo
+PA_PIN_BAR_BODY_MAX_PCT  = 0.35   # corpo < 35% del range
+PA_PIN_BAR_WICK_MIN_PCT  = 0.55   # wick di rigetto > 55% del range
+
+# Engulfing: qualità minima del body engulfing
+PA_ENGULFING_QUALITY_MIN = 0.5    # corpo corrente ≥ 50% del corpo precedente
+
+# Doji
+PA_DOJI_BODY_MAX_PCT     = 0.10   # corpo < 10% del range
+
+# Marubozu
+PA_MARUBOZU_BODY_MIN_PCT = 0.80   # corpo ≥ 80% del range
+
+# Round numbers per simbolo
+PA_ROUND_LEVELS          = {
+    "XAUUSD": [50.0, 100.0],     # ogni $50 (es: 2650) e $100 (es: 2700)
+    "EURUSD": [0.005, 0.010],    # ogni 50 pip e 100 pip
+    "GBPUSD": [0.005, 0.010],
+    "USDJPY": [0.50, 1.00],      # ogni 0.50 e 1.00
+}
+
+# Prossimità livello S&R: considerato "vicino" se entro X × ATR dal prezzo
+PA_LEVEL_PROXIMITY_ATR   = 0.5
 
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 

@@ -204,6 +204,9 @@ def run_backtest(
     if require_liq_sweep is None:
         require_liq_sweep = _sym_cfg.get('require_liq_sweep', getattr(config, 'SMC_REQUIRE_LIQ_SWEEP', False))
 
+    pa_enabled  = getattr(config, 'PA_ENABLED', True)
+    pa_min_score = getattr(config, 'PA_MIN_SCORE', 0)
+
     _log(f"{'=' * 50}")
     _log(f"  BACKTEST {symbol}")
     _log(f"  Periodo: {start_date} → {end_date}")
@@ -211,6 +214,7 @@ def run_backtest(
     _log(f"  HTF hard filter : {htf_hard_filter}")
     _log(f"  Require FVG     : {require_fvg}")
     _log(f"  Require Liq Sweep: {require_liq_sweep}")
+    _log(f"  PA filter        : {'ON (min score=' + str(pa_min_score) + ')' if pa_enabled and pa_min_score > 0 else 'OFF'}")
     _log(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
@@ -273,10 +277,12 @@ def run_backtest(
         "liq_blocked":     0,
         "ml_blocked":      0,
         "ml_errors":       0,
+        "pa_blocked":      0,
         "rr_rejected":     0,
         "signals":         0,
         "signals_with_fvg": 0,
         "signals_with_liq": 0,
+        "signals_with_pa":  0,
     }
 
     _log(f"Avvio simulazione...")
@@ -326,10 +332,13 @@ def run_backtest(
         # Traccia confluenze (per diagnostica)
         has_fvg = signal.fvg_top > 0
         has_liq = signal.liquidity_swept
+        has_pa  = bool(getattr(signal, 'pa_pattern', ""))
         if has_fvg:
             _diag["signals_with_fvg"] += 1
         if has_liq:
             _diag["signals_with_liq"] += 1
+        if has_pa:
+            _diag["signals_with_pa"] += 1
 
         # Hard filter HTF: scarta segnali contro il trend M30
         if htf_hard_filter:
@@ -379,9 +388,15 @@ def run_backtest(
         # Parametri del trade
         entry   = float(candle['close'])
         sl      = float(signal.sl_price)
-        tp      = float(signal.tp_price)
         dirn    = signal.direction   # "long" | "short"
         sl_dist = abs(entry - sl)
+
+        # TP asimmetrico: entry ± sl_dist × TP_RR_MULTIPLIER (default 1.5R)
+        tp_rr = getattr(config, 'TP_RR_MULTIPLIER', 1.0)
+        if dirn == 'long':
+            tp = entry + sl_dist * tp_rr
+        else:
+            tp = entry - sl_dist * tp_rr
         tp_dist = abs(tp - entry)
 
         if sl_dist <= 0 or tp_dist <= 0:
@@ -495,6 +510,8 @@ def run_backtest(
     _log(f"  Bloccati (no Liq)    : {_diag['liq_blocked']}")
     _log(f"  Bloccati da ML       : {_diag['ml_blocked']}")
     _log(f"  Errori ML (pass-thru): {_diag['ml_errors']}")
+    _log(f"  Bloccati da PA       : {_diag['pa_blocked']}")
+    _log(f"  di cui con PA pattern: {_diag['signals_with_pa']}  ({_diag['signals_with_pa']/max(_diag['signals'],1)*100:.0f}%)")
     _log(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
     _log(f"  Trade aperti         : {len(trades)}")
     _log(f"{'─' * 50}")

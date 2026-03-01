@@ -80,7 +80,7 @@ class SMCMLModel:
             params = {
                 "n_estimators":       trial.suggest_int("n_estimators", 500, 3000),
                 "num_leaves":         trial.suggest_int("num_leaves", 31, 255),
-                "learning_rate":      trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+                "learning_rate":      trial.suggest_float("learning_rate", 0.005, 0.05, log=True),
                 "subsample":          trial.suggest_float("subsample", 0.6, 1.0),
                 "colsample_bytree":   trial.suggest_float("colsample_bytree", 0.5, 1.0),
                 "min_child_samples":  trial.suggest_int("min_child_samples", 10, 100),
@@ -93,7 +93,7 @@ class SMCMLModel:
             }
             clf = LGBMClassifier(**params)
             callbacks = [
-                lgb.early_stopping(50, verbose=False),
+                lgb.early_stopping(150, verbose=False),
                 lgb.log_evaluation(period=-1),
             ]
             clf.fit(

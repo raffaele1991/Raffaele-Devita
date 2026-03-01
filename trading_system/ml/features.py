@@ -694,6 +694,94 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
     return df
 
 
+def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Price Action features vettorizzate: pattern candlestick + wick ratio.
+
+    Feature aggiunte:
+      pa_pin_bar_bull   — 1 se la candela è un bullish pin bar (hammer)
+      pa_pin_bar_bear   — 1 se la candela è un bearish pin bar (shooting star)
+      pa_engulfing_bull — 1 se bullish engulfing rispetto alla candela precedente
+      pa_engulfing_bear — 1 se bearish engulfing rispetto alla candela precedente
+      pa_doji           — 1 se la candela è un doji (indecisione)
+      pa_inside_bar     — 1 se la candela è un inside bar (compressione)
+      pa_marubozu_bull  — 1 se bullish marubozu (momentum puro)
+      pa_marubozu_bear  — 1 se bearish marubozu (momentum puro)
+      pa_wick_ratio     — upper_shadow / (lower_shadow + ε): >1 = wick sup dominante
+      pa_rejection      — wick dominante normalizzato (pin bar quality, 0-1)
+
+    Completamente vettorizzate: nessun loop Python, zero overhead.
+    Retrocompatibili: colonne fillate a 0.0 se dati insufficienti.
+    """
+    df = df.copy()
+    n = len(df)
+
+    o = df["open"].values
+    h = df["high"].values
+    l = df["low"].values
+    c = df["close"].values
+
+    rng  = np.maximum(h - l, 1e-10)
+    body = np.abs(c - o)
+    uwk  = h - np.maximum(o, c)   # upper wick
+    lwk  = np.minimum(o, c) - l   # lower wick
+
+    body_pct = body / rng
+    uwk_pct  = uwk / rng
+    lwk_pct  = lwk / rng
+
+    # Soglie configurabili
+    pb_body_max = getattr(config, 'PA_PIN_BAR_BODY_MAX_PCT', 0.35)
+    pb_wick_min = getattr(config, 'PA_PIN_BAR_WICK_MIN_PCT', 0.55)
+    doji_max    = getattr(config, 'PA_DOJI_BODY_MAX_PCT', 0.10)
+    maru_min    = getattr(config, 'PA_MARUBOZU_BODY_MIN_PCT', 0.80)
+
+    # Pin bar
+    is_small_body = body_pct <= pb_body_max
+    df["pa_pin_bar_bull"] = (is_small_body & (lwk_pct >= pb_wick_min) & (uwk_pct < 0.20)).astype(float)
+    df["pa_pin_bar_bear"] = (is_small_body & (uwk_pct >= pb_wick_min) & (lwk_pct < 0.20)).astype(float)
+
+    # Doji
+    df["pa_doji"] = (body_pct <= doji_max).astype(float)
+
+    # Marubozu
+    df["pa_marubozu_bull"] = ((body_pct >= maru_min) & (c > o)).astype(float)
+    df["pa_marubozu_bear"] = ((body_pct >= maru_min) & (c < o)).astype(float)
+
+    # Engulfing (richiede la candela precedente)
+    if n >= 2:
+        po = np.roll(o, 1); pc = np.roll(c, 1)
+        ph = np.roll(h, 1); pl = np.roll(l, 1)
+        # Precedente body bounds
+        prev_top = np.maximum(po, pc)
+        prev_bot = np.minimum(po, pc)
+        prev_bear = pc < po   # precedente bearish
+        prev_bull = pc > po   # precedente bullish
+        cur_bull  = c > o
+        cur_bear  = c < o
+        # Bullish engulfing: C1 bearish, C2 bullish e ingloba il corpo
+        df["pa_engulfing_bull"] = (prev_bear & cur_bull & (o <= prev_bot) & (c >= prev_top)).astype(float)
+        # Bearish engulfing: C1 bullish, C2 bearish e ingloba il corpo
+        df["pa_engulfing_bear"] = (prev_bull & cur_bear & (o >= prev_top) & (c <= prev_bot)).astype(float)
+        # Inside bar: range corrente contenuto nel range precedente
+        df["pa_inside_bar"] = ((h < ph) & (l > pl)).astype(float)
+        # Prima riga non ha contesto: azzera
+        for col in ["pa_engulfing_bull", "pa_engulfing_bear", "pa_inside_bar"]:
+            df.loc[df.index[0], col] = 0.0
+    else:
+        df["pa_engulfing_bull"] = 0.0
+        df["pa_engulfing_bear"] = 0.0
+        df["pa_inside_bar"]     = 0.0
+
+    # Wick ratio (proxy direzione pressione: >1 = pressione ribassista, <1 = bullish)
+    df["pa_wick_ratio"] = (uwk / (lwk + 1e-10)).clip(0, 10)
+
+    # Rejection strength: max wick dominante come % del range (pin bar quality)
+    df["pa_rejection"] = np.maximum(uwk_pct, lwk_pct)
+
+    return df
+
+
 def build_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.DataFrame:
     """Pipeline completa di feature engineering (v2 – indicatore potenziato)."""
     df = add_candle_features(df)
@@ -711,6 +799,7 @@ def build_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.DataFrame:
     df = add_smc_signal_features(df, symbol=symbol)   # OB/FVG/Liq + SL stop-hunt
     df = add_ob_volume_feature(df)        # volume all'OB (richiede ob_age_norm)
     df = add_signal_strength(df)          # score 0-100 composito
+    df = add_pa_features(df)              # Price Action patterns (pin bar, engulfing, ecc.)
     df = df.dropna()
     return df
 
@@ -767,6 +856,17 @@ FEATURE_COLUMNS = [
     # ── STOP HUNT RISK ────────────────────────────────────────────────────────
     "sl_in_liq_zone",   # 1 se SL grezzo cade dentro una liq zone (stop hunt risk)
     "dist_sl_to_liq",   # distanza SL → liq zone più vicina (ATR; bassa = rischio alto)
+    # ── PRICE ACTION PATTERNS (PA) ────────────────────────────────────────────
+    "pa_pin_bar_bull",   # 1 se bullish pin bar (hammer) — rigetto da zona di supporto
+    "pa_pin_bar_bear",   # 1 se bearish pin bar (shooting star) — rigetto da resistenza
+    "pa_engulfing_bull", # 1 se bullish engulfing — forte momentum inversivo rialzista
+    "pa_engulfing_bear", # 1 se bearish engulfing — forte momentum inversivo ribassista
+    "pa_doji",           # 1 se doji — indecisione al bordo dell'OB
+    "pa_inside_bar",     # 1 se inside bar — compressione, breakout atteso
+    "pa_marubozu_bull",  # 1 se bullish marubozu — momentum puro rialzista
+    "pa_marubozu_bear",  # 1 se bearish marubozu — momentum puro ribassista
+    "pa_wick_ratio",     # upper/lower wick ratio (>1=pressione bear; <1=pressione bull)
+    "pa_rejection",      # qualità pin bar: wick dominante / range (0-1)
 ]
 
 
