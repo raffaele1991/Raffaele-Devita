@@ -711,9 +711,9 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
       pa_inside_5/10       — inside bar nelle ultime 5/10 candele (compressione)
       pa_maru_bull_5/10    — marubozu bullish nelle ultime 5/10 candele
       pa_maru_bear_5/10    — marubozu bearish nelle ultime 5/10 candele
-      pa_bull_score_5/10   — score bullish aggregato (pin+engulf+maru) ultime N candele
-      pa_bear_score_5/10   — score bearish aggregato (pin+engulf+maru) ultime N candele
-      pa_net_score_5/10    — pressione direzionale netta (bull_score - bear_score)
+      pa_bull_score_5/10/20 — score bullish aggregato (pin+engulf+maru) ultime N candele
+      pa_bear_score_5/10/20 — score bearish aggregato (pin+engulf+maru) ultime N candele
+      pa_net_score_5/10/20  — pressione direzionale netta (bull_score - bear_score)
 
     Completamente vettorizzate: nessun loop Python, zero overhead.
     """
@@ -782,7 +782,7 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
     s_maru_bull   = pd.Series(maru_bull,   index=df.index)
     s_maru_bear   = pd.Series(maru_bear,   index=df.index)
 
-    for w in [5, 10]:
+    for w in [5, 10, 20]:
         df[f"pa_pin_bull_{w}"]    = s_pin_bull.rolling(w, min_periods=1).sum()
         df[f"pa_pin_bear_{w}"]    = s_pin_bear.rolling(w, min_periods=1).sum()
         df[f"pa_engulf_bull_{w}"] = s_engulf_bull.rolling(w, min_periods=1).sum()
@@ -904,6 +904,18 @@ FEATURE_COLUMNS = [
     "pa_bull_score_10",     # score bullish aggregato (pin+engulf+maru) ultime 10
     "pa_bear_score_10",     # score bearish aggregato (pin+engulf+maru) ultime 10
     "pa_net_score_10",      # pressione direzionale netta ultime 10
+    # ── PRICE ACTION (PA) — rolling 20 candele ────────────────────────────────
+    "pa_pin_bull_20",       # pin bar bullish nelle ultime 20 candele
+    "pa_pin_bear_20",       # pin bar bearish nelle ultime 20 candele
+    "pa_engulf_bull_20",    # bullish engulfing nelle ultime 20 candele
+    "pa_engulf_bear_20",    # bearish engulfing nelle ultime 20 candele
+    "pa_doji_20",           # doji nelle ultime 20 candele
+    "pa_inside_20",         # inside bar nelle ultime 20 candele
+    "pa_maru_bull_20",      # marubozu bullish nelle ultime 20 candele
+    "pa_maru_bear_20",      # marubozu bearish nelle ultime 20 candele
+    "pa_bull_score_20",     # score bullish aggregato (pin+engulf+maru) ultime 20
+    "pa_bear_score_20",     # score bearish aggregato (pin+engulf+maru) ultime 20
+    "pa_net_score_20",      # pressione direzionale netta ultime 20
 ]
 
 
