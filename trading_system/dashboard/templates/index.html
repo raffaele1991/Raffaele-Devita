@@ -744,6 +744,7 @@
                 <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">FVG</th>
                 <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">LIQ SWEEP</th>
                 <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">HTF ALIGN</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">PA FILTER</th>
               </tr>
             </thead>
             <tbody>
@@ -752,31 +753,36 @@
                 <td style="text-align:center;"><input id="cfg_require_fvg_xauusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_require_liq_xauusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_htf_align_xauusd"   class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_pa_filter_xauusd"   class="settings-checkbox" type="checkbox" /></td>
               </tr>
               <tr style="border-top:1px solid var(--border);">
                 <td style="padding:7px 0; font-weight:600; color:var(--blue);">EURUSD</td>
                 <td style="text-align:center;"><input id="cfg_require_fvg_eurusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_require_liq_eurusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_htf_align_eurusd"   class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_pa_filter_eurusd"   class="settings-checkbox" type="checkbox" /></td>
               </tr>
               <tr style="border-top:1px solid var(--border);">
                 <td style="padding:7px 0; font-weight:600; color:var(--green);">GBPUSD</td>
                 <td style="text-align:center;"><input id="cfg_require_fvg_gbpusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_require_liq_gbpusd" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_htf_align_gbpusd"   class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_pa_filter_gbpusd"   class="settings-checkbox" type="checkbox" /></td>
               </tr>
               <tr style="border-top:1px solid var(--border);">
                 <td style="padding:7px 0; font-weight:600; color:var(--accent);">USDJPY</td>
                 <td style="text-align:center;"><input id="cfg_require_fvg_usdjpy" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_require_liq_usdjpy" class="settings-checkbox" type="checkbox" /></td>
                 <td style="text-align:center;"><input id="cfg_htf_align_usdjpy"   class="settings-checkbox" type="checkbox" /></td>
+                <td style="text-align:center;"><input id="cfg_pa_filter_usdjpy"   class="settings-checkbox" type="checkbox" /></td>
               </tr>
             </tbody>
           </table>
           <div style="margin-top:8px; font-size:11px; color:var(--muted); line-height:1.6;">
             <b>FVG</b> = Fair Value Gap obbligatorio &nbsp;|&nbsp;
             <b>Liq Sweep</b> = solo dopo sweep liquidità &nbsp;|&nbsp;
-            <b>HTF Align</b> = trend M30 allineato
+            <b>HTF Align</b> = trend M30 allineato &nbsp;|&nbsp;
+            <b>PA Filter</b> = richiede pattern candlestick confermato (Pin Bar, Engulfing, ecc.)
           </div>
         </div>
 
@@ -1499,9 +1505,11 @@ async function loadSettings() {
       const el_fvg = document.getElementById('cfg_require_fvg_' + sym);
       const el_liq = document.getElementById('cfg_require_liq_' + sym);
       const el_htf = document.getElementById('cfg_htf_align_'   + sym);
+      const el_pa  = document.getElementById('cfg_pa_filter_'   + sym);
       if (el_fvg) el_fvg.checked = !!s['require_fvg_' + sym];
       if (el_liq) el_liq.checked = s['require_liq_' + sym] !== false;
       if (el_htf) el_htf.checked = s['htf_align_'   + sym] !== false;
+      if (el_pa)  el_pa.checked  = !!s['pa_filter_'  + sym];
     });
 
     // Telegram
@@ -1542,15 +1550,19 @@ async function saveSettings() {
     require_fvg_xauusd:        document.getElementById('cfg_require_fvg_xauusd').checked,
     require_liq_xauusd:        document.getElementById('cfg_require_liq_xauusd').checked,
     htf_align_xauusd:          document.getElementById('cfg_htf_align_xauusd').checked,
+    pa_filter_xauusd:          document.getElementById('cfg_pa_filter_xauusd').checked,
     require_fvg_eurusd:        document.getElementById('cfg_require_fvg_eurusd').checked,
     require_liq_eurusd:        document.getElementById('cfg_require_liq_eurusd').checked,
     htf_align_eurusd:          document.getElementById('cfg_htf_align_eurusd').checked,
+    pa_filter_eurusd:          document.getElementById('cfg_pa_filter_eurusd').checked,
     require_fvg_gbpusd:        document.getElementById('cfg_require_fvg_gbpusd').checked,
     require_liq_gbpusd:        document.getElementById('cfg_require_liq_gbpusd').checked,
     htf_align_gbpusd:          document.getElementById('cfg_htf_align_gbpusd').checked,
+    pa_filter_gbpusd:          document.getElementById('cfg_pa_filter_gbpusd').checked,
     require_fvg_usdjpy:        document.getElementById('cfg_require_fvg_usdjpy').checked,
     require_liq_usdjpy:        document.getElementById('cfg_require_liq_usdjpy').checked,
     htf_align_usdjpy:          document.getElementById('cfg_htf_align_usdjpy').checked,
+    pa_filter_usdjpy:          document.getElementById('cfg_pa_filter_usdjpy').checked,
     telegram_token:            document.getElementById('cfg_telegram_token').value,
     telegram_chat_id:          document.getElementById('cfg_telegram_chat_id').value.trim(),
     notify_trades:             document.getElementById('cfg_notify_trades').checked,

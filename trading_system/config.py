@@ -85,10 +85,10 @@ SMC_REQUIRE_HTF_ALIGN   = True   # allineamento trend M30 (EMA120/300 su M5, equ
 #   USDJPY: ML alzato 0.65→0.72. Pass rate ML scende da 17.8% a ~6%. Stima: ~60-80 tr/2mesi.
 #   EURUSD: invariato (già profittevole e frequenza adeguata).
 SYMBOL_FILTER_CONFIGS: dict = {
-    "XAUUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
-    "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
-    "GBPUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
-    "USDJPY": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True},
+    "XAUUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True, "pa_filter": False},
+    "EURUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True, "pa_filter": False},
+    "GBPUSD": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True, "pa_filter": False},
+    "USDJPY": {"require_fvg": False, "require_liq_sweep": True,  "htf_align": True, "pa_filter": False},
 }
 
 # ── SOGLIA ML PER-SIMBOLO ──────────────────────────────────────────────────────

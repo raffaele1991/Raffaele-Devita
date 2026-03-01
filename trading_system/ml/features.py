@@ -696,22 +696,27 @@ def add_smc_signal_features(df: pd.DataFrame, symbol: str = "XAUUSD") -> pd.Data
 
 def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Price Action features vettorizzate: pattern candlestick + wick ratio.
+    Price Action features vettorizzate: pattern candlestick rolling + wick ratio.
 
-    Feature aggiunte:
-      pa_pin_bar_bull   — 1 se la candela è un bullish pin bar (hammer)
-      pa_pin_bar_bear   — 1 se la candela è un bearish pin bar (shooting star)
-      pa_engulfing_bull — 1 se bullish engulfing rispetto alla candela precedente
-      pa_engulfing_bear — 1 se bearish engulfing rispetto alla candela precedente
-      pa_doji           — 1 se la candela è un doji (indecisione)
-      pa_inside_bar     — 1 se la candela è un inside bar (compressione)
-      pa_marubozu_bull  — 1 se bullish marubozu (momentum puro)
-      pa_marubozu_bear  — 1 se bearish marubozu (momentum puro)
-      pa_wick_ratio     — upper_shadow / (lower_shadow + ε): >1 = wick sup dominante
-      pa_rejection      — wick dominante normalizzato (pin bar quality, 0-1)
+    Feature continue (alta importanza nel modello):
+      pa_wick_ratio        — upper_shadow / (lower_shadow + ε): >1 = wick sup dominante
+      pa_rejection         — wick dominante normalizzato (pin bar quality, 0-1)
 
-    Completamente vettorizzate: nessun loop Python, zero overhead.
-    Retrocompatibili: colonne fillate a 0.0 se dati insufficienti.
+    Feature rolling (somma pattern nelle ultime N candele — continue, usabili da LGBM):
+      pa_pin_bull_10/20/30     — pin bar bullish nelle ultime 10/20/30 candele
+      pa_pin_bear_10/20/30     — pin bar bearish nelle ultime 10/20/30 candele
+      pa_engulf_bull_10/20/30  — bullish engulfing nelle ultime 10/20/30 candele
+      pa_engulf_bear_10/20/30  — bearish engulfing nelle ultime 10/20/30 candele
+      pa_doji_10/20/30         — doji nelle ultime 10/20/30 candele (zona di indecisione)
+      pa_inside_10/20/30       — inside bar nelle ultime 10/20/30 candele (compressione)
+      pa_maru_bull_10/20/30    — marubozu bullish nelle ultime 10/20/30 candele
+      pa_maru_bear_10/20/30    — marubozu bearish nelle ultime 10/20/30 candele
+      pa_bull_score_10/20/30   — score bullish aggregato (pin+engulf+maru) ultime N candele
+      pa_bear_score_10/20/30   — score bearish aggregato (pin+engulf+maru) ultime N candele
+      pa_net_score_10/20/30    — pressione direzionale netta (bull_score - bear_score)
+
+    Finestre: 10 (50 min), 20 (100 min), 30 (150 min = 2.5h) su M5.
+    La finestra 5 è stata rimossa: importanza sistematicamente vicina a 0 su tutti i simboli.
     """
     df = df.copy()
     n = len(df)
@@ -736,48 +741,65 @@ def add_pa_features(df: pd.DataFrame) -> pd.DataFrame:
     doji_max    = getattr(config, 'PA_DOJI_BODY_MAX_PCT', 0.10)
     maru_min    = getattr(config, 'PA_MARUBOZU_BODY_MIN_PCT', 0.80)
 
-    # Pin bar
+    # ── PATTERN BINARI (intermedi — non entrano in FEATURE_COLUMNS) ────────────
     is_small_body = body_pct <= pb_body_max
-    df["pa_pin_bar_bull"] = (is_small_body & (lwk_pct >= pb_wick_min) & (uwk_pct < 0.20)).astype(float)
-    df["pa_pin_bar_bear"] = (is_small_body & (uwk_pct >= pb_wick_min) & (lwk_pct < 0.20)).astype(float)
+    pin_bull  = (is_small_body & (lwk_pct >= pb_wick_min) & (uwk_pct < 0.20)).astype(float)
+    pin_bear  = (is_small_body & (uwk_pct >= pb_wick_min) & (lwk_pct < 0.20)).astype(float)
+    doji      = (body_pct <= doji_max).astype(float)
+    maru_bull = ((body_pct >= maru_min) & (c > o)).astype(float)
+    maru_bear = ((body_pct >= maru_min) & (c < o)).astype(float)
 
-    # Doji
-    df["pa_doji"] = (body_pct <= doji_max).astype(float)
-
-    # Marubozu
-    df["pa_marubozu_bull"] = ((body_pct >= maru_min) & (c > o)).astype(float)
-    df["pa_marubozu_bear"] = ((body_pct >= maru_min) & (c < o)).astype(float)
-
-    # Engulfing (richiede la candela precedente)
     if n >= 2:
         po = np.roll(o, 1); pc = np.roll(c, 1)
         ph = np.roll(h, 1); pl = np.roll(l, 1)
-        # Precedente body bounds
-        prev_top = np.maximum(po, pc)
-        prev_bot = np.minimum(po, pc)
-        prev_bear = pc < po   # precedente bearish
-        prev_bull = pc > po   # precedente bullish
+        prev_top  = np.maximum(po, pc)
+        prev_bot  = np.minimum(po, pc)
+        prev_bear = pc < po
+        prev_bull = pc > po
         cur_bull  = c > o
         cur_bear  = c < o
-        # Bullish engulfing: C1 bearish, C2 bullish e ingloba il corpo
-        df["pa_engulfing_bull"] = (prev_bear & cur_bull & (o <= prev_bot) & (c >= prev_top)).astype(float)
-        # Bearish engulfing: C1 bullish, C2 bearish e ingloba il corpo
-        df["pa_engulfing_bear"] = (prev_bull & cur_bear & (o >= prev_top) & (c <= prev_bot)).astype(float)
-        # Inside bar: range corrente contenuto nel range precedente
-        df["pa_inside_bar"] = ((h < ph) & (l > pl)).astype(float)
-        # Prima riga non ha contesto: azzera
-        for col in ["pa_engulfing_bull", "pa_engulfing_bear", "pa_inside_bar"]:
-            df.loc[df.index[0], col] = 0.0
+        engulf_bull = (prev_bear & cur_bull & (o <= prev_bot) & (c >= prev_top)).astype(float)
+        engulf_bear = (prev_bull & cur_bear & (o >= prev_top) & (c <= prev_bot)).astype(float)
+        inside_bar  = ((h < ph) & (l > pl)).astype(float)
+        engulf_bull[0] = 0.0
+        engulf_bear[0] = 0.0
+        inside_bar[0]  = 0.0
     else:
-        df["pa_engulfing_bull"] = 0.0
-        df["pa_engulfing_bear"] = 0.0
-        df["pa_inside_bar"]     = 0.0
+        engulf_bull = np.zeros(n)
+        engulf_bear = np.zeros(n)
+        inside_bar  = np.zeros(n)
 
-    # Wick ratio (proxy direzione pressione: >1 = pressione ribassista, <1 = bullish)
+    # ── FEATURE CONTINUE DIRETTE ───────────────────────────────────────────────
     df["pa_wick_ratio"] = (uwk / (lwk + 1e-10)).clip(0, 10)
+    df["pa_rejection"]  = np.maximum(uwk_pct, lwk_pct)
 
-    # Rejection strength: max wick dominante come % del range (pin bar quality)
-    df["pa_rejection"] = np.maximum(uwk_pct, lwk_pct)
+    # ── ROLLING PATTERN COUNTS (rendono i pattern continui per LGBM) ───────────
+    s_pin_bull    = pd.Series(pin_bull,    index=df.index)
+    s_pin_bear    = pd.Series(pin_bear,    index=df.index)
+    s_engulf_bull = pd.Series(engulf_bull, index=df.index)
+    s_engulf_bear = pd.Series(engulf_bear, index=df.index)
+    s_doji        = pd.Series(doji,        index=df.index)
+    s_inside      = pd.Series(inside_bar,  index=df.index)
+    s_maru_bull   = pd.Series(maru_bull,   index=df.index)
+    s_maru_bear   = pd.Series(maru_bear,   index=df.index)
+
+    for w in [10, 20, 30]:
+        df[f"pa_pin_bull_{w}"]    = s_pin_bull.rolling(w, min_periods=1).sum()
+        df[f"pa_pin_bear_{w}"]    = s_pin_bear.rolling(w, min_periods=1).sum()
+        df[f"pa_engulf_bull_{w}"] = s_engulf_bull.rolling(w, min_periods=1).sum()
+        df[f"pa_engulf_bear_{w}"] = s_engulf_bear.rolling(w, min_periods=1).sum()
+        df[f"pa_doji_{w}"]        = s_doji.rolling(w, min_periods=1).sum()
+        df[f"pa_inside_{w}"]      = s_inside.rolling(w, min_periods=1).sum()
+        df[f"pa_maru_bull_{w}"]   = s_maru_bull.rolling(w, min_periods=1).sum()
+        df[f"pa_maru_bear_{w}"]   = s_maru_bear.rolling(w, min_periods=1).sum()
+        # Score aggregati direzionali
+        df[f"pa_bull_score_{w}"] = (
+            df[f"pa_pin_bull_{w}"] + df[f"pa_engulf_bull_{w}"] + df[f"pa_maru_bull_{w}"]
+        )
+        df[f"pa_bear_score_{w}"] = (
+            df[f"pa_pin_bear_{w}"] + df[f"pa_engulf_bear_{w}"] + df[f"pa_maru_bear_{w}"]
+        )
+        df[f"pa_net_score_{w}"] = df[f"pa_bull_score_{w}"] - df[f"pa_bear_score_{w}"]
 
     return df
 
@@ -856,17 +878,27 @@ FEATURE_COLUMNS = [
     # ── STOP HUNT RISK ────────────────────────────────────────────────────────
     "sl_in_liq_zone",   # 1 se SL grezzo cade dentro una liq zone (stop hunt risk)
     "dist_sl_to_liq",   # distanza SL → liq zone più vicina (ATR; bassa = rischio alto)
-    # ── PRICE ACTION PATTERNS (PA) ────────────────────────────────────────────
-    "pa_pin_bar_bull",   # 1 se bullish pin bar (hammer) — rigetto da zona di supporto
-    "pa_pin_bar_bear",   # 1 se bearish pin bar (shooting star) — rigetto da resistenza
-    "pa_engulfing_bull", # 1 se bullish engulfing — forte momentum inversivo rialzista
-    "pa_engulfing_bear", # 1 se bearish engulfing — forte momentum inversivo ribassista
-    "pa_doji",           # 1 se doji — indecisione al bordo dell'OB
-    "pa_inside_bar",     # 1 se inside bar — compressione, breakout atteso
-    "pa_marubozu_bull",  # 1 se bullish marubozu — momentum puro rialzista
-    "pa_marubozu_bear",  # 1 se bearish marubozu — momentum puro ribassista
-    "pa_wick_ratio",     # upper/lower wick ratio (>1=pressione bear; <1=pressione bull)
-    "pa_rejection",      # qualità pin bar: wick dominante / range (0-1)
+    # ── PRICE ACTION (PA) — continue ──────────────────────────────────────────
+    "pa_wick_ratio",        # upper/lower wick ratio (>1=pressione bear; <1=bullish)
+    "pa_rejection",         # qualità pin bar: wick dominante / range (0-1)
+    # ── PRICE ACTION (PA) — rolling 10 candele (50 min) ──────────────────────
+    "pa_pin_bull_10",       "pa_pin_bear_10",
+    "pa_engulf_bull_10",    "pa_engulf_bear_10",
+    "pa_doji_10",           "pa_inside_10",
+    "pa_maru_bull_10",      "pa_maru_bear_10",
+    "pa_bull_score_10",     "pa_bear_score_10",  "pa_net_score_10",
+    # ── PRICE ACTION (PA) — rolling 20 candele (100 min) ─────────────────────
+    "pa_pin_bull_20",       "pa_pin_bear_20",
+    "pa_engulf_bull_20",    "pa_engulf_bear_20",
+    "pa_doji_20",           "pa_inside_20",
+    "pa_maru_bull_20",      "pa_maru_bear_20",
+    "pa_bull_score_20",     "pa_bear_score_20",  "pa_net_score_20",
+    # ── PRICE ACTION (PA) — rolling 30 candele (150 min = 2.5h) ──────────────
+    "pa_pin_bull_30",       "pa_pin_bear_30",
+    "pa_engulf_bull_30",    "pa_engulf_bear_30",
+    "pa_doji_30",           "pa_inside_30",
+    "pa_maru_bull_30",      "pa_maru_bear_30",
+    "pa_bull_score_30",     "pa_bear_score_30",  "pa_net_score_30",
 ]
 
 

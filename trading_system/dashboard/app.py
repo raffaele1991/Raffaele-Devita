@@ -379,15 +379,19 @@ _SETTINGS_DEFAULTS = {
     "require_fvg_xauusd":        False,
     "require_liq_xauusd":        True,
     "htf_align_xauusd":          True,
+    "pa_filter_xauusd":          False,
     "require_fvg_eurusd":        False,
     "require_liq_eurusd":        True,
     "htf_align_eurusd":          True,
+    "pa_filter_eurusd":          False,
     "require_fvg_gbpusd":        False,
     "require_liq_gbpusd":        True,
     "htf_align_gbpusd":          True,
+    "pa_filter_gbpusd":          False,
     "require_fvg_usdjpy":        False,
     "require_liq_usdjpy":        True,
     "htf_align_usdjpy":          True,
+    "pa_filter_usdjpy":          False,
     "telegram_token":            "",
     "telegram_chat_id":          "",
     "notify_trades":             True,
@@ -471,10 +475,10 @@ def _patch_config(data: dict) -> None:
 
     new_sym_filter = (
         f'{{\n'
-        f'    "XAUUSD": {{"require_fvg": {_b(data.get("require_fvg_xauusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_xauusd", True))},  "htf_align": {_b(data.get("htf_align_xauusd", True))}}},\n'
-        f'    "EURUSD": {{"require_fvg": {_b(data.get("require_fvg_eurusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_eurusd", True))},  "htf_align": {_b(data.get("htf_align_eurusd", True))}}},\n'
-        f'    "GBPUSD": {{"require_fvg": {_b(data.get("require_fvg_gbpusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_gbpusd", True))},  "htf_align": {_b(data.get("htf_align_gbpusd", True))}}},\n'
-        f'    "USDJPY": {{"require_fvg": {_b(data.get("require_fvg_usdjpy", False))}, "require_liq_sweep": {_b(data.get("require_liq_usdjpy", True))},  "htf_align": {_b(data.get("htf_align_usdjpy", True))}}},\n'
+        f'    "XAUUSD": {{"require_fvg": {_b(data.get("require_fvg_xauusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_xauusd", True))},  "htf_align": {_b(data.get("htf_align_xauusd", True))}, "pa_filter": {_b(data.get("pa_filter_xauusd", False))}}},\n'
+        f'    "EURUSD": {{"require_fvg": {_b(data.get("require_fvg_eurusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_eurusd", True))},  "htf_align": {_b(data.get("htf_align_eurusd", True))}, "pa_filter": {_b(data.get("pa_filter_eurusd", False))}}},\n'
+        f'    "GBPUSD": {{"require_fvg": {_b(data.get("require_fvg_gbpusd", False))}, "require_liq_sweep": {_b(data.get("require_liq_gbpusd", True))},  "htf_align": {_b(data.get("htf_align_gbpusd", True))}, "pa_filter": {_b(data.get("pa_filter_gbpusd", False))}}},\n'
+        f'    "USDJPY": {{"require_fvg": {_b(data.get("require_fvg_usdjpy", False))}, "require_liq_sweep": {_b(data.get("require_liq_usdjpy", True))},  "htf_align": {_b(data.get("htf_align_usdjpy", True))}, "pa_filter": {_b(data.get("pa_filter_usdjpy", False))}}},\n'
         f'}}'
     )
     content = re.sub(
@@ -530,12 +534,13 @@ def api_backtest():
     if start_date >= end_date:
         return jsonify({"ok": False, "error": "start_date deve essere precedente a end_date"}), 400
 
-    # Legge la soglia per-simbolo dai settings salvati (priorità rispetto a config.py)
+    # Legge impostazioni per-simbolo dai settings salvati (priorità rispetto a config.py)
     _s = _load_settings()
     _sym_key = f"ml_confidence_{symbol.lower()}"
     _threshold = float(_s.get(_sym_key, _s.get("ml_confidence_threshold", 0.65)))
+    _require_pa = bool(_s.get(f"pa_filter_{symbol.lower()}", False))
 
-    started = start_backtest(symbol, start_date, end_date, ml_threshold=_threshold)
+    started = start_backtest(symbol, start_date, end_date, ml_threshold=_threshold, require_pa=_require_pa)
     if not started:
         return jsonify({"ok": False, "error": "Backtest già in corso — attendi il completamento"}), 409
 
