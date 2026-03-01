@@ -189,6 +189,7 @@ def run_backtest(
     htf_hard_filter: Optional[bool] = None,
     require_fvg: Optional[bool] = None,
     require_liq_sweep: Optional[bool] = None,
+    require_pa: Optional[bool] = None,
 ) -> Dict[str, Any]:
 
     # Parametri: None = usa config per-simbolo (se disponibile) o default globale
@@ -203,6 +204,8 @@ def run_backtest(
         require_fvg       = _sym_cfg.get('require_fvg',      getattr(config, 'SMC_REQUIRE_FVG',        False))
     if require_liq_sweep is None:
         require_liq_sweep = _sym_cfg.get('require_liq_sweep', getattr(config, 'SMC_REQUIRE_LIQ_SWEEP', False))
+    if require_pa is None:
+        require_pa        = _sym_cfg.get('pa_filter',         False)
 
     pa_enabled  = getattr(config, 'PA_ENABLED', True)
     pa_min_score = getattr(config, 'PA_MIN_SCORE', 0)
@@ -214,7 +217,8 @@ def run_backtest(
     _log(f"  HTF hard filter : {htf_hard_filter}")
     _log(f"  Require FVG     : {require_fvg}")
     _log(f"  Require Liq Sweep: {require_liq_sweep}")
-    _log(f"  PA filter        : {'ON (min score=' + str(pa_min_score) + ')' if pa_enabled and pa_min_score > 0 else 'OFF'}")
+    _log(f"  Require PA       : {require_pa}")
+    _log(f"  PA filter (score): {'ON (min score=' + str(pa_min_score) + ')' if pa_enabled and pa_min_score > 0 else 'OFF'}")
     _log(f"{'=' * 50}")
 
     # 1. Carica e filtra CSV per data
@@ -384,6 +388,12 @@ def run_backtest(
                 if _diag["ml_errors"] <= 3:
                     _log(f"  [ML] Errore (trade {len(trades)+1}): {e}")
 
+
+        # Hard filter PA: entra solo se c'è un pattern Price Action confermato
+        if require_pa and not has_pa:
+            _diag["pa_blocked"] += 1
+            i += 1
+            continue
 
         # Parametri del trade
         entry   = float(candle['close'])
@@ -582,7 +592,7 @@ def run_backtest(
 
 # ── PUBLIC API ────────────────────────────────────────────────────────────────
 
-def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None) -> bool:
+def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None, require_pa: Optional[bool] = None) -> bool:
     """Avvia il backtest in un thread separato. Ritorna False se già in corso."""
     with _lock:
         if _state["running"]:
@@ -596,7 +606,7 @@ def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Op
         try:
             # Ricarica config da disco (l'utente può aver cambiato le impostazioni dalla dashboard)
             importlib.reload(config)
-            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold)
+            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold, require_pa=require_pa)
             with _lock:
                 _state["results"]  = results
                 _state["status"]   = "done"
