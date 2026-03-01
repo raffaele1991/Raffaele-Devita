@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 # Aggiungi root al path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
