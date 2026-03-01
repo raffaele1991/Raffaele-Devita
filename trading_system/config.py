@@ -185,7 +185,11 @@ MIN_SIGNAL_STRENGTH      = 55
 
 # ─── PRICE ACTION ─────────────────────────────────────────────────────────────
 # Modulo PA: pattern candlestick + livelli S&R integrati con SMC.
-# Il filtro PA si applica DOPO SMC e DOPO ML (terzo gate di qualità).
+#
+# Strategia raccomandata:
+#   PA_MIN_SCORE = 0 → PA NON filtra, ma popola pa_pattern/pa_score nel segnale
+#                      e aggiunge 10 feature al modello ML (riaddestra per usarle).
+#                      L'ML impara da solo quali pattern sono predittivi.
 #
 # Score 0–100 composito:
 #   Pin Bar forte        → +40  |  Engulfing forte  → +35  |  Morning Star → +28
@@ -195,12 +199,12 @@ MIN_SIGNAL_STRENGTH      = 55
 #
 PA_ENABLED               = True   # False = disabilita tutto il modulo PA
 
-# Soglia minima score PA per accettare il segnale (0 = disabilitato)
-# 0  → solo SMC + ML decidono (PA aggiunge info ma non filtra)
-# 30 → filtro leggero (almeno un pattern o livello chiave)  ← default
+# Soglia minima score PA per accettare il segnale
+# 0  → PA informa l'ML ma non filtra mai (RACCOMANDATO — max frequenza)
+# 30 → filtro leggero (almeno un pattern o livello chiave)
 # 45 → filtro moderato (pattern solido o pattern + livello)
-# 60 → filtro aggressivo (pin bar + livello o pattern multipli)
-PA_MIN_SCORE             = 30
+# 60 → filtro aggressivo (pochi trade, alta precisione)
+PA_MIN_SCORE             = 0
 
 # Pin Bar: corpo piccolo + wick di rigetto lungo
 PA_PIN_BAR_BODY_MAX_PCT  = 0.35   # corpo < 35% del range

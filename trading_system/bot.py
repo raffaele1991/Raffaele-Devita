@@ -387,11 +387,18 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("info", f"{symbol}: nessun setup SMC valido (struttura non confermata)")
         return
 
+    # Log segnale SMC + PA (identico al backtest: reason include già PA pattern e livelli)
+    pa_info = ""
+    if getattr(signal, 'pa_pattern', ""):
+        pa_info = f" | PA: {signal.pa_pattern} (score={signal.pa_score})"
+        if signal.pa_near_level:
+            pa_info += f" @ {signal.pa_near_level}"
     logger.info(
-        f"[SMC] {symbol} segnale {signal.direction.upper()}: {signal.reason}"
+        f"[SMC] {symbol} segnale {signal.direction.upper()}: {signal.reason}{pa_info}"
     )
 
     # Feature engineering per ML
+    # Nota: build_features include add_pa_features() — stessa pipeline del backtest
     df_struct = detect_structure(df)
     df_feat   = build_features(df_struct, symbol=symbol)
 
@@ -450,11 +457,14 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     confidence = ml_model.predict_proba(df_feat)
     logger.info(f"[ML]  {symbol} confidence: {confidence:.3f} (soglia: {ml_thresh})")
 
-    # Aggiorna segnale per la dashboard
+    # Aggiorna segnale per la dashboard (include info PA)
     _symbol_signals[symbol] = {
         "last_signal": signal.direction.upper(),
         "confidence":  round(float(confidence), 3),
         "reason":      signal.reason,
+        "pa_pattern":  getattr(signal, 'pa_pattern', ""),
+        "pa_score":    getattr(signal, 'pa_score', 0),
+        "pa_level":    getattr(signal, 'pa_near_level', ""),
     }
 
     if confidence < ml_thresh:
@@ -485,9 +495,10 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _reason("warn", f"{symbol}: lot size non calcolabile (SL troppo vicino all'entry?)")
         return
 
+    pa_log = f" | PA={signal.pa_score}" if getattr(signal, 'pa_score', 0) > 0 else ""
     logger.info(
         f"[BOT] APERTURA TRADE: {symbol} {signal.direction.upper()} "
-        f"lot={lot} | {signal.reason} | ML={confidence:.3f}"
+        f"lot={lot} | {signal.reason} | ML={confidence:.3f}{pa_log}"
     )
 
     # TP asimmetrico: entry ± sl_dist × TP_RR_MULTIPLIER (default 1.5R)
@@ -505,12 +516,13 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         lot_size=lot,
         sl_price=signal.sl_price,
         tp_price=tp_price,
-        comment=f"SMC+ML {session}",
+        comment=f"SMC+ML+PA {session}",
     )
 
     if trade:
         risk_manager.register_trade_open(trade)
-        _reason("ok", f"{symbol}: trade {signal.direction.upper()} aperto – lot={lot} | {signal.reason} | ML={confidence:.2f}")
+        pa_reason = f" | PA: {signal.pa_pattern} ({signal.pa_score})" if getattr(signal, 'pa_pattern', "") else ""
+        _reason("ok", f"{symbol}: trade {signal.direction.upper()} aperto – lot={lot} | {signal.reason} | ML={confidence:.2f}{pa_reason}")
     else:
         _reason("warn", f"{symbol}: ordine rifiutato da MT5")
 
