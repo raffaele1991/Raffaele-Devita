@@ -340,6 +340,21 @@ def run_cycle(connector, executor, risk_manager, session_f, news_f, ml_models, s
         write_state(risk_manager, session_f, connector=connector)
 
 
+def _htf_trend(df: pd.DataFrame) -> int:
+    """EMA120/EMA300 su M5 ≈ EMA20/EMA50 su M30. Identica al backtest engine."""
+    try:
+        close = df['close']
+        if len(close) < 30:
+            return 0
+        ema_fast = close.ewm(span=min(120, len(close) - 1), adjust=False).mean().iloc[-1]
+        ema_slow = close.ewm(span=min(300, len(close) - 1), adjust=False).mean().iloc[-1]
+        if ema_fast > ema_slow:   return  1
+        if ema_fast < ema_slow:   return -1
+        return 0
+    except Exception:
+        return 0
+
+
 def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_detector, session):
     """Analizza un singolo simbolo e apre un trade se il setup è valido."""
     global _symbol_signals
@@ -396,11 +411,16 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
     last_feat = df_feat.iloc[-1]
 
     # 1) HTF (M30) deve confermare il trend M5
-    if _require_htf and float(last_feat.get("htf_aligned", 0)) < 1.0:
-        logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
-        _reason("info", f"{symbol}: M30 contro-trend – skip")
-        _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
-        return
+    # Usa EMA120/EMA300 su M5 — identico al backtest engine (non features ML)
+    if _require_htf:
+        ht = _htf_trend(df)
+        if ht != 0:
+            sig_dir = 1 if signal.direction == 'long' else -1
+            if sig_dir != ht:
+                logger.info(f"[FILTER] {symbol}: M30 non allineato con M5 ({signal.direction}) – skip")
+                _reason("info", f"{symbol}: M30 contro-trend – skip")
+                _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
+                return
 
     # 2) ADX normalizzato ≥ MIN_ADX_FILTER (0.20 = ADX 20): evita ranging
     adx_val = float(last_feat.get("adx", 0))
@@ -410,9 +430,9 @@ def analyze_symbol(symbol, connector, executor, risk_manager, ml_model, smc_dete
         _symbol_signals[symbol] = {"last_signal": signal.direction.upper(), "confidence": 0.0, "reason": signal.reason}
         return
 
-    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep secondo SYMBOL_FILTER_CONFIGS
-    has_fvg   = float(last_feat.get("ob_has_fvg",    0)) >= 1.0
-    liq_swept = float(last_feat.get("liq_swept_smc", 0)) >= 1.0
+    # 3) Confluenza SMC per-simbolo: FVG e/o liq sweep da signal (identico al backtest)
+    has_fvg   = signal.fvg_top > 0
+    liq_swept = signal.liquidity_swept
     if _require_fvg and not has_fvg:
         logger.info(f"[FILTER] {symbol}: FVG richiesto ma assente – skip")
         _reason("info", f"{symbol}: nessun FVG confluente – skip")
