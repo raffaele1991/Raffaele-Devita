@@ -201,6 +201,10 @@ def run_backtest(
     _by_sym   = getattr(config, 'ML_CONFIDENCE_BY_SYMBOL', {}).get(symbol.upper(), None)
     threshold = ml_threshold if ml_threshold is not None else (_by_sym if _by_sym is not None else config.ML_CONFIDENCE_THRESHOLD)
 
+    # Limite superiore ML per-simbolo (se non passato esplicitamente dal grid search)
+    if ml_confidence_max is None:
+        ml_confidence_max = getattr(config, 'ML_CONFIDENCE_MAX_BY_SYMBOL', {}).get(symbol.upper(), None)
+
     # Leggi config per-simbolo (es. EURUSD usa Liq Sweep, XAUUSD usa FVG)
     _sym_cfg = getattr(config, 'SYMBOL_FILTER_CONFIGS', {}).get(symbol.upper(), {})
     if htf_hard_filter is None:
