@@ -219,10 +219,11 @@ def run_backtest(
     pa_enabled  = getattr(config, 'PA_ENABLED', True)
     pa_min_score = getattr(config, 'PA_MIN_SCORE', 0)
 
+    _ml_max_str = str(ml_confidence_max) if ml_confidence_max is not None else "∞"
     _log_fn(f"{'=' * 50}")
     _log_fn(f"  BACKTEST {symbol}")
     _log_fn(f"  Periodo: {start_date} → {end_date}")
-    _log_fn(f"  ML threshold  : {threshold}")
+    _log_fn(f"  ML range      : [{threshold}, {_ml_max_str})")
     _log_fn(f"  HTF hard filter : {htf_hard_filter}")
     _log_fn(f"  Require FVG     : {require_fvg}")
     _log_fn(f"  Require Liq Sweep: {require_liq_sweep}")
@@ -266,7 +267,7 @@ def run_backtest(
             try:
                 ml_model = SMCMLModel(symbol)
                 ml_model.load()
-                _log_fn(f"Modello ML caricato ✓  (soglia={threshold})")
+                _log_fn(f"Modello ML caricato ✓  (range=[{threshold}, {_ml_max_str}))")
             except Exception as e:
                 _log_fn(f"Avviso ML: {e} → procedo solo con SMC")
                 ml_model = None
@@ -551,8 +552,11 @@ def run_backtest(
             _bar = "█" * min(_cnt, 30)
             _label = f"[{_lo:.2f}-{_hi:.2f})" if _hi < 1.01 else f"[{_lo:.2f}-1.00]"
             _log_fn(f"    {_label}: {_cnt:>4}  {_bar}")
+        _ml_max_diag = ml_confidence_max if ml_confidence_max is not None else float('inf')
+        _in_range    = int(((_sc >= threshold) & (_sc < _ml_max_diag)).sum())
+        _ml_max_label = f"{ml_confidence_max}" if ml_confidence_max is not None else "∞"
         _log_fn(f"  Mediana confidence   : {float(_np.median(_sc)):.3f}")
-        _log_fn(f"  Superano soglia {threshold:.2f}  : {int((_sc >= threshold).sum())}")
+        _log_fn(f"  In range [{threshold:.2f}, {_ml_max_label})  : {_in_range}")
     _log_fn(f"  Bloccati da PA       : {_diag['pa_blocked']}")
     _log_fn(f"  di cui con PA pattern: {_diag['signals_with_pa']}  ({_diag['signals_with_pa']/max(_diag['signals'],1)*100:.0f}%)")
     _log_fn(f"  Rifiutati (R:R basso): {_diag['rr_rejected']}")
@@ -644,7 +648,7 @@ def run_backtest(
 
 # ── PUBLIC API ────────────────────────────────────────────────────────────────
 
-def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None, require_pa: Optional[bool] = None) -> bool:
+def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Optional[float] = None, ml_confidence_max: Optional[float] = None, require_pa: Optional[bool] = None) -> bool:
     """Avvia il backtest in un thread separato. Ritorna False se già in corso."""
     with _lock:
         if _state["running"]:
@@ -658,7 +662,7 @@ def start_backtest(symbol: str, start_date: str, end_date: str, ml_threshold: Op
         try:
             # Ricarica config da disco (l'utente può aver cambiato le impostazioni dalla dashboard)
             importlib.reload(config)
-            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold, require_pa=require_pa)
+            results = run_backtest(symbol, start_date, end_date, ml_threshold=ml_threshold, ml_confidence_max=ml_confidence_max, require_pa=require_pa)
             with _lock:
                 _state["results"]  = results
                 _state["status"]   = "done"

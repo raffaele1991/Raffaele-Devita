@@ -716,22 +716,39 @@
             <span class="settings-label">Usa ML</span>
             <input id="cfg_ml_enabled" class="settings-checkbox" type="checkbox" checked />
           </div>
-          <div class="settings-row">
-            <span class="settings-label">Confidence – EURUSD</span>
-            <input id="cfg_ml_confidence_eurusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Confidence – GBPUSD</span>
-            <input id="cfg_ml_confidence_gbpusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Confidence – USDJPY</span>
-            <input id="cfg_ml_confidence_usdjpy" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Confidence – XAUUSD</span>
-            <input id="cfg_ml_confidence_xauusd" class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:90px;" />
-          </div>
+          <!-- Range ML (min/max) per simbolo -->
+          <table style="width:100%; border-collapse:collapse; margin-top:8px;">
+            <thead>
+              <tr>
+                <th style="text-align:left; color:var(--muted); font-size:11px; font-weight:600; padding:4px 0; letter-spacing:.04em;">SIMBOLO</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">MIN (≥)</th>
+                <th style="color:var(--muted); font-size:11px; font-weight:600; padding:4px; text-align:center; letter-spacing:.04em;">MAX (&lt;)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--yellow);">XAUUSD</td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_xauusd"     class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:75px;" /></td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_max_xauusd" class="settings-input" type="number" min="0.50" max="1.00" step="0.01" style="max-width:75px;" placeholder="∞" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--blue);">EURUSD</td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_eurusd"     class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:75px;" /></td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_max_eurusd" class="settings-input" type="number" min="0.50" max="1.00" step="0.01" style="max-width:75px;" placeholder="∞" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--green);">GBPUSD</td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_gbpusd"     class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:75px;" /></td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_max_gbpusd" class="settings-input" type="number" min="0.50" max="1.00" step="0.01" style="max-width:75px;" placeholder="∞" /></td>
+              </tr>
+              <tr style="border-top:1px solid var(--border);">
+                <td style="padding:7px 0; font-weight:600; color:var(--accent);">USDJPY</td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_usdjpy"     class="settings-input" type="number" min="0.50" max="0.99" step="0.01" style="max-width:75px;" /></td>
+                <td style="text-align:center;"><input id="cfg_ml_confidence_max_usdjpy" class="settings-input" type="number" min="0.50" max="1.00" step="0.01" style="max-width:75px;" placeholder="∞" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="font-size:11px; color:var(--muted); margin-top:6px;">Lascia MAX vuoto per nessun limite superiore (∞).</div>
         </div>
 
         <!-- Filtri SMC per simbolo -->
@@ -1495,10 +1512,14 @@ async function loadSettings() {
 
     // ML
     document.getElementById('cfg_ml_enabled').checked                = !!s.ml_enabled;
-    document.getElementById('cfg_ml_confidence_xauusd').value        = s.ml_confidence_xauusd ?? 0.65;
+    document.getElementById('cfg_ml_confidence_xauusd').value        = s.ml_confidence_xauusd ?? 0.62;
     document.getElementById('cfg_ml_confidence_eurusd').value        = s.ml_confidence_eurusd ?? 0.62;
-    document.getElementById('cfg_ml_confidence_gbpusd').value        = s.ml_confidence_gbpusd ?? 0.72;
-    document.getElementById('cfg_ml_confidence_usdjpy').value        = s.ml_confidence_usdjpy ?? 0.72;
+    document.getElementById('cfg_ml_confidence_gbpusd').value        = s.ml_confidence_gbpusd ?? 0.70;
+    document.getElementById('cfg_ml_confidence_usdjpy').value        = s.ml_confidence_usdjpy ?? 0.62;
+    document.getElementById('cfg_ml_confidence_max_xauusd').value    = s.ml_confidence_max_xauusd != null ? s.ml_confidence_max_xauusd : '';
+    document.getElementById('cfg_ml_confidence_max_eurusd').value    = s.ml_confidence_max_eurusd != null ? s.ml_confidence_max_eurusd : '';
+    document.getElementById('cfg_ml_confidence_max_gbpusd').value    = s.ml_confidence_max_gbpusd != null ? s.ml_confidence_max_gbpusd : '';
+    document.getElementById('cfg_ml_confidence_max_usdjpy').value    = s.ml_confidence_max_usdjpy != null ? s.ml_confidence_max_usdjpy : '';
 
     // Filtri SMC per-simbolo
     ['xauusd', 'eurusd', 'gbpusd', 'usdjpy'].forEach(sym => {
@@ -1542,10 +1563,14 @@ async function saveSettings() {
     max_total_dd_pct:          parseFloat(document.getElementById('cfg_max_total_dd_pct').value)  || 7.0,
     min_rr:                    parseFloat(document.getElementById('cfg_min_rr').value)             || 2.0,
     ml_enabled:                document.getElementById('cfg_ml_enabled').checked,
-    ml_confidence_xauusd:      parseFloat(document.getElementById('cfg_ml_confidence_xauusd').value) || 0.65,
+    ml_confidence_xauusd:      parseFloat(document.getElementById('cfg_ml_confidence_xauusd').value) || 0.62,
     ml_confidence_eurusd:      parseFloat(document.getElementById('cfg_ml_confidence_eurusd').value) || 0.62,
-    ml_confidence_gbpusd:      parseFloat(document.getElementById('cfg_ml_confidence_gbpusd').value) || 0.72,
-    ml_confidence_usdjpy:      parseFloat(document.getElementById('cfg_ml_confidence_usdjpy').value) || 0.72,
+    ml_confidence_gbpusd:      parseFloat(document.getElementById('cfg_ml_confidence_gbpusd').value) || 0.70,
+    ml_confidence_usdjpy:      parseFloat(document.getElementById('cfg_ml_confidence_usdjpy').value) || 0.62,
+    ml_confidence_max_xauusd:  parseFloat(document.getElementById('cfg_ml_confidence_max_xauusd').value) || null,
+    ml_confidence_max_eurusd:  parseFloat(document.getElementById('cfg_ml_confidence_max_eurusd').value) || null,
+    ml_confidence_max_gbpusd:  parseFloat(document.getElementById('cfg_ml_confidence_max_gbpusd').value) || null,
+    ml_confidence_max_usdjpy:  parseFloat(document.getElementById('cfg_ml_confidence_max_usdjpy').value) || null,
     // Filtri SMC per-simbolo
     require_fvg_xauusd:        document.getElementById('cfg_require_fvg_xauusd').checked,
     require_liq_xauusd:        document.getElementById('cfg_require_liq_xauusd').checked,

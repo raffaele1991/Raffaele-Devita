@@ -370,10 +370,14 @@ _SETTINGS_DEFAULTS = {
     "max_total_dd_pct":          7.0,
     "min_rr":                    2.0,
     "ml_confidence_threshold":   0.65,
-    "ml_confidence_xauusd":      0.65,
+    "ml_confidence_xauusd":      0.62,
     "ml_confidence_eurusd":      0.62,
-    "ml_confidence_gbpusd":      0.72,
-    "ml_confidence_usdjpy":      0.72,
+    "ml_confidence_gbpusd":      0.70,
+    "ml_confidence_usdjpy":      0.62,
+    "ml_confidence_max_xauusd":  0.85,
+    "ml_confidence_max_eurusd":  0.85,
+    "ml_confidence_max_gbpusd":  None,
+    "ml_confidence_max_usdjpy":  None,
     "ml_enabled":                True,
     # Filtri confluenza SMC per-simbolo
     "require_fvg_xauusd":        False,
@@ -449,10 +453,10 @@ def _patch_config(data: dict) -> None:
             new_lines.append(line)
 
     # Aggiorna ML_CONFIDENCE_BY_SYMBOL con valori per-simbolo
-    xau = float(data.get("ml_confidence_xauusd", 0.65))
+    xau = float(data.get("ml_confidence_xauusd", 0.62))
     eur = float(data.get("ml_confidence_eurusd", 0.62))
-    gbp = float(data.get("ml_confidence_gbpusd", 0.72))
-    jpy = float(data.get("ml_confidence_usdjpy", 0.72))
+    gbp = float(data.get("ml_confidence_gbpusd", 0.70))
+    jpy = float(data.get("ml_confidence_usdjpy", 0.62))
     new_by_symbol = (
         f'{{\n'
         f'    "XAUUSD": {xau},\n'
@@ -465,6 +469,31 @@ def _patch_config(data: dict) -> None:
     content = re.sub(
         r'ML_CONFIDENCE_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{[^}]*?\}',
         f'ML_CONFIDENCE_BY_SYMBOL: dict = {new_by_symbol}',
+        content,
+        flags=re.DOTALL,
+    )
+
+    # Aggiorna ML_CONFIDENCE_MAX_BY_SYMBOL con limiti superiori per-simbolo
+    def _ml_max(val):
+        v = data.get(val)
+        if v is None or str(v).strip() in ("", "null", "None"):
+            return "None"
+        try:
+            return str(float(v))
+        except (TypeError, ValueError):
+            return "None"
+
+    new_ml_max = (
+        f'{{\n'
+        f'    "XAUUSD": {_ml_max("ml_confidence_max_xauusd")},\n'
+        f'    "EURUSD": {_ml_max("ml_confidence_max_eurusd")},\n'
+        f'    "GBPUSD": {_ml_max("ml_confidence_max_gbpusd")},\n'
+        f'    "USDJPY": {_ml_max("ml_confidence_max_usdjpy")},\n'
+        f'}}'
+    )
+    content = re.sub(
+        r'ML_CONFIDENCE_MAX_BY_SYMBOL\s*(?::\s*dict)?\s*=\s*\{[^}]*?\}',
+        f'ML_CONFIDENCE_MAX_BY_SYMBOL: dict = {new_ml_max}',
         content,
         flags=re.DOTALL,
     )
@@ -536,11 +565,13 @@ def api_backtest():
 
     # Legge impostazioni per-simbolo dai settings salvati (priorità rispetto a config.py)
     _s = _load_settings()
-    _sym_key = f"ml_confidence_{symbol.lower()}"
-    _threshold = float(_s.get(_sym_key, _s.get("ml_confidence_threshold", 0.65)))
-    _require_pa = bool(_s.get(f"pa_filter_{symbol.lower()}", False))
+    _sym_lower = symbol.lower()
+    _threshold = float(_s.get(f"ml_confidence_{_sym_lower}", _s.get("ml_confidence_threshold", 0.62)))
+    _max_raw   = _s.get(f"ml_confidence_max_{_sym_lower}")
+    _conf_max  = float(_max_raw) if _max_raw not in (None, "", "null") else None
+    _require_pa = bool(_s.get(f"pa_filter_{_sym_lower}", False))
 
-    started = start_backtest(symbol, start_date, end_date, ml_threshold=_threshold, require_pa=_require_pa)
+    started = start_backtest(symbol, start_date, end_date, ml_threshold=_threshold, ml_confidence_max=_conf_max, require_pa=_require_pa)
     if not started:
         return jsonify({"ok": False, "error": "Backtest già in corso — attendi il completamento"}), 409
 
