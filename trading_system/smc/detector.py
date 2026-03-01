@@ -11,6 +11,7 @@ from typing import Optional
 from .structure import detect_structure
 from .zones import find_order_blocks, find_fvg, find_liquidity_levels
 from trading_system import config
+from trading_system.pa.detector import analyze_pa
 
 # OB rilevanti solo se formati entro questi bar dalla candela corrente
 OB_MAX_AGE_BARS = 80
@@ -30,6 +31,10 @@ class SMCSignal:
     liquidity_swept: bool = False
     trend_aligned: bool = False
     sl_adjusted: bool = False   # True se SL è stato spostato oltre una liq zone
+    # Price Action (popolati dal modulo PA)
+    pa_pattern: str = ""        # es. "Pin Bar Bull", "Engulfing Bear + Doji"
+    pa_score: int   = 0         # score PA composito 0-100
+    pa_near_level: str = ""     # es. "PDH", "Round 2700", "Asian Low"
 
 
 class SMCDetector:
@@ -192,6 +197,17 @@ class SMCDetector:
                 if sl <= 0 or tp <= 0:
                     continue
 
+                # ── Price Action analysis ───────────────────────────────────
+                pa_sig = None
+                if getattr(config, 'PA_ENABLED', True):
+                    try:
+                        pa_sig = analyze_pa(df, self.symbol, direction_hint="long", atr=atr)
+                        pa_min = getattr(config, 'PA_MIN_SCORE', 0)
+                        if pa_min > 0 and pa_sig.score < pa_min:
+                            continue  # PA non confermata → prova prossimo OB
+                    except Exception:
+                        pa_sig = None
+
                 reason_parts = ["Bullish OB in uptrend"]
                 if fvg_in_zone:
                     reason_parts.append("FVG confluence")
@@ -199,6 +215,10 @@ class SMCDetector:
                     reason_parts.append("Liquidity swept")
                 if sl_adj:
                     reason_parts.append("SL beyond liq zone")
+                if pa_sig and pa_sig.pattern_names:
+                    reason_parts.append(f"PA: {pa_sig.pattern_names}")
+                if pa_sig and pa_sig.level_names:
+                    reason_parts.append(f"@ {pa_sig.level_names}")
 
                 sig = SMCSignal(
                     direction="long",
@@ -213,6 +233,9 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                     sl_adjusted=sl_adj,
+                    pa_pattern=pa_sig.pattern_names if pa_sig else "",
+                    pa_score=pa_sig.score if pa_sig else 0,
+                    pa_near_level=pa_sig.level_names if pa_sig else "",
                 )
                 return (sig, df) if return_struct else sig
 
@@ -265,6 +288,17 @@ class SMCDetector:
                 if sl <= 0 or tp <= 0:
                     continue
 
+                # ── Price Action analysis ───────────────────────────────────
+                pa_sig = None
+                if getattr(config, 'PA_ENABLED', True):
+                    try:
+                        pa_sig = analyze_pa(df, self.symbol, direction_hint="short", atr=atr)
+                        pa_min = getattr(config, 'PA_MIN_SCORE', 0)
+                        if pa_min > 0 and pa_sig.score < pa_min:
+                            continue  # PA non confermata → prova prossimo OB
+                    except Exception:
+                        pa_sig = None
+
                 reason_parts = ["Bearish OB in downtrend"]
                 if fvg_in_zone:
                     reason_parts.append("FVG confluence")
@@ -272,6 +306,10 @@ class SMCDetector:
                     reason_parts.append("Liquidity swept")
                 if sl_adj:
                     reason_parts.append("SL beyond liq zone")
+                if pa_sig and pa_sig.pattern_names:
+                    reason_parts.append(f"PA: {pa_sig.pattern_names}")
+                if pa_sig and pa_sig.level_names:
+                    reason_parts.append(f"@ {pa_sig.level_names}")
 
                 sig = SMCSignal(
                     direction="short",
@@ -286,6 +324,9 @@ class SMCDetector:
                     liquidity_swept=liq_swept,
                     trend_aligned=True,
                     sl_adjusted=sl_adj,
+                    pa_pattern=pa_sig.pattern_names if pa_sig else "",
+                    pa_score=pa_sig.score if pa_sig else 0,
+                    pa_near_level=pa_sig.level_names if pa_sig else "",
                 )
                 return (sig, df) if return_struct else sig
 

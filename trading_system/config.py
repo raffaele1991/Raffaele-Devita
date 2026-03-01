@@ -183,6 +183,49 @@ MIN_ADX_FILTER           = 0.20
 # 65 = filtro aggressivo (solo STRONG e A+) — meno trade, precisione max
 MIN_SIGNAL_STRENGTH      = 55
 
+# ─── PRICE ACTION ─────────────────────────────────────────────────────────────
+# Modulo PA: pattern candlestick + livelli S&R integrati con SMC.
+# Il filtro PA si applica DOPO SMC e DOPO ML (terzo gate di qualità).
+#
+# Score 0–100 composito:
+#   Pin Bar forte        → +40  |  Engulfing forte  → +35  |  Morning Star → +28
+#   Marubozu            → +18  |  Inside Bar       → +15  |  Doji         → +12
+#   PDH / PDL vicino    → +20  |  PWH / PWL        → +15  |  Round level  → +8-12
+#   Allineamento SMC    → +10  |  Multi-pattern     → +8
+#
+PA_ENABLED               = True   # False = disabilita tutto il modulo PA
+
+# Soglia minima score PA per accettare il segnale (0 = disabilitato)
+# 0  → solo SMC + ML decidono (PA aggiunge info ma non filtra)
+# 30 → filtro leggero (almeno un pattern o livello chiave)  ← default
+# 45 → filtro moderato (pattern solido o pattern + livello)
+# 60 → filtro aggressivo (pin bar + livello o pattern multipli)
+PA_MIN_SCORE             = 30
+
+# Pin Bar: corpo piccolo + wick di rigetto lungo
+PA_PIN_BAR_BODY_MAX_PCT  = 0.35   # corpo < 35% del range
+PA_PIN_BAR_WICK_MIN_PCT  = 0.55   # wick di rigetto > 55% del range
+
+# Engulfing: qualità minima del body engulfing
+PA_ENGULFING_QUALITY_MIN = 0.5    # corpo corrente ≥ 50% del corpo precedente
+
+# Doji
+PA_DOJI_BODY_MAX_PCT     = 0.10   # corpo < 10% del range
+
+# Marubozu
+PA_MARUBOZU_BODY_MIN_PCT = 0.80   # corpo ≥ 80% del range
+
+# Round numbers per simbolo
+PA_ROUND_LEVELS          = {
+    "XAUUSD": [50.0, 100.0],     # ogni $50 (es: 2650) e $100 (es: 2700)
+    "EURUSD": [0.005, 0.010],    # ogni 50 pip e 100 pip
+    "GBPUSD": [0.005, 0.010],
+    "USDJPY": [0.50, 1.00],      # ogni 0.50 e 1.00
+}
+
+# Prossimità livello S&R: considerato "vicino" se entro X × ATR dal prezzo
+PA_LEVEL_PROXIMITY_ATR   = 0.5
+
 # ─── MT5 CONNECTION ───────────────────────────────────────────────────────────
 
 MT5_ACCOUNT  = 0        # inserisci il numero conto FTMO demo
