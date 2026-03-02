@@ -1042,13 +1042,17 @@ function renderClosedTrades(trades) {
   const c = document.getElementById('closedContainer');
   if (!trades.length) { c.innerHTML = '<div class="text-muted" style="padding:8px 0;">Nessun trade chiuso</div>'; return; }
   c.innerHTML = trades.map(t => {
-    const pnlCls = (t.pnl ?? 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    // Usa t.result (win/loss impostato da MT5 reason: TP=win, SL=loss) per badge e colore.
+    // Non usare t.pnl che include commissioni e può rendere negativo anche un TP.
+    const isWin  = (t.result === 'win');
+    const pnlCls = isWin ? 'pnl-pos' : 'pnl-neg';
+    const pnl    = t.pnl ?? 0;
     return `<div class="trade-row">
       <span class="text-muted" style="font-size:11px;">${escHtml(t.close_time || '')}</span>
       <span style="font-weight:600;">${escHtml(t.symbol)}</span>
       <span class="${t.direction === 'long' ? 'text-blue' : 'text-red'}">${t.direction.toUpperCase()}</span>
-      <span class="${pnlCls}">${(t.pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(t.pnl ?? 0).toFixed(2)}</span>
-      <span class="badge ${(t.pnl ?? 0) >= 0 ? 'badge-win' : 'badge-loss'}">${(t.pnl ?? 0) >= 0 ? 'WIN' : 'LOSS'}</span>
+      <span class="${pnlCls}">${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}</span>
+      <span class="badge ${isWin ? 'badge-win' : 'badge-loss'}">${isWin ? 'WIN' : 'LOSS'}</span>
     </div>`;
   }).join('');
 }

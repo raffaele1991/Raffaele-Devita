@@ -15,7 +15,7 @@ import sys
 import time
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 import pandas as pd
@@ -24,8 +24,10 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-STATE_FILE   = os.path.join(ROOT, "trading_system", "state.json")
-CONTROL_FILE = os.path.join(ROOT, "trading_system", "control.json")
+STATE_FILE        = os.path.join(ROOT, "trading_system", "state.json")
+CONTROL_FILE      = os.path.join(ROOT, "trading_system", "control.json")
+RISK_STATE_FILE   = os.path.join(ROOT, "trading_system", "risk_state.json")
+TRADE_HISTORY_FILE = os.path.join(ROOT, "trading_system", "trade_history.json")
 
 from trading_system import config
 from trading_system.mt5.connector import MT5Connector
@@ -71,6 +73,7 @@ def initialize():
     # Componenti
     executor     = OrderExecutor(connector)
     risk_manager = RiskManager(balance)
+    load_risk_state(risk_manager)   # Ripristina DD dal ciclo/sessione precedente
     session_f    = SessionFilter()
     news_f       = NewsFilter()
 
@@ -96,6 +99,92 @@ def initialize():
     logger.info("Sistema pronto. In attesa kill zone...\n")
 
     return connector, executor, risk_manager, session_f, news_f, ml_models, smc_detectors
+
+
+# ─── PERSISTENZA DD & STORICO ─────────────────────────────────────────────────
+
+def load_risk_state(risk_manager):
+    """Ripristina DD e balance iniziale dal file salvato al ciclo precedente.
+    Chiamare dopo aver creato RiskManager, prima del primo ciclo."""
+    if not os.path.exists(RISK_STATE_FILE):
+        return
+    try:
+        with open(RISK_STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Balance iniziale del challenge: deve sopravvivere a qualsiasi riavvio
+        saved_initial = data.get("initial_balance")
+        if saved_initial:
+            risk_manager.initial_balance = saved_initial
+
+        # Max DD totale: non si resetta mai (segue regola FTMO)
+        risk_manager.max_total_dd_pct = data.get("max_total_dd_pct", 0.0)
+
+        # Max DD giornaliero: ripristina solo se la data salvata è oggi
+        saved_date = data.get("daily_start_date", "")
+        if saved_date == date.today().isoformat():
+            risk_manager.max_daily_dd_pct    = data.get("max_daily_dd_pct", 0.0)
+            saved_daily_start = data.get("daily_start_balance")
+            if saved_daily_start:
+                risk_manager.daily_start_balance = saved_daily_start
+
+        logger.info(
+            f"[Risk] Stato DD ripristinato da disk: "
+            f"initial={risk_manager.initial_balance:.2f} | "
+            f"max_total_dd={risk_manager.max_total_dd_pct*100:.2f}% | "
+            f"max_daily_dd={risk_manager.max_daily_dd_pct*100:.2f}%"
+        )
+    except Exception as e:
+        logger.warning(f"[Risk] Impossibile caricare risk_state.json: {e}")
+
+
+def save_risk_state(risk_manager):
+    """Salva DD e balance iniziale su disco. Chiamare ad ogni ciclo."""
+    try:
+        data = {
+            "max_total_dd_pct":    risk_manager.max_total_dd_pct,
+            "max_daily_dd_pct":    risk_manager.max_daily_dd_pct,
+            "initial_balance":     risk_manager.initial_balance,
+            "daily_start_balance": risk_manager.daily_start_balance,
+            "daily_start_date":    risk_manager.daily_start_date.isoformat(),
+            "saved_at":            datetime.now().isoformat(),
+        }
+        with open(RISK_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.debug(f"[Risk] Errore salvataggio risk_state.json: {e}")
+
+
+def _merge_and_save_history(new_trades: list) -> list:
+    """Unisce i nuovi trade MT5 con lo storico persistente su disco.
+    Usa il ticket MT5 come chiave di deduplicazione.
+    Ritorna la lista completa ordinata per data (più recente prima)."""
+    try:
+        if os.path.exists(TRADE_HISTORY_FILE):
+            with open(TRADE_HISTORY_FILE, "r", encoding="utf-8") as f:
+                historical = json.load(f)
+        else:
+            historical = []
+    except Exception:
+        historical = []
+
+    existing_tickets = {t.get("ticket") for t in historical if t.get("ticket")}
+    added = False
+    for t in new_trades:
+        if t.get("ticket") and t["ticket"] not in existing_tickets:
+            historical.append(t)
+            existing_tickets.add(t["ticket"])
+            added = True
+
+    if added:
+        historical.sort(key=lambda x: x.get("close_time", ""), reverse=True)
+        try:
+            with open(TRADE_HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(historical, f, indent=2)
+        except Exception as e:
+            logger.debug(f"[History] Errore salvataggio trade_history.json: {e}")
+
+    return historical
 
 
 # ─── STATE FILE ───────────────────────────────────────────────────────────────
@@ -156,6 +245,12 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             losses        = status["total_losses"]
             win_rate      = status["win_rate"]
 
+        # Salva DD su disco ad ogni ciclo (sopravvive al riavvio)
+        save_risk_state(risk_manager)
+
+        # Unisce i trade MT5 di oggi con lo storico persistente
+        all_trades = _merge_and_save_history(closed_trades)
+
         state = {
             "bot_status":         bot_status,
             "timestamp":          datetime.now().isoformat(),
@@ -180,7 +275,7 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "symbols":            _symbol_signals,
             "block_reasons":      list(_block_reasons),
             "open_trades":        open_trades,
-            "closed_trades":      closed_trades,
+            "closed_trades":      all_trades[:100],   # storico completo (max 100)
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
