@@ -234,14 +234,18 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
                 open_trades   = connector.get_open_positions_full()
                 # Storico completo (dal primo giorno del challenge, max 90 giorni)
                 all_closed    = connector.get_all_closed_deals(days_back=90)
-                # Statistiche di oggi: filtra dall'elenco completo
+                # Merge con lo storico su disco PRIMA di filtrare oggi:
+                # se un trade è mancato per ritardo MT5 in questo ciclo ma era
+                # stato catturato in un ciclo precedente, rimane visibile.
+                all_trades    = _merge_and_save_history(all_closed)
                 today_str     = date.today().isoformat()
-                closed_today  = [t for t in all_closed if t.get("close_time", "").startswith(today_str)]
+                # Filtra oggi dall'elenco COMPLETO (MT5 + file storico)
+                closed_today  = [t for t in all_trades if t.get("close_time", "").startswith(today_str)]
                 trades_today  = len(closed_today)
                 wins          = sum(1 for t in closed_today if t["result"] == "win")
                 losses        = sum(1 for t in closed_today if t["result"] == "loss")
                 win_rate      = round(wins / max(wins + losses, 1) * 100, 1)
-                closed_trades = all_closed   # storico completo per il merge
+                closed_trades = closed_today  # solo oggi per il display "Storico (oggi)"
             except Exception as e:
                 logger.debug(f"[Dashboard] Errore lettura MT5 trades: {e}")
                 open_trades   = []
@@ -274,8 +278,10 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
         # Salva DD su disco ad ogni ciclo (sopravvive al riavvio)
         save_risk_state(risk_manager)
 
-        # Unisce i trade MT5 di oggi con lo storico persistente
-        all_trades = _merge_and_save_history(closed_trades)
+        # Se il connector non era disponibile, esegue il merge dal file storico
+        # (nel caso normale il merge è già avvenuto nel blocco try sopra)
+        if connector is None:
+            _merge_and_save_history([])
 
         state = {
             "bot_status":         bot_status,
@@ -301,7 +307,7 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
             "symbols":            _symbol_signals,
             "block_reasons":      list(_block_reasons),
             "open_trades":        open_trades,
-            "closed_trades":      all_trades[:100],   # storico completo (max 100)
+            "closed_trades":      closed_trades,   # solo i trade chiusi oggi
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
