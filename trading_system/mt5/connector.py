@@ -178,16 +178,27 @@ class MT5Connector:
         for d in deals:
             if d.entry != 1:   # 1 = DEAL_ENTRY_OUT (chiusura)
                 continue
+            # Usa d.reason per determinare win/loss: 5=DEAL_REASON_TP, 4=DEAL_REASON_SL.
+            # Non usare profit+commission+swap perché le commissioni possono rendere
+            # negativo anche un trade chiuso a TP.
+            reason = getattr(d, "reason", -1)
+            if reason == 5:        # DEAL_REASON_TP
+                result_str = "win"
+            elif reason == 4:      # DEAL_REASON_SL
+                result_str = "loss"
+            else:
+                result_str = "win" if d.profit > 0 else "loss"
             result.append({
                 "symbol":     d.symbol,
-                "direction":  "long" if d.type == 1 else "short",  # type=1 sell=chiusura long
+                "direction":  "long" if d.type == 1 else "short",
                 "lot_size":   d.volume,
                 "entry_price": None,
                 "sl":          None,
                 "tp":          None,
                 "pnl":         round(d.profit + d.commission + d.swap, 2),
                 "close_time":  datetime.fromtimestamp(d.time).isoformat(),
-                "result":      "win" if (d.profit + d.commission + d.swap) > 0 else "loss",
+                "result":      result_str,
+                "reason":      reason,   # 4=SL, 5=TP, altri=manuale/bot
                 "ticket":      d.ticket,
             })
         return result

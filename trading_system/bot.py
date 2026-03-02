@@ -229,15 +229,16 @@ def _sync_risk_from_mt5(risk_manager, connector):
                 break
         risk_manager.consecutive_losses = consecutive
 
-        # Registra l'ultimo SL per simbolo (cooldown da deal history)
+        # Registra l'ultimo SL per simbolo (cooldown da deal history).
+        # Il cooldown scatta SOLO per chiusure a SL (reason=4), mai per TP (reason=5).
         for t in closed_today:
-            sym = t["symbol"].upper()
-            if t["result"] == "loss":
+            sym    = t["symbol"].upper()
+            reason = t.get("reason", -1)
+            if t["result"] == "loss" and reason != 5:   # SL reale, non TP con comm. negative
                 close_dt = datetime.fromisoformat(t["close_time"])
                 if sym not in _symbol_last_loss or close_dt > _symbol_last_loss[sym]:
                     _symbol_last_loss[sym] = close_dt
-            elif t["result"] == "win":
-                # Rimuove cooldown preventivo se la chiusura era un win
+            elif t["result"] == "win" or reason == 5:   # TP o win → rimuove qualsiasi cooldown
                 _symbol_last_loss.pop(sym, None)
 
     except Exception as e:
