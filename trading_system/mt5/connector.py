@@ -163,10 +163,35 @@ class MT5Connector:
             })
         return result
 
+    @staticmethod
+    def _deal_to_dict(d) -> dict:
+        """Converte un deal MT5 in dizionario. Usato da get_closed_deals_today e get_all_closed_deals."""
+        reason = getattr(d, "reason", -1)
+        if reason == 5:        # DEAL_REASON_TP
+            result_str = "win"
+        elif reason == 4:      # DEAL_REASON_SL
+            result_str = "loss"
+        else:
+            result_str = "win" if d.profit > 0 else "loss"
+        return {
+            "symbol":      d.symbol,
+            "direction":   "long" if d.type == 1 else "short",
+            "lot_size":    d.volume,
+            "entry_price": None,
+            "sl":          None,
+            "tp":          None,
+            "pnl":         round(d.profit + d.commission + d.swap, 2),
+            "close_time":  datetime.fromtimestamp(d.time).isoformat(),
+            "result":      result_str,
+            "reason":      reason,   # 4=SL, 5=TP, altri=manuale/bot
+            "ticket":      d.ticket,
+        }
+
     def get_closed_deals_today(self) -> list[dict]:
         """
-        Restituisce i deal di chiusura eseguiti oggi (DEAL_ENTRY_OUT = 1).
-        Usa mt5.history_deals_get() con intervallo da mezzanotte a ora corrente.
+        Restituisce i deal di chiusura eseguiti oggi.
+        Filtra entry IN (0) e tiene OUT(1), INOUT(2), OUT_BY(3) per catturare
+        tutti i tipi di chiusura (TP, SL, manuale, close-by).
         """
         from datetime import date, time as dtime
         today_start = datetime.combine(date.today(), dtime(0, 0, 0))
@@ -174,33 +199,32 @@ class MT5Connector:
         deals = mt5.history_deals_get(today_start, now)
         if not deals:
             return []
-        result = []
-        for d in deals:
-            if d.entry != 1:   # 1 = DEAL_ENTRY_OUT (chiusura)
-                continue
-            # Usa d.reason per determinare win/loss: 5=DEAL_REASON_TP, 4=DEAL_REASON_SL.
-            # Non usare profit+commission+swap perché le commissioni possono rendere
-            # negativo anche un trade chiuso a TP.
-            reason = getattr(d, "reason", -1)
-            if reason == 5:        # DEAL_REASON_TP
-                result_str = "win"
-            elif reason == 4:      # DEAL_REASON_SL
-                result_str = "loss"
-            else:
-                result_str = "win" if d.profit > 0 else "loss"
-            result.append({
-                "symbol":     d.symbol,
-                "direction":  "long" if d.type == 1 else "short",
-                "lot_size":   d.volume,
-                "entry_price": None,
-                "sl":          None,
-                "tp":          None,
-                "pnl":         round(d.profit + d.commission + d.swap, 2),
-                "close_time":  datetime.fromtimestamp(d.time).isoformat(),
-                "result":      result_str,
-                "reason":      reason,   # 4=SL, 5=TP, altri=manuale/bot
-                "ticket":      d.ticket,
-            })
+        return [
+            self._deal_to_dict(d)
+            for d in deals
+            if getattr(d, "entry", -1) != 0   # escludi solo DEAL_ENTRY_IN
+            and getattr(d, "symbol", "")       # escludi deal di sistema (balance, ecc.)
+        ]
+
+    def get_all_closed_deals(self, days_back: int = 90) -> list[dict]:
+        """
+        Restituisce tutti i deal di chiusura degli ultimi `days_back` giorni.
+        Usato per lo storico completo nella dashboard (dal primo giorno del challenge).
+        Ordine: più recente prima.
+        """
+        from datetime import timedelta
+        from_date = datetime.now() - timedelta(days=days_back)
+        now       = datetime.now()
+        deals = mt5.history_deals_get(from_date, now)
+        if not deals:
+            return []
+        result = [
+            self._deal_to_dict(d)
+            for d in deals
+            if getattr(d, "entry", -1) != 0   # escludi DEAL_ENTRY_IN
+            and getattr(d, "symbol", "")       # escludi deal di sistema
+        ]
+        result.sort(key=lambda x: x.get("close_time", ""), reverse=True)
         return result
 
     def get_symbol_info(self, symbol: str):

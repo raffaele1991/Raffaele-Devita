@@ -74,6 +74,14 @@ def initialize():
     executor     = OrderExecutor(connector)
     risk_manager = RiskManager(balance)
     load_risk_state(risk_manager)   # Ripristina DD dal ciclo/sessione precedente
+
+    # Correggi daily_start_balance: deve essere il balance a mezzanotte,
+    # non il balance all'ora di avvio (altrimenti il DD giornaliero parte sbagliato).
+    daily_start = _compute_daily_start_balance(connector, balance)
+    risk_manager.daily_start_balance = daily_start
+    risk_manager.daily_start_date    = date.today()
+    logger.info(f"[Risk] daily_start_balance (mezzanotte): {daily_start:.2f}")
+
     session_f    = SessionFilter()
     news_f       = NewsFilter()
 
@@ -155,6 +163,19 @@ def save_risk_state(risk_manager):
         logger.debug(f"[Risk] Errore salvataggio risk_state.json: {e}")
 
 
+def _compute_daily_start_balance(connector, current_balance: float) -> float:
+    """Calcola il balance reale a mezzanotte sottraendo i P&L dei deal chiusi oggi.
+    Così daily_start_balance è sempre ancorato a mezzanotte, indipendentemente
+    dall'ora in cui viene avviato o riavviato il bot."""
+    try:
+        closed_today = connector.get_closed_deals_today()
+        today_pnl = sum(d.get("pnl", 0) for d in closed_today)
+        return round(current_balance - today_pnl, 2)
+    except Exception as e:
+        logger.warning(f"[Risk] Impossibile calcolare balance mezzanotte: {e}")
+        return current_balance
+
+
 def _merge_and_save_history(new_trades: list) -> list:
     """Unisce i nuovi trade MT5 con lo storico persistente su disco.
     Usa il ticket MT5 come chiave di deduplicazione.
@@ -211,11 +232,16 @@ def write_state(risk_manager, session_f, bot_status: str = "running", connector=
         if connector is not None:
             try:
                 open_trades   = connector.get_open_positions_full()
-                closed_trades = connector.get_closed_deals_today()
-                trades_today  = len(closed_trades)
-                wins          = sum(1 for t in closed_trades if t["result"] == "win")
-                losses        = sum(1 for t in closed_trades if t["result"] == "loss")
+                # Storico completo (dal primo giorno del challenge, max 90 giorni)
+                all_closed    = connector.get_all_closed_deals(days_back=90)
+                # Statistiche di oggi: filtra dall'elenco completo
+                today_str     = date.today().isoformat()
+                closed_today  = [t for t in all_closed if t.get("close_time", "").startswith(today_str)]
+                trades_today  = len(closed_today)
+                wins          = sum(1 for t in closed_today if t["result"] == "win")
+                losses        = sum(1 for t in closed_today if t["result"] == "loss")
                 win_rate      = round(wins / max(wins + losses, 1) * 100, 1)
+                closed_trades = all_closed   # storico completo per il merge
             except Exception as e:
                 logger.debug(f"[Dashboard] Errore lettura MT5 trades: {e}")
                 open_trades   = []
