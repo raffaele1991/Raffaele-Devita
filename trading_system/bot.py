@@ -104,7 +104,7 @@ def initialize():
 _symbol_signals:    dict = {}
 _block_reasons:     list = []   # [{"level": "info"|"warn"|"ok", "msg": "..."}]
 _symbol_last_loss:  dict = {}   # {symbol: datetime_dell_ultimo_SL}
-_prev_open_symbols: set  = set()  # simboli con posizioni bot aperte nel ciclo precedente
+_prev_open_positions: dict = {}   # {symbol: last_known_profit} per le posizioni bot aperte
 
 
 def _reason(level: str, msg: str):
@@ -195,30 +195,36 @@ def _sync_risk_from_mt5(risk_manager, connector):
     Chiamata all'inizio di ogni ciclo — necessaria perché register_trade_close()
     non viene chiamato automaticamente quando MT5 chiude un trade per SL/TP.
     """
-    global _symbol_last_loss, _prev_open_symbols
+    global _symbol_last_loss, _prev_open_positions
     try:
         closed_today = connector.get_closed_deals_today()
 
         # trades_today = deal chiusi + posizioni ancora aperte del bot
         open_pos = connector.get_open_positions() or []
         bot_pos  = [p for p in open_pos if getattr(p, "magic", None) == 20250101]
-        current_open = {getattr(p, "symbol", "").upper() for p in bot_pos}
-        risk_manager.trades_today = len(closed_today) + len(bot_pos)
+        current_open = {getattr(p, "symbol", "").upper(): getattr(p, "profit", 0.0)
+                        for p in bot_pos}
+        risk_manager.trades_today = len(closed_today) + len(current_open)
 
         # ── Cooldown preventivo ────────────────────────────────────────────────
         # Se una posizione del bot scompare da open_positions ma il deal non è
         # ancora visibile in closed_today (ritardo history MT5), il cooldown
         # normale non scatta e il bot può riaprire immediatamente lo stesso simbolo.
-        # Soluzione: appena rileva la sparizione, imposta _symbol_last_loss = now.
-        # Quando la deal history si aggiorna: se era un WIN rimuove l'entry,
-        # se era un LOSS aggiorna al timestamp preciso.
+        # Applica il cooldown preventivo SOLO se l'ultimo profitto noto era negativo
+        # (probabile SL). Se era positivo, quasi certamente era un TP → nessun cooldown.
         confirmed_symbols = {t["symbol"].upper() for t in closed_today}
-        for sym in _prev_open_symbols - current_open:
+        for sym in set(_prev_open_positions) - set(current_open):
             if sym not in confirmed_symbols:
-                # deal non ancora in history → cooldown preventivo
-                _symbol_last_loss.setdefault(sym, datetime.now())
-                logger.info(f"[Sync] {sym}: posizione chiusa, deal in attesa → cooldown preventivo")
-        _prev_open_symbols = current_open
+                last_profit = _prev_open_positions.get(sym, 0.0)
+                if last_profit < 0:
+                    # Profitto negativo → probabile SL → cooldown preventivo
+                    _symbol_last_loss.setdefault(sym, datetime.now())
+                    logger.info(f"[Sync] {sym}: posizione chiusa (loss), deal in attesa → cooldown preventivo")
+                else:
+                    # Profitto positivo → probabile TP → nessun cooldown preventivo
+                    _symbol_last_loss.pop(sym, None)
+                    logger.info(f"[Sync] {sym}: posizione chiusa (profit), deal in attesa → nessun cooldown")
+        _prev_open_positions = current_open
 
         # consecutive_losses: conta le perdite consecutive partendo dall'ultima
         consecutive = 0
