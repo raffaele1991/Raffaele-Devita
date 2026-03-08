@@ -5,6 +5,8 @@ Ottimizzato per superare le challenge delle principali **prop firm** (FTMO, MyFu
 
 > **Requisiti di sistema:** Windows con MetaTrader 5 installato · Python 3.10+
 
+> **Compatibilità Ubuntu/Linux:** la dashboard, il training ML e il backtest girano su Ubuntu senza modifiche (se i CSV sono già presenti). Il trading live e il download dati richiedono Windows + MT5.
+
 ---
 
 ## Guida rapida – passo per passo
